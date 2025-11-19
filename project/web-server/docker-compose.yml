@@ -1,0 +1,33 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile_inline: |
+        # syntax=docker/dockerfile:1.7-labs
+        
+        # Build the React frontend
+        FROM node:20 AS client-build
+        WORKDIR /workspace
+        COPY frontend/package*.json ./frontend/
+        RUN cd frontend && npm install
+        COPY frontend ./frontend
+        RUN mkdir -p backend/wwwroot
+        RUN cd frontend && npm run build
+        
+        # Build and publish the ASP.NET Core app
+        FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+        WORKDIR /src
+        COPY backend/WebServer.csproj ./backend/WebServer.csproj
+        RUN dotnet restore ./backend/WebServer.csproj
+        COPY backend ./backend
+        COPY --from=client-build /workspace/backend/wwwroot ./backend/wwwroot
+        WORKDIR /src/backend
+        RUN dotnet publish WebServer.csproj -c Release -o /app/publish
+        
+        # Final runtime image
+        FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+        WORKDIR /app
+        COPY --from=build /app/publish ./
+        ENV ASPNETCORE_URLS=http://+:8080
+        EXPOSE 8080
+        ENTRYPOINT ["dotnet", "WebServer.dll"]

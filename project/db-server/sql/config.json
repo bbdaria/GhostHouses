@@ -1,0 +1,12 @@
+{
+  "database": "ghosthouses",
+  "user": "ghostadmin",
+  "password": "ghostpass123",
+  "host": "db",
+  "port": 5432,
+  "schemas": [
+    "public",
+    "bootstrap"
+  ],
+  "notes": "This file documents the initial PostgreSQL bootstrap configuration."
+}
