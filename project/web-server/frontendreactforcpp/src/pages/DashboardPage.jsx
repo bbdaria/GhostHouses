@@ -17,9 +17,9 @@ export default function DashboardPage() {
 
   const runSync = async (jobType) => {
     try {
-      await api.healthCheck();
+      const result = await api.runSync(jobType, { requestedBy: user?.username });
       const syncName = SYNC_LABELS[jobType] || jobType;
-      setSyncMessage(`סנכרון ${syncName} בוצע בהצלחה (דמו).`);
+      setSyncMessage(`סנכרון ${syncName} הסתיים: ${result.result?.note || 'הושלם'}`);
     } catch (err) {
       setSyncMessage(`שגיאה בסנכרון: ${err.message}`);
     }
@@ -33,6 +33,7 @@ export default function DashboardPage() {
           <h1>ברוך הבא, {user?.username}</h1>
           <p className="subtitle">בחרו פעולה להמשך.</p>
         </div>
+        <div className="health-chip">תפקיד: {roleLabel}</div>
       </header>
       <section className="grid-cards">
         <Link to="/buildings" className="card-link">

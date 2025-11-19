@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 
 export default function LoginPage() {
-  const { login, token, user, otpChallenge } = useAuth();
+  const { login, token, user, otpChallenge, setOtpChallenge } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
@@ -25,7 +25,12 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(form.username, form.password);
+      const result = await login(form.username, form.password);
+      setOtpChallenge({
+        username: form.username,
+        otpChallengeId: result.otpChallengeId,
+        demoCode: result.demoCode
+      });
       navigate('/otp');
     } catch (err) {
       setError(err.message);
