@@ -1,0 +1,35 @@
+services:
+  db:
+    extends:
+      file: ./db-server/docker-compose.yml
+      service: db
+
+  web:
+    extends:
+      file: ./web-server/docker-compose.yml
+      service: web
+    container_name: ghosthouses-web
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ghosthouses
+      POSTGRES_USER: ghostadmin
+      POSTGRES_PASSWORD: ghostpass123
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  pgadmin:
+    extends:
+      file: ./db-server/docker-compose.yml
+      service: pgadmin
+    depends_on:
+      db:
+        condition: service_started
+
+volumes:
+  db-data:
+  pgadmin-data:

@@ -1,0 +1,15 @@
+{
+  "name": "web-app",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "settings": {
+    "terminal.integrated.defaultProfile.linux": "bash"
+  },
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind"
+  ],
+  "workspaceFolder": "/workspace",
+  "postCreateCommand": "bash /workspace/.devcontainer/postCreate.sh",
+  "forwardPorts": []
+}

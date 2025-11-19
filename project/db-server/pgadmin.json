@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "name": "GhostHouses",
+      "host": "db",
+      "port": 5432,
+      "maintenanceDb": "ghosthouses",
+      "username": "ghostadmin",
+      "sslmode": "prefer"
+    }
+  ],
+  "defaultCredentials": {
+    "email": "admin@example.com",
+    "password": "adminpass123"
+  }
+}

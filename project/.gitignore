@@ -1,0 +1,18 @@
+# Build outputs
+bin/
+obj/
+web-server/backend/bin/
+web-server/backend/obj/
+*.user
+*.suo
+*.swp
+
+# Node
+web-server/frontend/node_modules/
+web-server/frontend/dist/
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
