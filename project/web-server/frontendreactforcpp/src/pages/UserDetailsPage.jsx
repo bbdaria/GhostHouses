@@ -11,7 +11,7 @@ export default function UserDetailsPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ role: 'Viewer', email: '', twoFactorEnabled: true });
+  const [form, setForm] = useState({ role: 'Viewer', department: '', isActive: true });
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -26,8 +26,8 @@ export default function UserDetailsPage() {
       setUser(data);
       setForm({
         role: data.role,
-        email: data.email || '',
-        twoFactorEnabled: data.twoFactorEnabled
+        department: data.department || '',
+        isActive: data.isActive
       });
       const history = await api.fetchLogs({ userId: data.id });
       setLogs(history);
@@ -91,8 +91,9 @@ export default function UserDetailsPage() {
         <div>
           <p className="eyebrow">חשבון</p>
           <h1>{user.username}</h1>
-          <p className="subtitle">{user.email || 'ללא דוא"ל'}</p>
+          <p className="subtitle">{user.department || 'ללא שיוך'}</p>
         </div>
+        <div className="health-chip">תפקיד: {roleLabel}</div>
       </header>
 
       <section className="panel">
@@ -107,17 +108,17 @@ export default function UserDetailsPage() {
             </select>
           </label>
           <label>
-            דוא"ל
-            <input name="email" value={form.email} onChange={handleChange} type="email" />
+            מחלקה
+            <input name="department" value={form.department} onChange={handleChange} />
           </label>
           <label className="checkbox">
             <input
               type="checkbox"
-              name="twoFactorEnabled"
-              checked={form.twoFactorEnabled}
+              name="isActive"
+              checked={form.isActive}
               onChange={handleChange}
             />
-            דרוש OTP
+            פעיל
           </label>
           <div className="filters-actions">
             <button type="submit" className="primary">
