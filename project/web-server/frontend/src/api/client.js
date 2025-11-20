@@ -2,6 +2,36 @@ const API_BASE = '/api';
 
 let authToken = null;
 
+const toCamel = (key) => (key ? key.charAt(0).toLowerCase() + key.slice(1) : key);
+
+const normalizeSnapshot = (value) => {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeSnapshot);
+  }
+
+  return Object.entries(value).reduce((acc, [k, v]) => {
+    acc[toCamel(k)] = normalizeSnapshot(v);
+    return acc;
+  }, {});
+};
+
+const parseSnapshot = (message) => {
+  if (!message) return null;
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed && typeof parsed === 'object') {
+      return normalizeSnapshot(parsed);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
 export function setAuthToken(token) {
   authToken = token;
 }
@@ -48,16 +78,35 @@ async function request(path, options = {}) {
 
 const mapBuildingSummary = (item) => ({
   id: item.id,
+  fldId: item.fldId,
   street: item.streetName,
   houseNumber: item.houseNumber,
   nickname: item.buildingName,
   status: item.shikumStatus,
   area: item.neighborhood,
+  statusSummary: item.statusSummary || '',
   updatedAt: item.statusSummaryUpdatedAt
+});
+
+const mapLog = (log) => ({
+  id: log.id,
+  buildingId: log.buildingId,
+  actionType: log.category || log.severity || log.title,
+  description: log.message,
+  username: log.createdBy || log.createdByUser || log.createdByUserId || 'system',
+  createdAt: log.createdAt,
+  snapshot: parseSnapshot(log.message),
+  buildingStreet: log.buildingStreet,
+  buildingHouseNumber: log.buildingHouseNumber,
+  buildingNickname: log.buildingNickname,
+  buildingNeighborhood: log.buildingNeighborhood,
+  buildingStatus: log.buildingStatus,
+  buildingStatusSummary: log.buildingStatusSummary
 });
 
 const mapBuildingDetail = (data) => ({
   id: data.summary.id,
+  fldId: data.summary.fldId,
   street: data.summary.streetName,
   houseNumber: data.summary.houseNumber,
   nickname: data.summary.buildingName,
@@ -70,22 +119,9 @@ const mapBuildingDetail = (data) => ({
   photos: data.photos || [],
   external: data.externalData || {},
   logs: (data.recentLogs || []).map((log) => ({
-    id: log.id,
-    buildingId: log.buildingId,
-    actionType: log.category || log.severity || 'עדכון',
-    description: log.message,
-    username: log.createdBy || 'system',
-    createdAt: log.createdAt
+    ...mapLog(log),
+    username: log.createdBy || 'system'
   }))
-});
-
-const mapLog = (log) => ({
-  id: log.id,
-  buildingId: log.buildingId,
-  actionType: log.category || log.severity || log.title,
-  description: log.message,
-  username: log.createdBy || log.createdByUser || log.createdByUserId || 'system',
-  createdAt: log.createdAt
 });
 
 const mapUser = (user) => ({
@@ -158,7 +194,7 @@ const api = {
   },
   async updateBuilding(id, form) {
     const payload = {
-      fldId: form.fldId || `GH-${id}`,
+      fldId: String(form.fldId || `GH-${id}`),
       streetName: form.streetName || form.street || '',
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || '',

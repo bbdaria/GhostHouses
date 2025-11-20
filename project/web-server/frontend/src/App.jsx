@@ -3,7 +3,6 @@ import AppLayout from './components/AppLayout.jsx';
 import RequireAuth from './components/RequireAuth.jsx';
 import RoleGate from './components/RoleGate.jsx';
 import BuildingsPage from './pages/BuildingsPage.jsx';
-import DashboardPage from './pages/DashboardPage.jsx';
 import LogsPage from './pages/LogsPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import OtpPage from './pages/OtpPage.jsx';
@@ -18,7 +17,6 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="buildings" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="buildings" element={<BuildingsPage />} />
           <Route path="logs" element={<LogsPage />} />
           <Route element={<RoleGate minRole="Admin" />}>

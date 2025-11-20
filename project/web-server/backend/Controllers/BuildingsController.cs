@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +6,7 @@ using WebServer.Data;
 using WebServer.Models;
 using WebServer.Models.Dtos;
 using WebServer.Services;
+using WebServer.Utilities;
 
 namespace WebServer.Controllers;
 
@@ -65,12 +67,14 @@ public class BuildingsController : ApiControllerBase
             .Take(filter.PageSize)
             .Select(b => new BuildingSummaryDto(
                 b.Id,
+                b.FldId,
                 b.BuildingName,
                 b.StreetName,
                 b.HouseNumber,
                 b.Neighborhood,
                 b.ShikumStatus,
-                b.BldSivug))
+                b.BldSivug,
+                b.StatusSummary))
             .ToListAsync(cancellationToken);
 
         return Ok(new PaginatedResult<BuildingSummaryDto>(items, total, filter.Page, filter.PageSize));
@@ -93,13 +97,27 @@ public class BuildingsController : ApiControllerBase
         var logs = building.Logs
             .OrderByDescending(l => l.CreatedAt)
             .Take(10)
-            .Select(l => new BuildingLogDto(l.Id, l.BuildingId, l.Title, l.Message, l.Category, l.Severity, l.CreatedAt, l.CreatedByUser?.Username))
+            .Select(l => new BuildingLogDto(
+                l.Id,
+                l.BuildingId,
+                l.Title,
+                l.Message,
+                l.Category,
+                l.Severity,
+                IsraelTime.Convert(l.CreatedAt),
+                l.CreatedByUser?.Username,
+                building.StreetName,
+                building.HouseNumber,
+                building.BuildingName,
+                building.Neighborhood,
+                building.ShikumStatus,
+                building.StatusSummary))
             .ToList();
 
         var detail = new BuildingDetailDto(
-            new BuildingSummaryDto(building.Id, building.BuildingName, building.StreetName, building.HouseNumber, building.Neighborhood, building.ShikumStatus, building.BldSivug),
+            new BuildingSummaryDto(building.Id, building.FldId, building.BuildingName, building.StreetName, building.HouseNumber, building.Neighborhood, building.ShikumStatus, building.BldSivug, building.StatusSummary),
             building.StatusSummary,
-            building.StatusSummaryUpdatedAt,
+            IsraelTime.Convert(building.StatusSummaryUpdatedAt),
             building.Complaints,
             string.IsNullOrWhiteSpace(building.PhotoUrls) ? Array.Empty<string>() : building.PhotoUrls.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
             externalData,
@@ -132,12 +150,14 @@ public class BuildingsController : ApiControllerBase
 
         return CreatedAtAction(nameof(GetBuilding), new { id = building.Id }, new BuildingSummaryDto(
             building.Id,
+            building.FldId,
             building.BuildingName,
             building.StreetName,
             building.HouseNumber,
             building.Neighborhood,
             building.ShikumStatus,
-            building.BldSivug));
+            building.BldSivug,
+            building.StatusSummary));
     }
 
     [HttpPut("{id:int}")]
@@ -153,7 +173,10 @@ public class BuildingsController : ApiControllerBase
         building.FldId = request.FldId;
         building.StreetName = request.StreetName;
         building.HouseNumber = request.HouseNumber;
-        building.BuildingName = request.BuildingName;
+        if (!string.IsNullOrWhiteSpace(request.BuildingName))
+        {
+            building.BuildingName = request.BuildingName;
+        }
         building.Neighborhood = request.Neighborhood;
         building.BldSivug = request.BldSivug ?? building.BldSivug;
         building.ShikumStatus = request.ShikumStatus ?? building.ShikumStatus;
@@ -162,6 +185,32 @@ public class BuildingsController : ApiControllerBase
         building.PhotoUrls = request.Photos is null ? building.PhotoUrls : string.Join(',', request.Photos);
         building.StatusSummaryUpdatedAt = DateTime.UtcNow;
 
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var changeSnapshot = new
+        {
+            building.Id,
+            building.FldId,
+            building.BuildingName,
+            building.StreetName,
+            building.HouseNumber,
+            building.Neighborhood,
+            building.BldSivug,
+            building.ShikumStatus,
+            building.StatusSummary,
+            building.StatusSummaryUpdatedAt
+        };
+
+        _context.BuildingLogs.Add(new BuildingLog
+        {
+            BuildingId = building.Id,
+            Title = "עדכון מבנה",
+            Message = JsonSerializer.Serialize(changeSnapshot),
+            Category = "Edit",
+            Severity = "info",
+            CreatedByUserId = CurrentUserId,
+            CreatedAt = IsraelTime.NowUtc
+        });
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Update", request, cancellationToken);
         return NoContent();

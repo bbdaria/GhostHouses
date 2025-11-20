@@ -10,7 +10,13 @@ public record BuildingLogDto(
     string Category,
     string Severity,
     DateTimeOffset CreatedAt,
-    string? CreatedBy);
+    string? CreatedBy,
+    string? BuildingStreet,
+    string? BuildingHouseNumber,
+    string? BuildingNickname,
+    string? BuildingNeighborhood,
+    string? BuildingStatus,
+    string? BuildingStatusSummary);
 
 public class BuildingLogRequest
 {

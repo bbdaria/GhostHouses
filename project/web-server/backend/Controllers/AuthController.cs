@@ -6,6 +6,7 @@ using WebServer.Data;
 using WebServer.Models.Dtos;
 using WebServer.Models.Users;
 using WebServer.Services;
+using WebServer.Utilities;
 
 namespace WebServer.Controllers;
 
@@ -49,7 +50,7 @@ public class AuthController : ApiControllerBase
         var (code, token) = _twoFactorService.IssueCode(user);
         user.PendingTwoFactorCode = code;
         user.PendingTwoFactorToken = token;
-        user.PendingTwoFactorExpiry = DateTimeOffset.UtcNow.AddMinutes(5);
+        user.PendingTwoFactorExpiry = IsraelTime.NowUtc.AddMinutes(5);
         await _context.SaveChangesAsync();
 
         // For Stage A we return the code so the FE can simulate delivery.
@@ -74,7 +75,7 @@ public class AuthController : ApiControllerBase
         user.PendingTwoFactorCode = null;
         user.PendingTwoFactorToken = null;
         user.PendingTwoFactorExpiry = null;
-        user.LastLoginAt = DateTimeOffset.UtcNow;
+        user.LastLoginAt = IsraelTime.NowUtc;
         await _context.SaveChangesAsync();
 
         var token = _tokenService.CreateToken(user);

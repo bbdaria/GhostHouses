@@ -1,3 +1,5 @@
+using WebServer.Utilities;
+
 namespace WebServer.Models.Users;
 
 public class AppUser
@@ -12,7 +14,7 @@ public class AppUser
     public string? PendingTwoFactorCode { get; set; }
     public string? PendingTwoFactorToken { get; set; }
     public DateTimeOffset? PendingTwoFactorExpiry { get; set; }
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; } = IsraelTime.NowUtc;
     public DateTimeOffset? LastLoginAt { get; set; }
 
     public ICollection<BuildingLog> Logs { get; set; } = new List<BuildingLog>();
