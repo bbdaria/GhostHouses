@@ -23,7 +23,7 @@ public static class SeedData
                 Role = UserRole.Admin,
                 TwoFactorSecret = Guid.NewGuid().ToString("N")
             };
-            admin.PasswordHash = hasher.HashPassword(admin, "ChangeMe!123");
+            admin.PasswordHash = hasher.HashPassword(admin, "admin");
             context.Users.Add(admin);
 
             // Seed baseline building for demo

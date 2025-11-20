@@ -14,12 +14,14 @@ public record BuildingFilterParameters(
 
 public record BuildingSummaryDto(
     int Id,
+    string FldId,
     string BuildingName,
     string StreetName,
     string HouseNumber,
     string Neighborhood,
     string ShikumStatus,
-    string BldSivug);
+    string BldSivug,
+    string StatusSummary);
 
 public record BuildingDetailDto(
     BuildingSummaryDto Summary,

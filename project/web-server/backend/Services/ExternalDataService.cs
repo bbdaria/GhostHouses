@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WebServer.Data;
 using WebServer.Models;
 using WebServer.Models.Dtos;
+using WebServer.Utilities;
 
 namespace WebServer.Services;
 
@@ -35,11 +36,11 @@ public class ExternalDataService : IExternalDataService
                 .FirstOrDefault();
             if (snap is null)
             {
-                var payload = JsonSerializer.Serialize(new { status = "No data", at = DateTimeOffset.UtcNow });
-                return new ExternalSystemSnapshotDto(system, payload, DateTimeOffset.UtcNow);
+                var payload = JsonSerializer.Serialize(new { status = "No data", at = IsraelTime.NowUtc });
+                return new ExternalSystemSnapshotDto(system, payload, IsraelTime.NowUtc);
             }
 
-            return new ExternalSystemSnapshotDto(system, snap.Payload, snap.RetrievedAt);
+            return new ExternalSystemSnapshotDto(system, snap.Payload, IsraelTime.Convert(snap.RetrievedAt));
         }
 
         return new BuildingExternalDataDto(
@@ -58,7 +59,7 @@ public class ExternalDataService : IExternalDataService
             var payload = JsonSerializer.Serialize(new
             {
                 system,
-                updatedAt = DateTimeOffset.UtcNow,
+                updatedAt = IsraelTime.NowUtc,
                 status = "ok",
                 notes = "Mocked integration payload"
             });
@@ -68,7 +69,7 @@ public class ExternalDataService : IExternalDataService
                 BuildingId = buildingId,
                 SystemName = system,
                 Payload = payload,
-                RetrievedAt = DateTimeOffset.UtcNow
+                RetrievedAt = IsraelTime.NowUtc
             });
         }
 

@@ -5,6 +5,7 @@ using WebServer.Data;
 using WebServer.Models;
 using WebServer.Models.Dtos;
 using WebServer.Services;
+using WebServer.Utilities;
 
 namespace WebServer.Controllers;
 
@@ -27,12 +28,19 @@ public class LogsController : ApiControllerBase
         [FromQuery] int pageSize = 20,
         [FromQuery] int? buildingId = null,
         [FromQuery] Guid? userId = null,
+        [FromQuery] string? user = null,
         [FromQuery] DateTimeOffset? from = null,
         [FromQuery] DateTimeOffset? to = null,
+        [FromQuery] string? street = null,
+        [FromQuery] string? houseNumber = null,
+        [FromQuery] string? nickname = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? neighborhood = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.BuildingLogs
             .Include(l => l.CreatedByUser)
+            .Include(l => l.Building)
             .AsQueryable();
 
         if (buildingId.HasValue)
@@ -45,6 +53,11 @@ public class LogsController : ApiControllerBase
             query = query.Where(l => l.CreatedByUserId == userId.Value);
         }
 
+        if (!string.IsNullOrWhiteSpace(user))
+        {
+            query = query.Where(l => l.CreatedByUser != null && EF.Functions.ILike(l.CreatedByUser.Username, $"%{user}%"));
+        }
+
         if (from.HasValue)
         {
             query = query.Where(l => l.CreatedAt >= from.Value);
@@ -53,6 +66,31 @@ public class LogsController : ApiControllerBase
         if (to.HasValue)
         {
             query = query.Where(l => l.CreatedAt <= to.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(street))
+        {
+            query = query.Where(l => EF.Functions.ILike(l.Building.StreetName, $"%{street}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(houseNumber))
+        {
+            query = query.Where(l => l.Building.HouseNumber == houseNumber);
+        }
+
+        if (!string.IsNullOrWhiteSpace(nickname))
+        {
+            query = query.Where(l => EF.Functions.ILike(l.Building.BuildingName, $"%{nickname}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(l => EF.Functions.ILike(l.Building.ShikumStatus, $"%{status}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(neighborhood))
+        {
+            query = query.Where(l => EF.Functions.ILike(l.Building.Neighborhood, $"%{neighborhood}%"));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -67,8 +105,14 @@ public class LogsController : ApiControllerBase
                 l.Message,
                 l.Category,
                 l.Severity,
-                l.CreatedAt,
-                l.CreatedByUser != null ? l.CreatedByUser.Username : null))
+                IsraelTime.Convert(l.CreatedAt),
+                l.CreatedByUser != null ? l.CreatedByUser.Username : null,
+                l.Building.StreetName,
+                l.Building.HouseNumber,
+                l.Building.BuildingName,
+                l.Building.Neighborhood,
+                l.Building.ShikumStatus,
+                l.Building.StatusSummary))
             .ToListAsync(cancellationToken);
 
         return Ok(new PaginatedResult<BuildingLogDto>(items, total, page, pageSize));
@@ -81,6 +125,7 @@ public class LogsController : ApiControllerBase
         var logs = await _context.BuildingLogs
             .Where(l => l.BuildingId == buildingId)
             .Include(l => l.CreatedByUser)
+            .Include(l => l.Building)
             .OrderByDescending(l => l.CreatedAt)
             .Select(l => new BuildingLogDto(
                 l.Id,
@@ -89,8 +134,14 @@ public class LogsController : ApiControllerBase
                 l.Message,
                 l.Category,
                 l.Severity,
-                l.CreatedAt,
-                l.CreatedByUser != null ? l.CreatedByUser.Username : null))
+                IsraelTime.Convert(l.CreatedAt),
+                l.CreatedByUser != null ? l.CreatedByUser.Username : null,
+                l.Building.StreetName,
+                l.Building.HouseNumber,
+                l.Building.BuildingName,
+                l.Building.Neighborhood,
+                l.Building.ShikumStatus,
+                l.Building.StatusSummary))
             .ToListAsync(cancellationToken);
 
         return Ok(logs);
@@ -100,8 +151,8 @@ public class LogsController : ApiControllerBase
     [Authorize(Policy = "Editor")]
     public async Task<ActionResult<BuildingLogDto>> CreateLog(int buildingId, [FromBody] BuildingLogRequest request, CancellationToken cancellationToken)
     {
-        var buildingExists = await _context.Buildings.AnyAsync(b => b.Id == buildingId, cancellationToken);
-        if (!buildingExists)
+        var building = await _context.Buildings.FindAsync(new object[] { buildingId }, cancellationToken);
+        if (building is null)
         {
             return NotFound();
         }
@@ -114,14 +165,28 @@ public class LogsController : ApiControllerBase
             Category = request.Category,
             Severity = request.Severity,
             CreatedByUserId = CurrentUserId,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = IsraelTime.NowUtc
         };
 
         _context.BuildingLogs.Add(log);
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(BuildingLog), log.Id.ToString(), "Create", request, cancellationToken);
 
-        var dto = new BuildingLogDto(log.Id, log.BuildingId, log.Title, log.Message, log.Category, log.Severity, log.CreatedAt, null);
+        var dto = new BuildingLogDto(
+            log.Id,
+            log.BuildingId,
+            log.Title,
+            log.Message,
+            log.Category,
+            log.Severity,
+            IsraelTime.Convert(log.CreatedAt),
+            null,
+            building.StreetName,
+            building.HouseNumber,
+            building.BuildingName,
+            building.Neighborhood,
+            building.ShikumStatus,
+            building.StatusSummary);
         return CreatedAtAction(nameof(GetBuildingLogs), new { buildingId }, dto);
     }
 
@@ -139,7 +204,7 @@ public class LogsController : ApiControllerBase
         log.Message = request.Message;
         log.Category = request.Category;
         log.Severity = request.Severity;
-        log.UpdatedAt = DateTimeOffset.UtcNow;
+        log.UpdatedAt = IsraelTime.NowUtc;
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(BuildingLog), log.Id.ToString(), "Update", request, cancellationToken);
         return NoContent();

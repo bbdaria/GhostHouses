@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WebServer.Data;
 using WebServer.Models;
+using WebServer.Utilities;
 
 namespace WebServer.Services;
 
@@ -27,7 +28,7 @@ public class AuditService : IAuditService
             Action = action,
             Changes = changes is null ? string.Empty : JsonSerializer.Serialize(changes),
             PerformedByUserId = userId,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = IsraelTime.NowUtc
         };
 
         _context.AuditEntries.Add(entry);

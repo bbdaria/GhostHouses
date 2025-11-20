@@ -3,6 +3,7 @@ import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
+import { LAST_BUILDING_KEY } from '../constants.js';
 
 const initialFilters = {
   street: '',
@@ -44,7 +45,6 @@ export default function BuildingsPage() {
     shikumStatusId: '',
     category: ''
   });
-  const [logForm, setLogForm] = useState({ actionType: '', description: '' });
   const [actionMessage, setActionMessage] = useState('');
 
   const canEdit = useMemo(
@@ -54,6 +54,25 @@ export default function BuildingsPage() {
   const isAdmin = user?.role === 'Admin';
   const roleLabel = ROLE_LABELS[user?.role] || user?.role;
   const statusLabelMap = STATUS_LABEL_MAP;
+  const israelDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('he-IL', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: 'Asia/Jerusalem'
+      }),
+    []
+  );
+  const formatLogDate = (value) => {
+    if (!value) return '—';
+    try {
+      return israelDateFormatter.format(new Date(value));
+    } catch {
+      return value;
+    }
+  };
+
+  const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
 
   useEffect(() => {
     loadBuildings(initialFilters);
@@ -100,6 +119,7 @@ export default function BuildingsPage() {
       const building = await api.fetchBuilding(id);
       setSelectedBuilding(building);
       setDetailTab('summary');
+      sessionStorage.setItem(LAST_BUILDING_KEY, String(id));
       await loadBuildingLogs(id);
     } catch (err) {
       setDetailError(err.message);
@@ -190,7 +210,7 @@ export default function BuildingsPage() {
         (option) => String(option.id) === editForm.shikumStatusId
       );
       const payload = {
-        fldId: selectedBuilding.id,
+        fldId: selectedBuilding.fldId || String(selectedBuilding.id),
         streetName: selectedBuilding.street,
         houseNumber: selectedBuilding.houseNumber,
         buildingName: editForm.bldName || selectedBuilding.nickname || selectedBuilding.street,
@@ -219,37 +239,6 @@ export default function BuildingsPage() {
       setLogs([]);
       loadBuildings(filters);
       setActionMessage('המבנה הוסר.');
-    } catch (err) {
-      setActionMessage(err.message);
-    }
-  };
-
-  const handleLogChange = (event) => {
-    const { name, value } = event.target;
-    setLogForm((form) => ({ ...form, [name]: value }));
-  };
-
-  const handleAddLog = async (event) => {
-    event.preventDefault();
-    if (!selectedBuilding) return;
-    try {
-      await api.createBuildingLog(selectedBuilding.id, logForm);
-      setLogForm({ actionType: '', description: '' });
-      loadBuildingLogs(selectedBuilding.id);
-      setActionMessage('נרשם לוג חדש.');
-    } catch (err) {
-      setActionMessage(err.message);
-    }
-  };
-
-  const handleDeleteLog = async (logId) => {
-    if (!selectedBuilding) return;
-    const confirmed = window.confirm('למחוק רשומה זו?');
-    if (!confirmed) return;
-    try {
-      await api.deleteBuildingLog(logId);
-      loadBuildingLogs(selectedBuilding.id);
-      setActionMessage('הרישום נמחק.');
     } catch (err) {
       setActionMessage(err.message);
     }
@@ -410,11 +399,12 @@ export default function BuildingsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>רחוב</th>
+                  <th>שם רחוב</th>
                   <th>מספר בית</th>
                   <th>כינוי</th>
                   <th>סטטוס</th>
                   <th>אזור</th>
+                  <th>תקציר מצב</th>
                 </tr>
               </thead>
               <tbody>
@@ -436,12 +426,13 @@ export default function BuildingsPage() {
                         <span className={`status status-${statusSlug}`}>{statusLabel}</span>
                       </td>
                       <td>{building.area || '—'}</td>
+                      <td>{building.statusSummary || '—'}</td>
                     </tr>
                   );
                 })}
                 {buildings.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="5" className="muted">
+                    <td colSpan="6" className="muted">
                       אין מבנים שעונים על הסינון.
                     </td>
                   </tr>
@@ -504,7 +495,7 @@ export default function BuildingsPage() {
                     </div>
                     <div>
                       <dt>עודכן לאחרונה</dt>
-                      <dd>{selectedBuilding.updatedAt}</dd>
+                      <dd>{formatLogDate(selectedBuilding.updatedAt)}</dd>
                     </div>
                     <div>
                       <dt>תקציר מצב</dt>
@@ -526,49 +517,57 @@ export default function BuildingsPage() {
                 <div className="details-card">
                   {logsLoading && <p className="muted">טוען יומן…</p>}
                   {!logsLoading && logs.length === 0 && <p className="muted">אין רשומות במבנה זה.</p>}
-                  <ul className="log-list">
-                    {logs.map((log) => (
-                      <li key={log.id}>
-                        <div>
-                          <strong>{log.actionType}</strong>
-                          <p>{log.description || '—'}</p>
-                          <small>
-                            {log.createdAt} • {log.username || log.userId || 'לא ידוע'}
-                          </small>
-                        </div>
-                        {isAdmin && (
-                          <button className="ghost danger" onClick={() => handleDeleteLog(log.id)}>
-                            מחיקה
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  {canEdit && (
-                    <form className="form-grid" onSubmit={handleAddLog}>
-                      <label>
-                        סוג פעולה
-                        <input
-                          name="actionType"
-                          value={logForm.actionType}
-                          onChange={handleLogChange}
-                          required
-                        />
-                      </label>
-                      <label className="full-span">
-                        תיאור
-                        <textarea
-                          name="description"
-                          value={logForm.description}
-                          onChange={handleLogChange}
-                        />
-                      </label>
-                      <div className="filters-actions">
-                        <button type="submit" className="primary">
-                          הוסף רישום
-                        </button>
-                      </div>
-                    </form>
+                  {!logsLoading && logs.length > 0 && (
+                    <div className="table-wrapper">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>שם רחוב</th>
+                            <th>מספר בית</th>
+                            <th>כינוי</th>
+                            <th>סטטוס</th>
+                            <th>אזור</th>
+                            <th>תקציר מצב</th>
+                            <th>תאריך עדכון</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {logs.map((log) => {
+                            const snapshot = log.snapshot || {};
+                            const street = snapshot.streetName || log.buildingStreet || selectedBuilding.street;
+                            const houseNumber =
+                              snapshot.houseNumber || log.buildingHouseNumber || selectedBuilding.houseNumber;
+                            const nickname =
+                              snapshot.buildingName ||
+                              log.buildingNickname ||
+                              selectedBuilding.nickname ||
+                              '—';
+                            const neighborhood =
+                              snapshot.neighborhood || log.buildingNeighborhood || selectedBuilding.area || '—';
+                            const statusValue =
+                              snapshot.shikumStatus || log.buildingStatus || selectedBuilding.status || 'Unknown';
+                            const statusLabel = statusLabelMap[statusValue] || statusValue || '—';
+                            const summary =
+                              snapshot.statusSummary ||
+                              log.buildingStatusSummary ||
+                              selectedBuilding.statusSummary ||
+                              '—';
+                            const updatedAt = snapshot.statusSummaryUpdatedAt || log.createdAt;
+                            return (
+                              <tr key={log.id}>
+                                <td>{displayOrDash(street)}</td>
+                                <td>{displayOrDash(houseNumber)}</td>
+                                <td>{displayOrDash(nickname)}</td>
+                                <td>{statusLabel}</td>
+                                <td>{displayOrDash(neighborhood)}</td>
+                                <td>{displayOrDash(summary)}</td>
+                                <td>{formatLogDate(updatedAt)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               )}

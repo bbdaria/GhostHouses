@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using WebServer.Models.Users;
+using WebServer.Utilities;
 
 namespace WebServer.Services;
 
@@ -44,6 +45,6 @@ public class TwoFactorService : ITwoFactorService
             return false;
         }
 
-        return user.PendingTwoFactorExpiry is null || user.PendingTwoFactorExpiry > DateTimeOffset.UtcNow;
+        return user.PendingTwoFactorExpiry is null || user.PendingTwoFactorExpiry > IsraelTime.NowUtc;
     }
 }

@@ -1,4 +1,5 @@
 using WebServer.Models.Users;
+using WebServer.Utilities;
 
 namespace WebServer.Models;
 
@@ -13,7 +14,7 @@ public class BuildingLog
     public string Message { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
     public string Severity { get; set; } = "info";
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; } = IsraelTime.NowUtc;
     public DateTimeOffset? UpdatedAt { get; set; }
     public bool IsDeleted { get; set; }
 }
