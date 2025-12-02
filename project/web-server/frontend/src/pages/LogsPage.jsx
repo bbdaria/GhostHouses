@@ -2,23 +2,58 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
-import { STATUS_LABEL_MAP } from '../i18n.js';
-import { LAST_BUILDING_KEY } from '../constants.js';
+import { STATUS_LABEL_MAP, STATUS_OPTIONS } from '../i18n.js';
+import {
+  BUILDING_FIELD_LABELS,
+  BUILDING_FIELD_PLACEHOLDERS,
+  LOG_TABLE_COLUMNS,
+  STATUS_SELECT_PLACEHOLDER
+} from '../constants.js';
+
+const todayIso = () =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+    .format(new Date())
+    .replace(/\//g, '-');
+
+const STATUS_ID_TO_VALUE = STATUS_OPTIONS.reduce((acc, option) => {
+  acc[option.id] = option.value;
+  return acc;
+}, {});
+
+const normalizeStatusValue = (value) => {
+  if (value === null || value === undefined) return 'Unknown';
+  if (typeof value === 'number') {
+    return STATUS_ID_TO_VALUE[value] || 'Unknown';
+  }
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric) && STATUS_ID_TO_VALUE[numeric]) {
+      return STATUS_ID_TO_VALUE[numeric];
+    }
+    return value;
+  }
+  return 'Unknown';
+};
 
 const baseFilters = {
   buildingId: '',
   userId: '',
+  user: '',
   actionType: '',
   street: '',
   houseNumber: '',
   nickname: '',
   status: '',
   area: '',
+  statusSummary: '',
   startDate: '',
   endDate: ''
 };
-
-const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const buildDefaultFilters = (overrides = {}) => ({
   ...baseFilters,
@@ -27,15 +62,33 @@ const buildDefaultFilters = (overrides = {}) => ({
   ...overrides
 });
 
+const expandDateRange = (filters) => {
+  const next = { ...filters };
+  if (filters.startDate && filters.endDate && filters.startDate === filters.endDate) {
+    const start = new Date(`${filters.startDate}T00:00:00`).toISOString();
+    const end = new Date(`${filters.endDate}T23:59:59.999`).toISOString();
+    next.startDate = start;
+    next.endDate = end;
+  } else {
+    if (filters.startDate) {
+      next.startDate = new Date(`${filters.startDate}T00:00:00`).toISOString();
+    }
+    if (filters.endDate) {
+      next.endDate = new Date(`${filters.endDate}T23:59:59.999`).toISOString();
+    }
+  }
+  return next;
+};
+
 export default function LogsPage() {
   const [searchParams] = useSearchParams();
-  const initialBuildingId =
-    searchParams.get('buildingId') || sessionStorage.getItem(LAST_BUILDING_KEY) || '';
+  const initialBuildingId = searchParams.get('buildingId') || '';
   const [filters, setFilters] = useState(() => buildDefaultFilters({ buildingId: initialBuildingId }));
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const statusLabelMap = STATUS_LABEL_MAP;
+  const statuses = STATUS_OPTIONS;
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('he-IL', {
@@ -57,7 +110,7 @@ export default function LogsPage() {
   };
 
   useEffect(() => {
-    loadLogs({ ...baseFilters, buildingId: initialBuildingId });
+    loadLogs(buildDefaultFilters({ buildingId: initialBuildingId }));
   }, []);
 
   useEffect(() => {
@@ -79,8 +132,9 @@ export default function LogsPage() {
     setLoading(true);
     setError('');
     try {
+      const expanded = expandDateRange(appliedFilters);
       const clean = Object.fromEntries(
-        Object.entries(appliedFilters).filter(([, value]) => value && value.trim() !== '')
+        Object.entries(expanded).filter(([, value]) => value && value.trim() !== '')
       );
       const result = await api.fetchLogs(clean);
       setLogs(result);
@@ -101,10 +155,19 @@ export default function LogsPage() {
     loadLogs(filters);
   };
 
+  const handleDeleteLog = async (logId) => {
+    try {
+      await api.deleteBuildingLog(logId);
+      await loadLogs(filters);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleReset = () => {
-    const reset = buildDefaultFilters();
+    const reset = buildDefaultFilters({ buildingId: '' });
     setFilters(reset);
-    loadLogs(baseFilters);
+    loadLogs(reset);
   };
 
   return (
@@ -119,28 +182,64 @@ export default function LogsPage() {
       <section className="filters-card">
         <form className="filters-grid" onSubmit={handleSubmit}>
           <label>
-            <span>שם רחוב</span>
-            <input name="street" value={filters.street || ''} onChange={handleChange} />
+            <span>{BUILDING_FIELD_LABELS.street}</span>
+            <input
+              name="street"
+              value={filters.street || ''}
+              onChange={handleChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.street}
+            />
           </label>
           <label>
-            <span>מספר בית</span>
-            <input name="houseNumber" value={filters.houseNumber || ''} onChange={handleChange} />
+            <span>{BUILDING_FIELD_LABELS.houseNumber}</span>
+            <input
+              name="houseNumber"
+              value={filters.houseNumber || ''}
+              onChange={handleChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.houseNumber}
+            />
           </label>
           <label>
-            <span>כינוי</span>
-            <input name="nickname" value={filters.nickname || ''} onChange={handleChange} />
+            <span>{BUILDING_FIELD_LABELS.nickname}</span>
+            <input
+              name="nickname"
+              value={filters.nickname || ''}
+              onChange={handleChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.nickname}
+            />
           </label>
           <label>
-            <span>סטטוס</span>
-            <input name="status" value={filters.status || ''} onChange={handleChange} />
+            <span>{BUILDING_FIELD_LABELS.status}</span>
+            <select name="status" value={filters.status || ''} onChange={handleChange}>
+              <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
+              {statuses.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
-            <span>אזור</span>
-            <input name="area" value={filters.area || ''} onChange={handleChange} />
+            <span>{BUILDING_FIELD_LABELS.area}</span>
+            <input
+              name="area"
+              value={filters.area || ''}
+              onChange={handleChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.area}
+            />
+          </label>
+          <label className="full-span">
+            <span>{BUILDING_FIELD_LABELS.statusSummary}</span>
+            <input
+              name="statusSummary"
+              value={filters.statusSummary || ''}
+              onChange={handleChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
+            />
           </label>
           <label>
             <span>משתמש</span>
-            <input name="userId" value={filters.userId} onChange={handleChange} />
+            <input name="user" value={filters.user} onChange={handleChange} placeholder="שם משתמש" />
           </label>
           <label>
             <span>תאריך התחלה</span>
@@ -168,45 +267,62 @@ export default function LogsPage() {
           <table>
             <thead>
               <tr>
-                <th>שם רחוב</th>
-                <th>מספר בית</th>
-                <th>כינוי</th>
-                <th>סטטוס</th>
-                <th>אזור</th>
-                <th>תקציר מצב</th>
-                <th>משתמש</th>
-                <th>תאריך</th>
+                {LOG_TABLE_COLUMNS.map((col) => (
+                  <th key={col.key}>{col.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={LOG_TABLE_COLUMNS.length} className="table-loading">
+                    <span className="spinner" aria-label="טוען נתונים" />
+                  </td>
+                </tr>
+              )}
               {logs.map((log) => {
                 const snapshot = log.snapshot || {};
                 const street = snapshot.streetName || log.buildingStreet || '—';
                 const houseNumber = snapshot.houseNumber || log.buildingHouseNumber || '—';
                 const nickname = snapshot.buildingName || log.buildingNickname || '—';
                 const neighborhood = snapshot.neighborhood || log.buildingNeighborhood || '—';
-                const statusValue = snapshot.shikumStatus || log.buildingStatus || 'Unknown';
+                const statusValue = normalizeStatusValue(snapshot.shikumStatus || log.buildingStatus || 'Unknown');
                 const statusLabel = statusLabelMap[statusValue] || statusValue || '—';
                 const summary = snapshot.statusSummary || log.buildingStatusSummary || log.description || '—';
                 const timestamp = snapshot.statusSummaryUpdatedAt || log.createdAt;
+                const row = {
+                  street: displayOrDash(street),
+                  houseNumber: displayOrDash(houseNumber),
+                  nickname: displayOrDash(nickname),
+                  status: statusLabel,
+                  area: displayOrDash(neighborhood),
+                  summary: displayOrDash(summary),
+                  user: displayOrDash(log.username),
+                  date: formatDate(timestamp),
+                  actions: (
+                    <button
+                      type="button"
+                      className="danger"
+                      aria-label={`מחק לוג ${log.id}`}
+                      onClick={() => handleDeleteLog(log.id)}
+                    >
+                      מחק
+                    </button>
+                  )
+                };
                 return (
                   <tr key={log.id}>
-                    <td>{displayOrDash(street)}</td>
-                    <td>{displayOrDash(houseNumber)}</td>
-                    <td>{displayOrDash(nickname)}</td>
-                    <td>{statusLabel}</td>
-                    <td>{displayOrDash(neighborhood)}</td>
-                    <td>{displayOrDash(summary)}</td>
-                    <td>{displayOrDash(log.username)}</td>
-                    <td>{formatDate(timestamp)}</td>
+                    {LOG_TABLE_COLUMNS.map((col) => (
+                      <td key={col.key}>{row[col.key]}</td>
+                    ))}
                   </tr>
                 );
               })}
               {logs.length === 0 && !loading && (
                 <tr>
-                  <td colSpan="8" className="muted">
-                    אין רשומות.
-                  </td>
+                  {LOG_TABLE_COLUMNS.map((col) => (
+                    <td key={col.key} />
+                  ))}
                 </tr>
               )}
             </tbody>

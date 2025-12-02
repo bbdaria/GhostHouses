@@ -1,6 +1,30 @@
 using System.ComponentModel.DataAnnotations;
+using WebServer.Models;
 
 namespace WebServer.Models.Dtos;
+
+public record LogFilterParameters(
+    int Page = 1,
+    int PageSize = 20,
+    int? BuildingId = null,
+    Guid? UserId = null,
+    string? User = null,
+    DateTimeOffset? From = null,
+    DateTimeOffset? To = null,
+    string? Street = null,
+    string? HouseNumber = null,
+    string? Name = null,
+    BuildingStatus? Status = null,
+    string? Neighborhood = null,
+    string? StatusSummary = null) : BuildingFilterParameters(
+        Page,
+        PageSize,
+        Street,
+        HouseNumber,
+        Name,
+        Status,
+        Neighborhood,
+        StatusSummary);
 
 public record BuildingLogDto(
     int Id,
@@ -15,7 +39,7 @@ public record BuildingLogDto(
     string? BuildingHouseNumber,
     string? BuildingNickname,
     string? BuildingNeighborhood,
-    string? BuildingStatus,
+    string BuildingStatus,
     string? BuildingStatusSummary);
 
 public class BuildingLogRequest

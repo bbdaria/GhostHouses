@@ -13,6 +13,7 @@ export default function UserDetailsPage() {
   const [error, setError] = useState('');
   const [form, setForm] = useState({ role: 'Viewer', email: '', twoFactorEnabled: true });
   const [message, setMessage] = useState('');
+  useDocumentTitle(user ? `פרטי משתמש – ${user.username}` : 'פרטי משתמש');
 
   useEffect(() => {
     loadUser();
@@ -80,7 +81,6 @@ export default function UserDetailsPage() {
   }
 
   const roleLabel = ROLE_LABELS[user.role] || user.role;
-  useDocumentTitle(`פרטי משתמש – ${user.username} | מוקד המבנים העירוני`);
 
   return (
     <main className="app users-app">

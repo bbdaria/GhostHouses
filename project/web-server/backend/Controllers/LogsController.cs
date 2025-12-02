@@ -24,18 +24,7 @@ public class LogsController : ApiControllerBase
     [HttpGet]
     [Authorize(Policy = "Viewer")]
     public async Task<ActionResult<PaginatedResult<BuildingLogDto>>> GetLogs(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
-        [FromQuery] int? buildingId = null,
-        [FromQuery] Guid? userId = null,
-        [FromQuery] string? user = null,
-        [FromQuery] DateTimeOffset? from = null,
-        [FromQuery] DateTimeOffset? to = null,
-        [FromQuery] string? street = null,
-        [FromQuery] string? houseNumber = null,
-        [FromQuery] string? nickname = null,
-        [FromQuery] string? status = null,
-        [FromQuery] string? neighborhood = null,
+        [FromQuery] LogFilterParameters filter,
         CancellationToken cancellationToken = default)
     {
         var query = _context.BuildingLogs
@@ -43,61 +32,66 @@ public class LogsController : ApiControllerBase
             .Include(l => l.Building)
             .AsQueryable();
 
-        if (buildingId.HasValue)
+        if (filter.BuildingId.HasValue)
         {
-            query = query.Where(l => l.BuildingId == buildingId.Value);
+            query = query.Where(l => l.BuildingId == filter.BuildingId.Value);
         }
 
-        if (userId.HasValue)
+        if (filter.UserId.HasValue)
         {
-            query = query.Where(l => l.CreatedByUserId == userId.Value);
+            query = query.Where(l => l.CreatedByUserId == filter.UserId.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(user))
+        if (!string.IsNullOrWhiteSpace(filter.User))
         {
-            query = query.Where(l => l.CreatedByUser != null && EF.Functions.ILike(l.CreatedByUser.Username, $"%{user}%"));
+            query = query.Where(l => l.CreatedByUser != null && EF.Functions.ILike(l.CreatedByUser.Username, $"%{filter.User}%"));
         }
 
-        if (from.HasValue)
+        if (filter.From.HasValue)
         {
-            query = query.Where(l => l.CreatedAt >= from.Value);
+            query = query.Where(l => l.CreatedAt >= filter.From.Value);
         }
 
-        if (to.HasValue)
+        if (filter.To.HasValue)
         {
-            query = query.Where(l => l.CreatedAt <= to.Value);
+            query = query.Where(l => l.CreatedAt <= filter.To.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(street))
+        if (!string.IsNullOrWhiteSpace(filter.Street))
         {
-            query = query.Where(l => EF.Functions.ILike(l.Building.StreetName, $"%{street}%"));
+            query = query.Where(l => EF.Functions.ILike(l.Building.StreetName, $"%{filter.Street}%"));
         }
 
-        if (!string.IsNullOrWhiteSpace(houseNumber))
+        if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
         {
-            query = query.Where(l => l.Building.HouseNumber == houseNumber);
+            query = query.Where(l => l.Building.HouseNumber == filter.HouseNumber);
         }
 
-        if (!string.IsNullOrWhiteSpace(nickname))
+        if (!string.IsNullOrWhiteSpace(filter.Name))
         {
-            query = query.Where(l => EF.Functions.ILike(l.Building.BuildingName, $"%{nickname}%"));
+            query = query.Where(l => EF.Functions.ILike(l.Building.BuildingName, $"%{filter.Name}%"));
         }
 
-        if (!string.IsNullOrWhiteSpace(status))
+        if (filter.Status.HasValue)
         {
-            query = query.Where(l => EF.Functions.ILike(l.Building.ShikumStatus, $"%{status}%"));
+            query = query.Where(l => l.Building.ShikumStatus == filter.Status.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(neighborhood))
+        if (!string.IsNullOrWhiteSpace(filter.Neighborhood))
         {
-            query = query.Where(l => EF.Functions.ILike(l.Building.Neighborhood, $"%{neighborhood}%"));
+            query = query.Where(l => EF.Functions.ILike(l.Building.Neighborhood, $"%{filter.Neighborhood}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StatusSummary))
+        {
+            query = query.Where(l => EF.Functions.ILike(l.Building.StatusSummary, $"%{filter.StatusSummary}%"));
         }
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(l => l.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
             .Select(l => new BuildingLogDto(
                 l.Id,
                 l.BuildingId,
@@ -111,11 +105,11 @@ public class LogsController : ApiControllerBase
                 l.Building.HouseNumber,
                 l.Building.BuildingName,
                 l.Building.Neighborhood,
-                l.Building.ShikumStatus,
+                l.Building.ShikumStatus.ToString(),
                 l.Building.StatusSummary))
             .ToListAsync(cancellationToken);
 
-        return Ok(new PaginatedResult<BuildingLogDto>(items, total, page, pageSize));
+        return Ok(new PaginatedResult<BuildingLogDto>(items, total, filter.Page, filter.PageSize));
     }
 
     [HttpGet("building/{buildingId:int}")]
@@ -140,7 +134,7 @@ public class LogsController : ApiControllerBase
                 l.Building.HouseNumber,
                 l.Building.BuildingName,
                 l.Building.Neighborhood,
-                l.Building.ShikumStatus,
+                l.Building.ShikumStatus.ToString(),
                 l.Building.StatusSummary))
             .ToListAsync(cancellationToken);
 
@@ -157,6 +151,8 @@ public class LogsController : ApiControllerBase
             return NotFound();
         }
 
+        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
+
         var log = new BuildingLog
         {
             BuildingId = buildingId,
@@ -164,13 +160,22 @@ public class LogsController : ApiControllerBase
             Message = request.Message,
             Category = request.Category,
             Severity = request.Severity,
-            CreatedByUserId = CurrentUserId,
+            CreatedByUserId = actorId,
             CreatedAt = IsraelTime.NowUtc
         };
 
         _context.BuildingLogs.Add(log);
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(BuildingLog), log.Id.ToString(), "Create", request, cancellationToken);
+
+        string? createdBy = null;
+        if (actorId.HasValue)
+        {
+            createdBy = await _context.Users
+                .Where(u => u.Id == actorId.Value)
+                .Select(u => u.Username)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
 
         var dto = new BuildingLogDto(
             log.Id,
@@ -180,12 +185,12 @@ public class LogsController : ApiControllerBase
             log.Category,
             log.Severity,
             IsraelTime.Convert(log.CreatedAt),
-            null,
+            createdBy,
             building.StreetName,
             building.HouseNumber,
             building.BuildingName,
             building.Neighborhood,
-            building.ShikumStatus,
+            building.ShikumStatus.ToString(),
             building.StatusSummary);
         return CreatedAtAction(nameof(GetBuildingLogs), new { buildingId }, dto);
     }
@@ -208,6 +213,21 @@ public class LogsController : ApiControllerBase
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(BuildingLog), log.Id.ToString(), "Update", request, cancellationToken);
         return NoContent();
+    }
+
+    private async Task<Guid?> ResolveActorIdAsync(CancellationToken cancellationToken)
+    {
+        var actorId = CurrentUserId;
+        if (actorId.HasValue)
+        {
+            var exists = await _context.Users.AnyAsync(u => u.Id == actorId.Value, cancellationToken);
+            if (!exists)
+            {
+                return null;
+            }
+        }
+
+        return actorId;
     }
 
     [HttpDelete("{logId:int}")]

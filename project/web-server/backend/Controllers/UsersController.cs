@@ -28,7 +28,14 @@ public class UsersController : ApiControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetUsers([FromQuery] string? search = null, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetUsers(
+        [FromQuery] string? search = null,
+        [FromQuery] string? username = null,
+        [FromQuery] string? email = null,
+        [FromQuery] UserRole? role = null,
+        [FromQuery] DateTimeOffset? from = null,
+        [FromQuery] DateTimeOffset? to = null,
+        CancellationToken cancellationToken = default)
     {
         var query = _context.Users.AsQueryable();
         if (!string.IsNullOrWhiteSpace(search))
@@ -36,9 +43,34 @@ public class UsersController : ApiControllerBase
             query = query.Where(u => EF.Functions.ILike(u.Username, $"%{search}%") || EF.Functions.ILike(u.Email, $"%{search}%"));
         }
 
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            query = query.Where(u => EF.Functions.ILike(u.Username, $"%{username}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            query = query.Where(u => EF.Functions.ILike(u.Email, $"%{email}%"));
+        }
+
+        if (role.HasValue)
+        {
+            query = query.Where(u => u.Role == role.Value);
+        }
+
+        if (from.HasValue)
+        {
+            query = query.Where(u => u.CreatedAt >= from.Value);
+        }
+
+        if (to.HasValue)
+        {
+            query = query.Where(u => u.CreatedAt <= to.Value);
+        }
+
         var users = await query
             .OrderBy(u => u.Username)
-            .Select(u => new UserSummaryDto(u.Id, u.Username, u.Email, u.Role, u.TwoFactorEnabled))
+            .Select(u => new UserSummaryDto(u.Id, u.Username, u.Email, u.Role, u.TwoFactorEnabled, u.CreatedAt))
             .ToListAsync(cancellationToken);
 
         return Ok(users);
@@ -53,7 +85,7 @@ public class UsersController : ApiControllerBase
             return NotFound();
         }
 
-        return Ok(new UserSummaryDto(user.Id, user.Username, user.Email, user.Role, user.TwoFactorEnabled));
+        return Ok(new UserSummaryDto(user.Id, user.Username, user.Email, user.Role, user.TwoFactorEnabled, user.CreatedAt));
     }
 
     [HttpPost]
@@ -76,7 +108,7 @@ public class UsersController : ApiControllerBase
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(AppUser), user.Id.ToString(), "Create", request, cancellationToken);
 
-        return CreatedAtAction(nameof(GetUser), new { id = user.Id }, new UserSummaryDto(user.Id, user.Username, user.Email, user.Role, user.TwoFactorEnabled));
+        return CreatedAtAction(nameof(GetUser), new { id = user.Id }, new UserSummaryDto(user.Id, user.Username, user.Email, user.Role, user.TwoFactorEnabled, user.CreatedAt));
     }
 
     [HttpPut("{id:guid}")]

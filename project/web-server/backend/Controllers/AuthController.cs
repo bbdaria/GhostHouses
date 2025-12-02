@@ -98,6 +98,6 @@ public class AuthController : ApiControllerBase
             return Unauthorized();
         }
 
-        return Ok(new UserSummaryDto(user.Id, user.Username, user.Email, user.Role, user.TwoFactorEnabled));
+        return Ok(new UserSummaryDto(user.Id, user.Username, user.Email, user.Role, user.TwoFactorEnabled, user.CreatedAt));
     }
 }

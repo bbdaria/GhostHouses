@@ -8,7 +8,8 @@ public record UserSummaryDto(
     string Username,
     string Email,
     UserRole Role,
-    bool TwoFactorEnabled);
+    bool TwoFactorEnabled,
+    DateTimeOffset CreatedAt);
 
 public class CreateUserRequest
 {

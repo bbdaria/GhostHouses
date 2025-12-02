@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using WebServer.Models;
 using WebServer.Models.Users;
 
 namespace WebServer.Models.Dtos;
@@ -9,8 +10,9 @@ public record BuildingFilterParameters(
     string? Street = null,
     string? HouseNumber = null,
     string? Name = null,
-    string? Status = null,
-    string? Neighborhood = null);
+    BuildingStatus? Status = null,
+    string? Neighborhood = null,
+    string? StatusSummary = null);
 
 public record BuildingSummaryDto(
     int Id,
@@ -19,7 +21,7 @@ public record BuildingSummaryDto(
     string StreetName,
     string HouseNumber,
     string Neighborhood,
-    string ShikumStatus,
+    BuildingStatus ShikumStatus,
     string BldSivug,
     string StatusSummary);
 
@@ -58,7 +60,7 @@ public record BuildingEditRequest
     public string BuildingName { get; set; } = string.Empty;
     public string Neighborhood { get; set; } = string.Empty;
     public string? BldSivug { get; set; }
-    public string? ShikumStatus { get; set; }
+    public BuildingStatus? ShikumStatus { get; set; }
     public string? StatusSummary { get; set; }
     public string? Complaints { get; set; }
     public string[]? Photos { get; set; }

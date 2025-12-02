@@ -21,7 +21,7 @@ export default function App() {
           <Route path="logs" element={<LogsPage />} />
           <Route element={<RoleGate minRole="Admin" />}>
             <Route path="users" element={<UsersListPage />} />
-            <Route path="users/:id" element={<UserDetailsPage />} />
+            <Route path="users/:id" element={<UsersListPage />} />
           </Route>
         </Route>
       </Route>
