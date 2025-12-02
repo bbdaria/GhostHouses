@@ -16,6 +16,7 @@ public static class SeedData
         if (!await context.Users.AnyAsync(cancellationToken))
         {
             var hasher = new PasswordHasher<AppUser>();
+
             var admin = new AppUser
             {
                 Username = "admin",
@@ -26,21 +27,27 @@ public static class SeedData
             admin.PasswordHash = hasher.HashPassword(admin, "admin");
             context.Users.Add(admin);
 
-            // Seed baseline building for demo
-            context.Buildings.Add(new Building
+            var editor = new AppUser
             {
-                FldId = "GH-0001",
-                BuildingName = "Old Port House",
-                StreetName = "Herzl",
-                HouseNumber = "5",
-                Neighborhood = "Downtown",
-                BldSivug = "Abandoned",
-                ShikumStatus = "Pending Survey",
-                StatusSummary = "Awaiting inspection",
-                Complaints = "Graffiti and loitering",
-                PhotoUrls = "https://placehold.co/600x400"
-            });
+                Username = "editor",
+                Email = "editor@haifa.gov",
+                Role = UserRole.Editor,
+                TwoFactorSecret = Guid.NewGuid().ToString("N")
+            };
+            editor.PasswordHash = hasher.HashPassword(editor, "editor");
+            context.Users.Add(editor);
 
+            var viewer = new AppUser
+            {
+                Username = "viewer",
+                Email = "viewer@haifa.gov",
+                Role = UserRole.Viewer,
+                TwoFactorSecret = Guid.NewGuid().ToString("N")
+            };
+            viewer.PasswordHash = hasher.HashPassword(viewer, "viewer");
+            context.Users.Add(viewer);
+
+            // No buildings seeded by default
             await context.SaveChangesAsync(cancellationToken);
         }
     }

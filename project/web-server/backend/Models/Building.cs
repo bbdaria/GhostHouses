@@ -9,7 +9,7 @@ public class Building
     public string BuildingName { get; set; } = string.Empty;
     public string Neighborhood { get; set; } = string.Empty;
     public string BldSivug { get; set; } = string.Empty;
-    public string ShikumStatus { get; set; } = string.Empty;
+    public BuildingStatus ShikumStatus { get; set; } = BuildingStatus.Unknown;
     public string StatusSummary { get; set; } = string.Empty;
     public DateTime? StatusSummaryUpdatedAt { get; set; }
     public string Complaints { get; set; } = string.Empty;

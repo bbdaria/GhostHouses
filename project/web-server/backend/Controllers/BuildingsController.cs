@@ -49,14 +49,19 @@ public class BuildingsController : ApiControllerBase
             query = query.Where(b => EF.Functions.ILike(b.BuildingName, $"%{filter.Name}%"));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Status))
+        if (filter.Status.HasValue)
         {
-            query = query.Where(b => EF.Functions.ILike(b.ShikumStatus, $"%{filter.Status}%"));
+            query = query.Where(b => b.ShikumStatus == filter.Status.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Neighborhood))
         {
             query = query.Where(b => EF.Functions.ILike(b.Neighborhood, $"%{filter.Neighborhood}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StatusSummary))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.StatusSummary, $"%{filter.StatusSummary}%"));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -86,6 +91,7 @@ public class BuildingsController : ApiControllerBase
     {
         var building = await _context.Buildings
             .Include(b => b.Logs.OrderByDescending(l => l.CreatedAt))
+            .ThenInclude(l => l.CreatedByUser)
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
 
         if (building is null)
@@ -110,7 +116,7 @@ public class BuildingsController : ApiControllerBase
                 building.HouseNumber,
                 building.BuildingName,
                 building.Neighborhood,
-                building.ShikumStatus,
+                building.ShikumStatus.ToString(),
                 building.StatusSummary))
             .ToList();
 
@@ -138,13 +144,41 @@ public class BuildingsController : ApiControllerBase
             BuildingName = request.BuildingName,
             Neighborhood = request.Neighborhood,
             BldSivug = request.BldSivug ?? "Unclassified",
-            ShikumStatus = request.ShikumStatus ?? "Unknown",
+            ShikumStatus = request.ShikumStatus ?? BuildingStatus.Unknown,
             StatusSummary = request.StatusSummary ?? string.Empty,
             Complaints = request.Complaints ?? string.Empty,
             PhotoUrls = request.Photos is null ? string.Empty : string.Join(',', request.Photos)
         };
 
         _context.Buildings.Add(building);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
+
+        var createSnapshot = new
+        {
+            building.Id,
+            building.FldId,
+            building.BuildingName,
+            building.StreetName,
+            building.HouseNumber,
+            building.Neighborhood,
+            building.BldSivug,
+            building.ShikumStatus,
+            building.StatusSummary,
+            building.StatusSummaryUpdatedAt
+        };
+
+        _context.BuildingLogs.Add(new BuildingLog
+        {
+            BuildingId = building.Id,
+            Title = "יצירת מבנה",
+            Message = JsonSerializer.Serialize(createSnapshot),
+            Category = "Create",
+            Severity = "info",
+            CreatedByUserId = actorId,
+            CreatedAt = IsraelTime.NowUtc
+        });
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Create", request, cancellationToken);
 
@@ -179,7 +213,10 @@ public class BuildingsController : ApiControllerBase
         }
         building.Neighborhood = request.Neighborhood;
         building.BldSivug = request.BldSivug ?? building.BldSivug;
-        building.ShikumStatus = request.ShikumStatus ?? building.ShikumStatus;
+        if (request.ShikumStatus.HasValue)
+        {
+            building.ShikumStatus = request.ShikumStatus.Value;
+        }
         building.StatusSummary = request.StatusSummary ?? building.StatusSummary;
         building.Complaints = request.Complaints ?? building.Complaints;
         building.PhotoUrls = request.Photos is null ? building.PhotoUrls : string.Join(',', request.Photos);
@@ -201,6 +238,8 @@ public class BuildingsController : ApiControllerBase
             building.StatusSummaryUpdatedAt
         };
 
+        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
+
         _context.BuildingLogs.Add(new BuildingLog
         {
             BuildingId = building.Id,
@@ -208,12 +247,27 @@ public class BuildingsController : ApiControllerBase
             Message = JsonSerializer.Serialize(changeSnapshot),
             Category = "Edit",
             Severity = "info",
-            CreatedByUserId = CurrentUserId,
+            CreatedByUserId = actorId,
             CreatedAt = IsraelTime.NowUtc
         });
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Update", request, cancellationToken);
         return NoContent();
+    }
+
+    private async Task<Guid?> ResolveActorIdAsync(CancellationToken cancellationToken)
+    {
+        var actorId = CurrentUserId;
+        if (actorId.HasValue)
+        {
+            var exists = await _context.Users.AnyAsync(u => u.Id == actorId.Value, cancellationToken);
+            if (!exists)
+            {
+                return null;
+            }
+        }
+
+        return actorId;
     }
 
     [HttpDelete("{id:int}")]

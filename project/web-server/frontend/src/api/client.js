@@ -129,7 +129,8 @@ const mapUser = (user) => ({
   username: user.username,
   email: user.email,
   role: user.role,
-  twoFactorEnabled: user.twoFactorEnabled
+  twoFactorEnabled: user.twoFactorEnabled,
+  createdAt: user.createdAt
 });
 
 const api = {
@@ -169,6 +170,7 @@ const api = {
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
     if (filters.area) params.append('neighborhood', filters.area);
+    if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
     return (data.items || []).map(mapBuildingSummary);
@@ -233,6 +235,13 @@ const api = {
     const params = new URLSearchParams();
     if (filters.buildingId) params.append('buildingId', filters.buildingId);
     if (filters.userId) params.append('userId', filters.userId);
+    if (filters.user) params.append('user', filters.user);
+    if (filters.street) params.append('street', filters.street);
+    if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);
+    if (filters.nickname) params.append('name', filters.nickname);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.area) params.append('neighborhood', filters.area);
+    if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
     if (filters.startDate) params.append('from', filters.startDate);
     if (filters.endDate) params.append('to', filters.endDate);
     const data = await request(`/logs${params.toString() ? `?${params}` : ''}`);

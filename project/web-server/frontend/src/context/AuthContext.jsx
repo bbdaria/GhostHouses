@@ -4,7 +4,13 @@ import api, { clearAuthToken, setAuthToken } from '../api/client.js';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('authToken'));
+  const [token, setToken] = useState(() => {
+    const stored = localStorage.getItem('authToken');
+    if (stored) {
+      setAuthToken(stored);
+    }
+    return stored;
+  });
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem('authUser');
     return raw ? JSON.parse(raw) : null;

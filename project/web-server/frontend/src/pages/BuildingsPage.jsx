@@ -3,14 +3,40 @@ import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
-import { LAST_BUILDING_KEY } from '../constants.js';
+import {
+  BUILDING_FIELD_LABELS,
+  BUILDING_FIELD_PLACEHOLDERS,
+  LAST_BUILDING_KEY,
+  STATUS_SELECT_PLACEHOLDER
+} from '../constants.js';
 
 const initialFilters = {
   street: '',
   houseNumber: '',
   nickname: '',
   status: '',
-  area: ''
+  area: '',
+  statusSummary: ''
+};
+
+const STATUS_ID_TO_VALUE = STATUS_OPTIONS.reduce((acc, option) => {
+  acc[option.id] = option.value;
+  return acc;
+}, {});
+
+const normalizeStatusValue = (value) => {
+  if (value === null || value === undefined) return 'Unknown';
+  if (typeof value === 'number') {
+    return STATUS_ID_TO_VALUE[value] || 'Unknown';
+  }
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric) && STATUS_ID_TO_VALUE[numeric]) {
+      return STATUS_ID_TO_VALUE[numeric];
+    }
+    return value;
+  }
+  return 'Unknown';
 };
 
 
@@ -22,8 +48,6 @@ export default function BuildingsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedBuilding, setSelectedBuilding] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [logsLoading, setLogsLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const [detailTab, setDetailTab] = useState('summary');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -103,7 +127,6 @@ export default function BuildingsPage() {
         const stillExists = data.find((b) => b.id === selectedBuilding.id);
         if (!stillExists) {
           setSelectedBuilding(null);
-          setLogs([]);
         }
       }
     } catch (err) {
@@ -120,21 +143,8 @@ export default function BuildingsPage() {
       setSelectedBuilding(building);
       setDetailTab('summary');
       sessionStorage.setItem(LAST_BUILDING_KEY, String(id));
-      await loadBuildingLogs(id);
     } catch (err) {
       setDetailError(err.message);
-    }
-  };
-
-  const loadBuildingLogs = async (id) => {
-    setLogsLoading(true);
-    try {
-      const data = await api.fetchBuildingLogs(id);
-      setLogs(data);
-    } catch (err) {
-      setDetailError(err.message);
-    } finally {
-      setLogsLoading(false);
     }
   };
 
@@ -236,7 +246,6 @@ export default function BuildingsPage() {
     try {
       await api.deleteBuilding(selectedBuilding.id);
       setSelectedBuilding(null);
-      setLogs([]);
       loadBuildings(filters);
       setActionMessage('המבנה הוסר.');
     } catch (err) {
@@ -245,6 +254,10 @@ export default function BuildingsPage() {
   };
 
   const statuses = useMemo(() => STATUS_OPTIONS, []);
+
+  const handleTabChange = (tab) => {
+    setDetailTab(tab);
+  };
 
   return (
     <main className="app buildings-app">
@@ -259,39 +272,39 @@ export default function BuildingsPage() {
       <section className="filters-card">
         <form className="filters-grid" onSubmit={handleSearch}>
           <label>
-            <span>רחוב</span>
+            <span>{BUILDING_FIELD_LABELS.street}</span>
             <input
               type="text"
               name="street"
               value={filters.street}
               onChange={handleFilterChange}
-              placeholder="לדוגמה: הרצל"
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.street}
             />
           </label>
           <label>
-            <span>מספר בית</span>
+            <span>{BUILDING_FIELD_LABELS.houseNumber}</span>
             <input
               type="text"
               name="houseNumber"
               value={filters.houseNumber}
               onChange={handleFilterChange}
-              placeholder="לדוגמה: 12א"
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.houseNumber}
             />
           </label>
           <label>
-            <span>כינוי</span>
+            <span>{BUILDING_FIELD_LABELS.nickname}</span>
             <input
               type="text"
               name="nickname"
               value={filters.nickname}
               onChange={handleFilterChange}
-              placeholder="לדוגמה: הטחנה"
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.nickname}
             />
           </label>
           <label>
-            <span>סטטוס</span>
+            <span>{BUILDING_FIELD_LABELS.status}</span>
             <select name="status" value={filters.status} onChange={handleFilterChange}>
-              <option value="">כל הסטטוסים</option>
+              <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
               {statuses.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -300,13 +313,23 @@ export default function BuildingsPage() {
             </select>
           </label>
           <label>
-            <span>אזור</span>
+            <span>{BUILDING_FIELD_LABELS.area}</span>
             <input
               type="text"
               name="area"
               value={filters.area}
               onChange={handleFilterChange}
-              placeholder="לדוגמה: אזור תעשייה"
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.area}
+            />
+          </label>
+          <label className="full-span">
+            <span>{BUILDING_FIELD_LABELS.statusSummary}</span>
+            <input
+              type="text"
+              name="statusSummary"
+              value={filters.statusSummary}
+              onChange={handleFilterChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
             />
           </label>
           <div className="filters-actions">
@@ -338,6 +361,7 @@ export default function BuildingsPage() {
                 name="streetName"
                 value={createForm.streetName}
                 onChange={handleCreateChange}
+                placeholder={BUILDING_FIELD_PLACEHOLDERS.street}
                 required
               />
             </label>
@@ -347,21 +371,27 @@ export default function BuildingsPage() {
                 name="bldNum"
                 value={createForm.bldNum}
                 onChange={handleCreateChange}
+                placeholder={BUILDING_FIELD_PLACEHOLDERS.houseNumber}
                 required
               />
             </label>
             <label>
               כינוי
-              <input name="bldName" value={createForm.bldName} onChange={handleCreateChange} />
+              <input
+                name="bldName"
+                value={createForm.bldName}
+                onChange={handleCreateChange}
+                placeholder={BUILDING_FIELD_PLACEHOLDERS.nickname}
+              />
             </label>
             <label>
-              Status
+              סטטוס
               <select
                 name="shikumStatusId"
                 value={createForm.shikumStatusId}
                 onChange={handleCreateChange}
               >
-                <option value="">Select status</option>
+                <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
                 {STATUS_OPTIONS.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
@@ -371,7 +401,12 @@ export default function BuildingsPage() {
             </label>
             <label>
               אזור
-              <input name="area" value={createForm.area} onChange={handleCreateChange} />
+              <input
+                name="area"
+                value={createForm.area}
+                onChange={handleCreateChange}
+                placeholder={BUILDING_FIELD_PLACEHOLDERS.area}
+              />
             </label>
             <label className="full-span">
               תקציר מצב
@@ -379,6 +414,7 @@ export default function BuildingsPage() {
                 name="statusSummary"
                 value={createForm.statusSummary}
                 onChange={handleCreateChange}
+                placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
               />
             </label>
             <div className="filters-actions">
@@ -453,20 +489,14 @@ export default function BuildingsPage() {
               <div className="tab-bar">
                 <button
                   className={detailTab === 'summary' ? 'tab active' : 'tab'}
-                  onClick={() => setDetailTab('summary')}
+                  onClick={() => handleTabChange('summary')}
                 >
                   תקציר
-                </button>
-                <button
-                  className={detailTab === 'logs' ? 'tab active' : 'tab'}
-                  onClick={() => setDetailTab('logs')}
-                >
-                  יומן
                 </button>
                 {canEdit && (
                   <button
                     className={detailTab === 'edit' ? 'tab active' : 'tab'}
-                    onClick={() => setDetailTab('edit')}
+                    onClick={() => handleTabChange('edit')}
                   >
                     עריכה
                   </button>
@@ -509,65 +539,6 @@ export default function BuildingsPage() {
                     <button className="danger" onClick={handleDeleteBuilding}>
                       מחיקת מבנה
                     </button>
-                  )}
-                </div>
-              )}
-
-              {detailTab === 'logs' && (
-                <div className="details-card">
-                  {logsLoading && <p className="muted">טוען יומן…</p>}
-                  {!logsLoading && logs.length === 0 && <p className="muted">אין רשומות במבנה זה.</p>}
-                  {!logsLoading && logs.length > 0 && (
-                    <div className="table-wrapper">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>שם רחוב</th>
-                            <th>מספר בית</th>
-                            <th>כינוי</th>
-                            <th>סטטוס</th>
-                            <th>אזור</th>
-                            <th>תקציר מצב</th>
-                            <th>תאריך עדכון</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {logs.map((log) => {
-                            const snapshot = log.snapshot || {};
-                            const street = snapshot.streetName || log.buildingStreet || selectedBuilding.street;
-                            const houseNumber =
-                              snapshot.houseNumber || log.buildingHouseNumber || selectedBuilding.houseNumber;
-                            const nickname =
-                              snapshot.buildingName ||
-                              log.buildingNickname ||
-                              selectedBuilding.nickname ||
-                              '—';
-                            const neighborhood =
-                              snapshot.neighborhood || log.buildingNeighborhood || selectedBuilding.area || '—';
-                            const statusValue =
-                              snapshot.shikumStatus || log.buildingStatus || selectedBuilding.status || 'Unknown';
-                            const statusLabel = statusLabelMap[statusValue] || statusValue || '—';
-                            const summary =
-                              snapshot.statusSummary ||
-                              log.buildingStatusSummary ||
-                              selectedBuilding.statusSummary ||
-                              '—';
-                            const updatedAt = snapshot.statusSummaryUpdatedAt || log.createdAt;
-                            return (
-                              <tr key={log.id}>
-                                <td>{displayOrDash(street)}</td>
-                                <td>{displayOrDash(houseNumber)}</td>
-                                <td>{displayOrDash(nickname)}</td>
-                                <td>{statusLabel}</td>
-                                <td>{displayOrDash(neighborhood)}</td>
-                                <td>{displayOrDash(summary)}</td>
-                                <td>{formatLogDate(updatedAt)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
                   )}
                 </div>
               )}
