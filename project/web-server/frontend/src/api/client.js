@@ -278,6 +278,12 @@ const api = {
   async resetUserTwoFactor(id) {
     return request(`/users/${id}/reset-2fa`, { method: 'POST' });
   },
+  async setUserPassword(id, newPassword) {
+    return request(`/users/${id}/password`, {
+      method: 'POST',
+      body: { newPassword }
+    });
+  },
   async healthCheck() {
     return request('/health/db');
   }

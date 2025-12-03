@@ -35,3 +35,10 @@ public class UpdateUserRequest
     public UserRole? Role { get; set; }
     public bool? TwoFactorEnabled { get; set; }
 }
+
+public class AdminSetPasswordRequest
+{
+    [Required]
+    [MinLength(6)]
+    public string NewPassword { get; set; } = string.Empty;
+}

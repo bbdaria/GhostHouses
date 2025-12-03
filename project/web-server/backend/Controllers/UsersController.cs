@@ -156,4 +156,19 @@ public class UsersController : ApiControllerBase
         await _auditService.RecordAsync(CurrentUserId, nameof(AppUser), user.Id.ToString(), "Reset2FA", null, cancellationToken);
         return NoContent();
     }
+
+    [HttpPost("{id:guid}/password")]
+    public async Task<ActionResult> SetPassword(Guid id, [FromBody] AdminSetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _context.Users.FindAsync(new object[] { id }, cancellationToken);
+        if (user is null)
+        {
+            return NotFound();
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
+        await _context.SaveChangesAsync(cancellationToken);
+        await _auditService.RecordAsync(CurrentUserId, nameof(AppUser), user.Id.ToString(), "AdminSetPassword", null, cancellationToken);
+        return NoContent();
+    }
 }

@@ -40,6 +40,8 @@ export default function UsersListPage() {
   const [detailError, setDetailError] = useState('');
   const [detailMessage, setDetailMessage] = useState('');
   const [detailForm, setDetailForm] = useState({ role: 'Viewer', email: '', twoFactorEnabled: true });
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [passwordMessage, setPasswordMessage] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   useDocumentTitle('ניהול משתמשים - מוקד המבנים העירוני');
 
@@ -155,6 +157,27 @@ export default function UsersListPage() {
       loadUsers();
     } catch (err) {
       setDetailError(err.message);
+    }
+  };
+
+  const handlePasswordSubmit = async (event) => {
+    event.preventDefault();
+    if (!selectedUser) return;
+    if (!passwordForm.newPassword || passwordForm.newPassword.length < 6) {
+      setPasswordMessage('הסיסמה חייבת להיות באורך 6 תווים לפחות.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordMessage('הסיסמאות אינן תואמות.');
+      return;
+    }
+    setPasswordMessage('');
+    try {
+      await api.setUserPassword(selectedUser.id, passwordForm.newPassword);
+      setPasswordMessage('הסיסמה עודכנה בהצלחה.');
+      setPasswordForm({ newPassword: '', confirmPassword: '' });
+    } catch (err) {
+      setPasswordMessage(err.message);
     }
   };
 
@@ -368,6 +391,43 @@ export default function UsersListPage() {
                 </div>
               </form>
               {detailMessage && <p className="muted">{detailMessage}</p>}
+
+              <hr />
+              <form className="form-grid" onSubmit={handlePasswordSubmit}>
+                <label className="full-span">
+                  <strong>איפוס סיסמה</strong>
+                </label>
+                <label>
+                  סיסמה חדשה
+                  <input
+                    type="password"
+                    name="newPassword"
+                    value={passwordForm.newPassword}
+                    onChange={(e) =>
+                      setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  אימות סיסמה
+                  <input
+                    type="password"
+                    name="confirmPassword"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) =>
+                      setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <div className="filters-actions full-span">
+                  <button type="submit" className="ghost">
+                    שמירת סיסמה חדשה
+                  </button>
+                </div>
+              </form>
+              {passwordMessage && <p className="muted">{passwordMessage}</p>}
             </div>
           )}
         </div>
