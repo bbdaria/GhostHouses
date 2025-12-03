@@ -521,3 +521,124 @@ tbody tr.active {
   align-items: center;
   gap: 0.5rem;
 }
+
+.settings-app {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.theme-option input {
+  accent-color: #2563eb;
+}
+
+.theme-option.active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.2);
+}
+
+.theme-light .theme-option {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.theme-light .theme-option.active {
+  background: #e0e7ff;
+}
+
+.theme-light,
+.theme-light body {
+  background-color: #f6f7fb;
+  color: #0f172a;
+}
+
+.theme-light .app-shell {
+  background: #f6f7fb;
+}
+
+.theme-light .top-bar {
+  background: #ffffff;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+}
+
+.theme-light .nav-link {
+  color: #1f2937;
+}
+
+.theme-light .nav-link.active,
+.theme-light .nav-link:hover {
+  background: rgba(37, 99, 235, 0.16);
+  color: #0f172a;
+}
+
+.theme-light .user-pill {
+  background: #e2e8f0;
+}
+
+.theme-light .user-pill .muted {
+  color: #334155;
+}
+
+.theme-light .logout-btn,
+.theme-light button.ghost {
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.theme-light .filters-card,
+.theme-light .list-panel,
+.theme-light .details-panel,
+.theme-light .panel,
+.theme-light .card-link,
+.theme-light .auth-card {
+  background: #ffffff;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.theme-light .form-grid input,
+.theme-light .form-grid textarea,
+.theme-light .form-grid select,
+.theme-light .filters-grid input,
+.theme-light .filters-grid select,
+.theme-light .auth-card input {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
+.theme-light .muted {
+  color: #475467;
+}
+
+.theme-light table th {
+  color: #475467;
+}
+
+.theme-light tbody tr:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.theme-light .status-unknown {
+  color: #475467;
+}
