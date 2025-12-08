@@ -2,28 +2,28 @@ name: Run Backend Tests
 
 on:
   push:
-    paths:
-      - 'web-server/backend/**'
+    branches: [ "main" ]
   pull_request:
+    branches: [ "main" ]
 
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 8.0.x
 
       - name: Restore dependencies
-        run: dotnet restore web-server/backend
+        run: dotnet restore
 
-      - name: Build backend
-        run: dotnet build --no-restore web-server/backend
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
 
       - name: Run tests
-        run: dotnet test --no-build --verbosity normal web-server/backend/WebServer.Tests
+        run: dotnet test --no-build --verbosity normal
