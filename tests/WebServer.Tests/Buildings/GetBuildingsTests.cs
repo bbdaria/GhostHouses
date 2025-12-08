@@ -270,3 +270,25 @@ public async Task GetBuildings_ReturnsEmpty_WhenNoMatches()
 
     Assert.Empty(data.Items);
 }
+
+[Fact]
+public async Task GetBuildings_FiltersByHouseNumber()
+{
+    var db = CreateDb();
+    db.Buildings.AddRange(
+        new Building { FldId = "1", StreetName = "Herzl", HouseNumber = "10" },
+        new Building { FldId = "2", StreetName = "Herzl", HouseNumber = "20" }
+    );
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+    var filter = new BuildingFilterParameters { HouseNumber = "10" };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Single(data.Items);
+    Assert.Equal("10", data.Items.First().HouseNumber);
+}
