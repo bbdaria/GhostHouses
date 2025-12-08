@@ -95,3 +95,34 @@ public async Task GetBuildings_ReturnsCorrectNumberOfItems_WhenMultipleBuildings
     Assert.Equal(3, paginated.Items.Count());
     Assert.Equal(3, paginated.Total);
 }
+
+[Fact]
+public async Task GetBuildings_FilterByStreetName_ReturnsOnlyMatches()
+{
+    var db = CreateDb();
+
+    db.Buildings.AddRange(
+        new Building { FldId = "1", StreetName = "Main", HouseNumber = "10", BuildingName = "A" },
+        new Building { FldId = "2", StreetName = "Main", HouseNumber = "11", BuildingName = "B" },
+        new Building { FldId = "3", StreetName = "Other", HouseNumber = "5", BuildingName = "C" }
+    );
+
+    await db.SaveChangesAsync();
+
+    var controller = new BuildingsController(db, null, null);
+
+    var filter = new BuildingFilterParameters(StreetName: "Main");
+
+    var result = await controller.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var payload = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    // Two results expected
+    Assert.Equal(2, payload.Items.Count);
+    Assert.Equal(2, payload.Total);
+
+    // Both results must have StreetName = "Main"
+    Assert.All(payload.Items, item => Assert.Equal("Main", item.StreetName));
+}
+
