@@ -61,3 +61,41 @@ namespace WebServer.Tests.Buildings
         }
     }
 }
+
+[Fact]
+public async Task GetBuildings_Pagination_ReturnsCorrectPage()
+{
+    var db = CreateDb();
+
+    // Insert 15 buildings
+    for (int i = 1; i <= 15; i++)
+    {
+        db.Buildings.Add(new Building
+        {
+            FldId = "F" + i,
+            StreetName = "Street" + i,
+            HouseNumber = i.ToString(),
+            BuildingName = "Building " + i,
+            Neighbourhood = "Center",
+            Bldisgvu = "A",
+            ShikunStatus = BuildingStatus.Unknown,
+            StatusSummary = ""
+        });
+    }
+    await db.SaveChangesAsync();
+
+    var controller = new BuildingsController(db, null, null);
+
+    var filter = new BuildingFilterParameters(Page: 1, PageSize: 10);
+
+    var result = await controller.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var paginated = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    // Assert page size
+    Assert.Equal(10, paginated.Items.Count);
+
+    // Assert total count is all 15 buildings
+    Assert.Equal(15, paginated.Total);
+}
