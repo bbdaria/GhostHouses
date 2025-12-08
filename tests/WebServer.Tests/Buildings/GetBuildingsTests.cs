@@ -148,3 +148,34 @@ public async Task GetBuildings_FiltersByNeighbourhood()
     Assert.Single(payload.Items);
     Assert.Equal("Center", payload.Items.First().Neighbourhood);
 }
+
+[Fact]
+public async Task GetBuildings_FiltersByStatus()
+{
+    var db = CreateDb();
+    db.Buildings.AddRange(
+        new Building {
+            FldId = "1",
+            ShikunStatus = BuildingStatus.Renovated,
+            StreetName = "A"
+        },
+        new Building {
+            FldId = "2",
+            ShikunStatus = BuildingStatus.Unknown,
+            StreetName = "B"
+        }
+    );
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+    var filter = new BuildingFilterParameters { ShikunStatus = BuildingStatus.Renovated };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var payload = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Single(payload.Items);
+    Assert.Equal(BuildingStatus.Renovated, payload.Items.First().ShikunStatus);
+}
+
