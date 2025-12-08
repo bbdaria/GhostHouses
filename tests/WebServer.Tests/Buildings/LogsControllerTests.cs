@@ -198,3 +198,33 @@ public async Task GetLogs_FiltersByNeighborhood()
 
 
 
+
+[Fact]
+public async Task GetLogs_FiltersByStatusSummary()
+{
+    // Arrange
+    _context.Buildings.AddRange(
+        new Building { Id = 1, StatusSummary = "Needs Repair" },
+        new Building { Id = 2, StatusSummary = "All Good" }
+    );
+
+    _context.BuildingLogs.AddRange(
+        new BuildingLog { Id = 1, BuildingId = 1, Title = "Repair log" },
+        new BuildingLog { Id = 2, BuildingId = 2, Title = "Good log" }
+    );
+
+    await _context.SaveChangesAsync();
+
+    var filter = new LogFilterParameters(StatusSummary: "Repair");
+
+    // Act
+    var result = await _controller.GetLogs(filter);
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+
+    // Assert
+    Assert.Single(data.Items);
+    Assert.Equal(1, data.Items.First().Id);
+}
+
+
