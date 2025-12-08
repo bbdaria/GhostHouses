@@ -292,3 +292,26 @@ public async Task GetBuildings_FiltersByHouseNumber()
     Assert.Single(data.Items);
     Assert.Equal("10", data.Items.First().HouseNumber);
 }
+
+
+[Fact]
+public async Task GetBuildings_FiltersByBuildingName()
+{
+    var db = CreateDb();
+    db.Buildings.AddRange(
+        new Building { FldId = "1", BuildingName = "Tower A" },
+        new Building { FldId = "2", BuildingName = "Tower B" }
+    );
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+    var filter = new BuildingFilterParameters { Name = "A" };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Single(data.Items);
+    Assert.Equal("Tower A", data.Items.First().BuildingName);
+}
