@@ -65,3 +65,33 @@ public async Task GetBuildings_ReturnsOneResult_WhenSingleBuildingExists()
 }
 
 
+[Fact]
+public async Task GetBuildings_ReturnsCorrectNumberOfItems_WhenMultipleBuildingsExist()
+{
+    var db = CreateDb();
+
+    // Arrange: add 3 buildings
+    db.Buildings.AddRange(
+        new Building { Id = 1, Name = "B1" },
+        new Building { Id = 2, Name = "B2" },
+        new Building { Id = 3, Name = "B3" }
+    );
+    db.SaveChanges();
+
+    var externalMock = new Mock<IExternalDataService>();
+    var auditMock = new Mock<IAuditService>();
+    var controller = new BuildingsController(db, externalMock.Object, auditMock.Object);
+
+    var filter = new BuildingFilterParameters(Page: 1, PageSize: 10);
+    var token = CancellationToken.None;
+
+    // Act
+    var result = await controller.GetBuildings(filter, token);
+
+    // Assert
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var paginated = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Equal(3, paginated.Items.Count());
+    Assert.Equal(3, paginated.Total);
+}
