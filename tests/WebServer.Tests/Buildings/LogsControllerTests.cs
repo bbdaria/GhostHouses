@@ -168,3 +168,33 @@ public async Task GetLogs_FiltersByStatus()
 }
 
 
+[Fact]
+public async Task GetLogs_FiltersByNeighborhood()
+{
+    // Arrange
+    _context.Buildings.AddRange(
+        new Building { Id = 1, StreetName = "A", HouseNumber = "1", Neighborhood = "Downtown" },
+        new Building { Id = 2, StreetName = "B", HouseNumber = "2", Neighborhood = "Hadar" }
+    );
+
+    _context.BuildingLogs.AddRange(
+        new BuildingLog { Id = 1, BuildingId = 1, Title = "in DT" },
+        new BuildingLog { Id = 2, BuildingId = 2, Title = "in Hadar" }
+    );
+
+    await _context.SaveChangesAsync();
+
+    var filter = new LogFilterParameters(Neighborhood: "Down");
+
+    // Act
+    var result = await _controller.GetLogs(filter);
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+
+    // Assert
+    Assert.Single(data.Items);
+    Assert.Equal(1, data.Items.First().Id);
+}
+
+
+
