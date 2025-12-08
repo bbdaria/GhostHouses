@@ -108,3 +108,31 @@ public async Task GetLogs_FiltersByDateRange()
     Assert.Equal(2, data.Items.First().Id);
 }
 
+
+[Fact]
+public async Task GetLogs_FiltersByStreet()
+{
+    // Arrange
+    _context.Buildings.AddRange(
+        new Building { Id = 1, StreetName = "Herzl", HouseNumber = "10" },
+        new Building { Id = 2, StreetName = "Jabotinsky", HouseNumber = "5" }
+    );
+
+    _context.BuildingLogs.AddRange(
+        new BuildingLog { Id = 1, BuildingId = 1, Title = "A" },
+        new BuildingLog { Id = 2, BuildingId = 2, Title = "B" }
+    );
+    await _context.SaveChangesAsync();
+
+    var filter = new LogFilterParameters(Street: "Her");
+
+    // Act
+    var result = await _controller.GetLogs(filter);
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+
+    // Assert
+    Assert.Single(data.Items);
+    Assert.Equal(1, data.Items.First().Id);
+}
+
