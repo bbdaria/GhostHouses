@@ -47,3 +47,33 @@ public class LogsControllerTests
         Assert.Equal(1, data.Items.First().Id);
     }
 }
+
+
+[Fact]
+public async Task GetLogs_FiltersByUserId()
+{
+    // Arrange
+    var user1 = new AppUser { Id = Guid.NewGuid(), Username = "u1" };
+    var user2 = new AppUser { Id = Guid.NewGuid(), Username = "u2" };
+    _context.Users.AddRange(user1, user2);
+
+    _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "1" });
+
+    _context.BuildingLogs.AddRange(
+        new BuildingLog { Id = 1, BuildingId = 1, CreatedByUserId = user1.Id, Title = "L1" },
+        new BuildingLog { Id = 2, BuildingId = 1, CreatedByUserId = user2.Id, Title = "L2" }
+    );
+    await _context.SaveChangesAsync();
+
+    var filter = new LogFilterParameters(UserId: user1.Id);
+
+    // Act
+    var result = await _controller.GetLogs(filter);
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+
+    // Assert
+    Assert.Single(data.Items);
+    Assert.Equal(1, data.Items.First().Id);
+}
+
