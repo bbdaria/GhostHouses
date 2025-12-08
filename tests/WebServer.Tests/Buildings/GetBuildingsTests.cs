@@ -252,3 +252,21 @@ public async Task GetBuildings_PaginatesCorrectly()
     Assert.Equal(2, data.Page);
 }
 
+[Fact]
+public async Task GetBuildings_ReturnsEmpty_WhenNoMatches()
+{
+    var db = CreateDb();
+    db.Buildings.Add(new Building { FldId = "1", StreetName = "ABC" });
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+
+    var filter = new BuildingFilterParameters { Street = "ZZZ" };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Empty(data.Items);
+}
