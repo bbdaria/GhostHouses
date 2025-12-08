@@ -335,6 +335,34 @@ public async Task GetBuildings_FiltersByStatus()
     var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
     var data = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
 
+}
+    [Fact]
+public async Task GetBuildings_FiltersByMultipleFields()
+{
+    var db = CreateDb();
+    db.Buildings.AddRange(
+        new Building { FldId = "1", StreetName = "BenYehuda", HouseNumber = "5", Neighborhood = "Center" },
+        new Building { FldId = "2", StreetName = "BenYehuda", HouseNumber = "5", Neighborhood = "North" }
+    );
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+    var filter = new BuildingFilterParameters
+    {
+        Street = "BenYehuda",
+        HouseNumber = "5",
+        Neighborhood = "Center"
+    };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Single(data.Items);
+    Assert.Equal("Center", data.Items.First().Neighborhood);
+}
+
     Assert.Single(data.Items);
     Assert.Equal(BuildingStatus.Good, data.Items.First().ShikumStatus);
 }
