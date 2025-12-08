@@ -136,3 +136,35 @@ public async Task GetLogs_FiltersByStreet()
     Assert.Equal(1, data.Items.First().Id);
 }
 
+
+
+
+[Fact]
+public async Task GetLogs_FiltersByStatus()
+{
+    // Arrange
+    _context.Buildings.AddRange(
+        new Building { Id = 1, StreetName = "A", HouseNumber = "1", ShikumStatus = BuildingStatus.Good },
+        new Building { Id = 2, StreetName = "B", HouseNumber = "2", ShikumStatus = BuildingStatus.Bad }
+    );
+
+    _context.BuildingLogs.AddRange(
+        new BuildingLog { Id = 1, BuildingId = 1, Title = "GoodLog" },
+        new BuildingLog { Id = 2, BuildingId = 2, Title = "BadLog" }
+    );
+
+    await _context.SaveChangesAsync();
+
+    var filter = new LogFilterParameters(Status: BuildingStatus.Good);
+
+    // Act
+    var result = await _controller.GetLogs(filter);
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+
+    // Assert
+    Assert.Single(data.Items);
+    Assert.Equal(1, data.Items.First().Id);
+}
+
+
