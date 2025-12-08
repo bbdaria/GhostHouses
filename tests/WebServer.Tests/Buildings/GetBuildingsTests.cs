@@ -200,3 +200,25 @@ public async Task GetBuildings_FiltersByNeighborhood()
     Assert.Single(data.Items);
     Assert.Equal("Ramat", data.Items.First().Neighborhood);
 }
+
+[Fact]
+public async Task GetBuildings_FiltersByStatusSummary()
+{
+    var db = CreateDb();
+    db.Buildings.AddRange(
+        new Building { FldId = "1", StatusSummary = "Needs repair" },
+        new Building { FldId = "2", StatusSummary = "All good" }
+    );
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+    var filter = new BuildingFilterParameters { StatusSummary = "repair" };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Single(data.Items);
+    Assert.Contains("repair", data.Items.First().StatusSummary, StringComparison.OrdinalIgnoreCase);
+}
