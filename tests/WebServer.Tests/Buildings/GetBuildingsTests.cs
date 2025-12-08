@@ -222,3 +222,33 @@ public async Task GetBuildings_FiltersByStatusSummary()
     Assert.Single(data.Items);
     Assert.Contains("repair", data.Items.First().StatusSummary, StringComparison.OrdinalIgnoreCase);
 }
+
+
+[Fact]
+public async Task GetBuildings_PaginatesCorrectly()
+{
+    var db = CreateDb();
+    for (int i = 1; i <= 30; i++)
+    {
+        db.Buildings.Add(new Building { FldId = i.ToString(), StreetName = "X" });
+    }
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+
+    var filter = new BuildingFilterParameters
+    {
+        Page = 2,
+        PageSize = 10
+    };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Equal(10, data.Items.Count());
+    Assert.Equal(30, data.Total);
+    Assert.Equal(2, data.Page);
+}
+
