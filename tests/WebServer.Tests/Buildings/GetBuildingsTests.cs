@@ -126,3 +126,25 @@ public async Task GetBuildings_FilterByStreetName_ReturnsOnlyMatches()
     Assert.All(payload.Items, item => Assert.Equal("Main", item.StreetName));
 }
 
+[Fact]
+public async Task GetBuildings_FiltersByNeighbourhood()
+{
+    var db = CreateDb();
+    db.Buildings.AddRange(
+        new Building { FldId = "1", Neighbourhood = "Center", StreetName = "A" },
+        new Building { FldId = "2", Neighbourhood = "North", StreetName = "B" }
+    );
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+
+    var filter = new BuildingFilterParameters { Neighbourhood = "Center" };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var payload = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Single(payload.Items);
+    Assert.Equal("Center", payload.Items.First().Neighbourhood);
+}
