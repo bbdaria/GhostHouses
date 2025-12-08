@@ -315,3 +315,26 @@ public async Task GetBuildings_FiltersByBuildingName()
     Assert.Single(data.Items);
     Assert.Equal("Tower A", data.Items.First().BuildingName);
 }
+
+
+[Fact]
+public async Task GetBuildings_FiltersByStatus()
+{
+    var db = CreateDb();
+    db.Buildings.AddRange(
+        new Building { FldId = "1", ShikumStatus = BuildingStatus.Good },
+        new Building { FldId = "2", ShikumStatus = BuildingStatus.Unknown }
+    );
+    await db.SaveChangesAsync();
+
+    var ctrl = new BuildingsController(db, null, null);
+    var filter = new BuildingFilterParameters { Status = BuildingStatus.Good };
+
+    var result = await ctrl.GetBuildings(filter, default);
+
+    var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingSummaryDto>>(ok.Value);
+
+    Assert.Single(data.Items);
+    Assert.Equal(BuildingStatus.Good, data.Items.First().ShikumStatus);
+}
