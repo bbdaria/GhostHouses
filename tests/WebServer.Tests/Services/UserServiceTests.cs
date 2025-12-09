@@ -80,3 +80,17 @@ public void VerifyPassword_ReturnsTrue_WhenPasswordMatches()
 
     Assert.True(ok);
 }
+
+
+    [Fact]
+public async Task CreateUserAsync_HashesPasswordBeforeStoring()
+{
+    var service = new UserService();
+
+    var created = await service.CreateUserAsync("bayan", "12345");
+
+    Assert.NotNull(created);
+    Assert.NotEqual("12345", created!.PasswordHash);
+    Assert.NotEmpty(created.PasswordHash);
+}
+
