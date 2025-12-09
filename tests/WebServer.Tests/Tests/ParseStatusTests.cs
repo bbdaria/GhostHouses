@@ -54,3 +54,20 @@ public class ParseStatusTests_NullEmpty
             .Invoke(null, new object?[] { value })!;
 }
 
+
+public class ParseStatusTests_Invalid
+{
+    [Fact]
+    public void ParseStatus_ReturnsUnknown_WhenInvalid()
+    {
+        var result = Invoke("NotARealStatus");
+
+        Assert.Equal(BuildingStatus.Unknown, result);
+    }
+
+    private BuildingStatus Invoke(string? value)
+        => (BuildingStatus) typeof(AppDbContext)
+            .GetMethod("ParseStatus", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object?[] { value })!;
+}
+
