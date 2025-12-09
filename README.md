@@ -21,6 +21,7 @@ To run the project locally, clone the repository and navigate into the main proj
 git clone https://github.com/bbdaria/GhostHouses.git
 cd GhostHouses/project
 docker compose up -d --build
+```
 
 
 ## Project Structure
