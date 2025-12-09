@@ -44,3 +44,25 @@ public class TokenServiceTests
         Assert.Contains(jwt.Claims, c => c.Type == System.Security.Claims.ClaimTypes.Role && c.Value == "Editor");
     }
 }
+
+
+
+
+[Fact]
+public void CreateToken_HasExpiration()
+{
+    var user = new AppUser
+    {
+        Id = Guid.NewGuid(),
+        Username = "testuser",
+        Email = "test@example.com",
+        Role = UserRole.Viewer
+    };
+
+    var token = _service.CreateToken(user);
+    var handler = new JwtSecurityTokenHandler();
+    var jwt = handler.ReadJwtToken(token);
+
+    Assert.NotNull(jwt.ValidTo);
+    Assert.True(jwt.ValidTo > DateTime.UtcNow);
+}
