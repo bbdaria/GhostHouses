@@ -228,3 +228,29 @@ public async Task GetLogs_FiltersByStatusSummary()
 }
 
 
+
+
+[Fact]
+public async Task GetLogs_ExcludesDeletedLogs()
+{
+    // Arrange
+    _context.Buildings.Add(new Building { Id = 1, StreetName = "X", HouseNumber = "1" });
+
+    _context.BuildingLogs.AddRange(
+        new BuildingLog { Id = 1, BuildingId = 1, Title = "Visible", IsDeleted = false },
+        new BuildingLog { Id = 2, BuildingId = 1, Title = "Deleted", IsDeleted = true }
+    );
+
+    await _context.SaveChangesAsync();
+
+    var filter = new LogFilterParameters();
+
+    // Act
+    var result = await _controller.GetLogs(filter);
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+
+    // Assert
+    Assert.Single(data.Items);
+    Assert.Equal(1, data.Items.First().Id);
+}
