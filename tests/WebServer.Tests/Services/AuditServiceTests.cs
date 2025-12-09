@@ -59,3 +59,19 @@ public async Task RecordAsync_AllowsNullChanges()
     Assert.Equal(string.Empty, entry.Changes);
 }
 
+
+[Fact]
+public void ValidateCode_ReturnsTrue_WhenCorrect()
+{
+    var user = new AppUser();
+    var (code, token) = _service.IssueCode(user);
+
+    user.PendingTwoFactorCode = code;
+    user.PendingTwoFactorToken = token;
+    user.PendingTwoFactorExpiry = DateTimeOffset.UtcNow.AddMinutes(5);
+
+    var result = _service.ValidateCode(user, code, token);
+
+    Assert.True(result);
+}
+
