@@ -50,3 +50,27 @@ public class TwoFactorServiceTests
         Assert.False(string.IsNullOrWhiteSpace(token));
         Assert.Equal(6, code.Length);
     }
+
+
+
+
+
+
+
+        [Fact]
+    public void ValidateCode_ReturnsTrue_ForCorrectValues()
+    {
+        var service = new TwoFactorService(new NullLogger<TwoFactorService>());
+
+        var user = new AppUser
+        {
+            PendingTwoFactorCode = "123456",
+            PendingTwoFactorToken = "abc123",
+            PendingTwoFactorExpiry = DateTimeOffset.UtcNow.AddMinutes(5)
+        };
+
+        var result = service.ValidateCode(user, "123456", "abc123");
+
+        Assert.True(result);
+    }
+
