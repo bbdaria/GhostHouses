@@ -122,3 +122,14 @@ public async Task CreateUserAsync_Throws_WhenUsernameAlreadyExists()
         await service.CreateUserAsync("bayan", "999");
     });
 }
+
+
+    [Fact]
+public async Task AuthenticateUserAsync_ReturnsNull_WhenUserNotFound()
+{
+    var service = new UserService();
+
+    var result = await service.AuthenticateUserAsync("ghost", "1234");
+
+    Assert.Null(result);
+}
