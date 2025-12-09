@@ -187,3 +187,23 @@ public void CreateToken_ShouldIncludeCorrectUserIdClaim()
 
 
 
+
+
+
+
+[Fact]
+public void CreateToken_ShouldHaveCorrectIssuerAndAudience()
+{
+    // Arrange
+    var user = new User { Id = "55", UserName = "ghost" };
+
+    // Act
+    var token = _service.CreateToken(user);
+    var handler = new JwtSecurityTokenHandler();
+    var jwt = handler.ReadJwtToken(token);
+
+    // Assert
+    Assert.Equal("ghosthouses", jwt.Issuer);
+    Assert.Contains(jwt.Audiences, aud => aud == "ghosthouses-clients");
+}
+
