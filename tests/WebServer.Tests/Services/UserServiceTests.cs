@@ -318,3 +318,15 @@ public async Task GetAllUsersAsync_ReturnsAllCreatedUsers()
     Assert.Contains(result, u => u.Username == "u1");
     Assert.Contains(result, u => u.Username == "u2");
 }
+
+
+    [Fact]
+public async Task GetUserByIdAsync_ReturnsNull_WhenUserDoesNotExist()
+{
+    var service = new UserService();
+
+    var result = await service.GetUserByIdAsync(Guid.NewGuid());
+
+    Assert.Null(result);
+}
+
