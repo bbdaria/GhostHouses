@@ -20,3 +20,24 @@ public async Task GetUserByUsername_ReturnsNull_WhenUserDoesNotExist()
 
     Assert.Null(result);
 }
+
+
+    [Fact]
+public async Task GetUserByUsername_ReturnsUser_WhenUsernameExists()
+{
+    var service = new UserService();
+
+    var user = new User
+    {
+        Id = "1",
+        UserName = "bayan",
+        PasswordHash = "HASHED"
+    };
+
+    service.AddUser(user);
+
+    var result = await service.GetUserByUsernameAsync("bayan");
+
+    Assert.NotNull(result);
+    Assert.Equal("1", result!.Id);
+}
