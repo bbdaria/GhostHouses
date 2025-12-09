@@ -75,3 +75,19 @@ public void ValidateCode_ReturnsTrue_WhenCorrect()
     Assert.True(result);
 }
 
+
+
+[Fact]
+public void ValidateCode_ReturnsFalse_WhenWrongCodeOrToken()
+{
+    var user = new AppUser
+    {
+        PendingTwoFactorCode = "123456",
+        PendingTwoFactorToken = "abc",
+        PendingTwoFactorExpiry = DateTimeOffset.UtcNow.AddMinutes(5)
+    };
+
+    Assert.False(_service.ValidateCode(user, "000000", "abc")); // wrong code
+    Assert.False(_service.ValidateCode(user, "123456", "zzz")); // wrong token
+}
+
