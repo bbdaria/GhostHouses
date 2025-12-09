@@ -148,3 +148,18 @@ public async Task AuthenticateUserAsync_ReturnsNull_ForWrongPassword()
 
     Assert.Null(result);
 }
+
+
+
+    [Fact]
+public async Task AuthenticateUserAsync_ReturnsUser_WhenCredentialsAreCorrect()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("bayan", "1234");
+
+    var result = await service.AuthenticateUserAsync("bayan", "1234");
+
+    Assert.NotNull(result);
+    Assert.Equal("bayan", result!.Username);
+}
