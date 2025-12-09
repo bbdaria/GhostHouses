@@ -175,3 +175,17 @@ public async Task DeleteUserAsync_ReturnsFalse_WhenUserDoesNotExist()
 
     Assert.False(result);
 }
+
+
+[Fact]
+public async Task DeleteUserAsync_DeletesExistingUser()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("bayan", "1234");
+
+    var result = await service.DeleteUserAsync("bayan");
+
+    Assert.True(result);
+}
+
