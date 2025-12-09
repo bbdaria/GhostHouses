@@ -33,3 +33,24 @@ public class ParseStatusTests_PendingSurvey
             .GetMethod("ParseStatus", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, new object?[] { value })!;
 }
+
+
+
+
+
+public class ParseStatusTests_NullEmpty
+{
+    [Fact]
+    public void ParseStatus_ReturnsUnknown_WhenNullOrEmpty()
+    {
+        Assert.Equal(BuildingStatus.Unknown, Invoke(null));
+        Assert.Equal(BuildingStatus.Unknown, Invoke(""));
+        Assert.Equal(BuildingStatus.Unknown, Invoke("   "));
+    }
+
+    private BuildingStatus Invoke(string? value)
+        => (BuildingStatus) typeof(AppDbContext)
+            .GetMethod("ParseStatus", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object?[] { value })!;
+}
+
