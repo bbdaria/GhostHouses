@@ -350,3 +350,17 @@ public async Task DeleteLog_SoftDeletesLog()
     Assert.True(log.IsDeleted);
 }
 
+
+
+
+[Fact]
+public async Task DeleteLog_ReturnsNotFound_WhenLogDoesNotExist()
+{
+    // Act
+    var result = await _controller.DeleteLog(999);
+
+    // Assert
+    Assert.IsType<NotFoundResult>(result);
+}
+
+
