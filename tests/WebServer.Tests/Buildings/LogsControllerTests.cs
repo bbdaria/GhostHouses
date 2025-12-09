@@ -283,3 +283,46 @@ public async Task CreateLog_ReturnsCreatedLogDto()
     Assert.Equal("low", dto.Severity);
     Assert.Equal(1, dto.BuildingId);
 }
+
+
+
+
+
+[Fact]
+public async Task UpdateLog_UpdatesFields()
+{
+    // Arrange
+    _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "10" });
+    _context.BuildingLogs.Add(new BuildingLog
+    {
+        Id = 5,
+        BuildingId = 1,
+        Title = "Old",
+        Message = "Old msg",
+        Category = "old",
+        Severity = "old"
+    });
+
+    await _context.SaveChangesAsync();
+
+    var request = new BuildingLogRequest
+    {
+        Title = "New",
+        Message = "New msg",
+        Category = "new",
+        Severity = "critical"
+    };
+
+    // Act
+    var result = await _controller.UpdateLog(5, request);
+
+    // Assert
+    Assert.IsType<NoContentResult>(result);
+
+    var updated = await _context.BuildingLogs.FindAsync(5);
+    Assert.Equal("New", updated.Title);
+    Assert.Equal("New msg", updated.Message);
+    Assert.Equal("new", updated.Category);
+    Assert.Equal("critical", updated.Severity);
+}
+
