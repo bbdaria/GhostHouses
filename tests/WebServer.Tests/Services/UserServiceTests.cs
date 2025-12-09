@@ -395,3 +395,14 @@ public async Task AuthenticateAsync_ReturnsNull_WhenUserNotFound()
     Assert.Null(result);
 }
 
+
+    [Fact]
+public async Task CreateUserAsync_TrimsUsername()
+{
+    var service = new UserService();
+
+    var user = await service.CreateUserAsync("   bayan   ", "123");
+
+    Assert.Equal("bayan", user.Username);
+}
+
