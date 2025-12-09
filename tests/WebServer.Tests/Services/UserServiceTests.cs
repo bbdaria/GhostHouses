@@ -354,3 +354,18 @@ public async Task CreateUserAsync_Throws_WhenUsernameExists()
         await service.CreateUserAsync("bayan", "otherpass");
     });
 }
+
+
+
+    [Fact]
+public async Task AuthenticateAsync_ReturnsNull_WhenPasswordIncorrect()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("bayan", "correctpass");
+
+    var result = await service.AuthenticateAsync("bayan", "wrongpass");
+
+    Assert.Null(result);
+}
+
