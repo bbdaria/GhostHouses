@@ -326,3 +326,27 @@ public async Task UpdateLog_UpdatesFields()
     Assert.Equal("critical", updated.Severity);
 }
 
+
+
+
+[Fact]
+public async Task DeleteLog_SoftDeletesLog()
+{
+    // Arrange
+    _context.Users.Add(new AppUser { Id = Guid.NewGuid(), Username = "admin", Role = UserRole.Admin });
+    await _context.SaveChangesAsync();
+
+    _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "10" });
+    _context.BuildingLogs.Add(new BuildingLog { Id = 20, BuildingId = 1, Title = "t" });
+    await _context.SaveChangesAsync();
+
+    // Act
+    var result = await _controller.DeleteLog(20);
+    
+    // Assert
+    Assert.IsType<NoContentResult>(result);
+
+    var log = await _context.BuildingLogs.IgnoreQueryFilters().FirstOrDefaultAsync(l => l.Id == 20);
+    Assert.True(log.IsDeleted);
+}
+
