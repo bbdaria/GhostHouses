@@ -340,3 +340,17 @@ public async Task CreateUserAsync_StoresHashedPassword()
     Assert.NotEqual("mypassword", user.PasswordHash);
     Assert.False(string.IsNullOrWhiteSpace(user.PasswordHash));
 }
+
+
+    [Fact]
+public async Task CreateUserAsync_Throws_WhenUsernameExists()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("bayan", "123");
+
+    await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+    {
+        await service.CreateUserAsync("bayan", "otherpass");
+    });
+}
