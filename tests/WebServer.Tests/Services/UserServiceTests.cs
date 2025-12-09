@@ -189,3 +189,18 @@ public async Task DeleteUserAsync_DeletesExistingUser()
     Assert.True(result);
 }
 
+
+    [Fact]
+public async Task DeleteUserAsync_RemovesUserFromStore()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("bayan", "1234");
+
+    await service.DeleteUserAsync("bayan");
+
+    var auth = await service.AuthenticateUserAsync("bayan", "1234");
+
+    Assert.Null(auth);
+}
+
