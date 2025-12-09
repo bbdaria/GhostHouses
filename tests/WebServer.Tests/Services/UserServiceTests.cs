@@ -163,3 +163,15 @@ public async Task AuthenticateUserAsync_ReturnsUser_WhenCredentialsAreCorrect()
     Assert.NotNull(result);
     Assert.Equal("bayan", result!.Username);
 }
+
+
+
+    [Fact]
+public async Task DeleteUserAsync_ReturnsFalse_WhenUserDoesNotExist()
+{
+    var service = new UserService();
+
+    var result = await service.DeleteUserAsync("ghost");
+
+    Assert.False(result);
+}
