@@ -330,3 +330,13 @@ public async Task GetUserByIdAsync_ReturnsNull_WhenUserDoesNotExist()
     Assert.Null(result);
 }
 
+[Fact]
+public async Task CreateUserAsync_StoresHashedPassword()
+{
+    var service = new UserService();
+
+    var user = await service.CreateUserAsync("bayan", "mypassword");
+
+    Assert.NotEqual("mypassword", user.PasswordHash);
+    Assert.False(string.IsNullOrWhiteSpace(user.PasswordHash));
+}
