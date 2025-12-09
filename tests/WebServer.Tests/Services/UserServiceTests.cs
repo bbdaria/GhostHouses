@@ -301,3 +301,20 @@ public async Task GetAllUsersAsync_ReturnsEmpty_WhenNoUsers()
 
     Assert.Empty(result);
 }
+
+
+
+    [Fact]
+public async Task GetAllUsersAsync_ReturnsAllCreatedUsers()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("u1", "p1");
+    await service.CreateUserAsync("u2", "p2");
+
+    var result = await service.GetAllUsersAsync();
+
+    Assert.Equal(2, result.Count);
+    Assert.Contains(result, u => u.Username == "u1");
+    Assert.Contains(result, u => u.Username == "u2");
+}
