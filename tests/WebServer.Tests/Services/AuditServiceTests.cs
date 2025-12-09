@@ -39,3 +39,23 @@ public class AuditServiceTests
         Assert.False(string.IsNullOrWhiteSpace(entry.Changes));
     }
 }
+
+
+[Fact]
+public async Task RecordAsync_AllowsNullChanges()
+{
+    // Act
+    await _service.RecordAsync(
+        userId: null,
+        entityType: "BuildingLog",
+        entityId: "77",
+        action: "Delete",
+        changes: null
+    );
+
+    // Assert
+    var entry = await _context.AuditEntries.FirstOrDefaultAsync(e => e.EntityId == "77");
+    Assert.NotNull(entry);
+    Assert.Equal(string.Empty, entry.Changes);
+}
+
