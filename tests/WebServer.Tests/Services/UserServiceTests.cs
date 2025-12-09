@@ -274,3 +274,18 @@ public async Task DeleteUserAsync_RemovesUser_WhenExists()
 
     Assert.DoesNotContain(users, u => u.Id == user.Id);
 }
+
+
+
+[Fact]
+public async Task DeleteUserAsync_DoesNothing_WhenUserDoesNotExist()
+{
+    var service = new UserService();
+
+    // no users created
+    await service.DeleteUserAsync(Guid.NewGuid());
+
+    var users = await service.GetAllUsersAsync();
+
+    Assert.Empty(users); // should stay empty
+}
