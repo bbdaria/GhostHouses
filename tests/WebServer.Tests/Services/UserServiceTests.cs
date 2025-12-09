@@ -133,3 +133,18 @@ public async Task AuthenticateUserAsync_ReturnsNull_WhenUserNotFound()
 
     Assert.Null(result);
 }
+
+
+    
+
+    [Fact]
+public async Task AuthenticateUserAsync_ReturnsNull_ForWrongPassword()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("bayan", "correct");
+
+    var result = await service.AuthenticateUserAsync("bayan", "wrong");
+
+    Assert.Null(result);
+}
