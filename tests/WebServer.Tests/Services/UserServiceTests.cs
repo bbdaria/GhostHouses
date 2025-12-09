@@ -406,3 +406,16 @@ public async Task CreateUserAsync_TrimsUsername()
     Assert.Equal("bayan", user.Username);
 }
 
+
+
+
+    [Fact]
+public async Task CreateUserAsync_StoresHashedPassword()
+{
+    var service = new UserService();
+
+    var user = await service.CreateUserAsync("bayan", "secret");
+
+    Assert.NotEqual("secret", user.PasswordHash);
+    Assert.False(string.IsNullOrWhiteSpace(user.PasswordHash));
+}
