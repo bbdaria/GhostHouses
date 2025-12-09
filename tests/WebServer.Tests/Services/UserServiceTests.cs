@@ -261,3 +261,16 @@ public async Task CreateUserAsync_Throws_WhenUsernameExists()
     });
 }
 
+
+[Fact]
+public async Task DeleteUserAsync_RemovesUser_WhenExists()
+{
+    var service = new UserService();
+
+    var user = await service.CreateUserAsync("temp", "pw");
+    await service.DeleteUserAsync(user.Id);
+
+    var users = await service.GetAllUsersAsync();
+
+    Assert.DoesNotContain(users, u => u.Id == user.Id);
+}
