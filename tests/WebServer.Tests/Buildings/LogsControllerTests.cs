@@ -254,3 +254,32 @@ public async Task GetLogs_ExcludesDeletedLogs()
     Assert.Single(data.Items);
     Assert.Equal(1, data.Items.First().Id);
 }
+
+
+[Fact]
+public async Task CreateLog_ReturnsCreatedLogDto()
+{
+    // Arrange
+    _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "10" });
+    await _context.SaveChangesAsync();
+
+    var request = new BuildingLogRequest
+    {
+        Title = "Test log",
+        Message = "Message here",
+        Category = "info",
+        Severity = "low"
+    };
+
+    // Act
+    var result = await _controller.CreateLog(1, request);
+    var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+    var dto = Assert.IsType<BuildingLogDto>(created.Value);
+
+    // Assert
+    Assert.Equal("Test log", dto.Title);
+    Assert.Equal("Message here", dto.Message);
+    Assert.Equal("info", dto.Category);
+    Assert.Equal("low", dto.Severity);
+    Assert.Equal(1, dto.BuildingId);
+}
