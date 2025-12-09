@@ -432,3 +432,19 @@ public async Task CreateUserAsync_Throws_WhenUsernameExists()
     await Assert.ThrowsAsync<InvalidOperationException>(() =>
         service.CreateUserAsync("bayan", "456"));
 }
+
+
+
+    [Fact]
+public async Task AuthenticateAsync_UpdatesLastLoginAt()
+{
+    var service = new UserService();
+
+    var user = await service.CreateUserAsync("bayan", "123");
+
+    var before = user.LastLoginAt;
+
+    await service.AuthenticateAsync("bayan", "123");
+
+    Assert.True(user.LastLoginAt > before);
+}
