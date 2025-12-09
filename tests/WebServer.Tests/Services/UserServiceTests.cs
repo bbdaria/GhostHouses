@@ -41,3 +41,23 @@ public async Task GetUserByUsername_ReturnsUser_WhenUsernameExists()
     Assert.NotNull(result);
     Assert.Equal("1", result!.Id);
 }
+
+
+
+    [Fact]
+public void VerifyPassword_ReturnsFalse_WhenPasswordInvalid()
+{
+    var service = new UserService();
+
+    var user = new User
+    {
+        Id = "2",
+        UserName = "test",
+        PasswordHash = "correct123"
+    };
+
+    var ok = service.VerifyPassword(user, "wrong");
+
+    Assert.False(ok);
+}
+
