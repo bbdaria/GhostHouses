@@ -66,3 +66,48 @@ public void CreateToken_HasExpiration()
     Assert.NotNull(jwt.ValidTo);
     Assert.True(jwt.ValidTo > DateTime.UtcNow);
 }
+
+
+
+
+using Microsoft.Extensions.Options;
+using WebServer.Services;
+using WebServer.Models.Users;
+using System.IdentityModel.Tokens.Jwt;
+
+public class TokenServiceTests
+{
+    [Fact]
+    public void CreateToken_ReturnsValidJwt()
+    {
+        var opts = Options.Create(new JwtOptions
+        {
+            SigningKey = "THIS_IS_A_TEST_KEY_1234567890",
+            Issuer = "test-issuer",
+            Audience = "test-audience",
+            ExpirationMinutes = 30
+        });
+
+        var service = new TokenService(opts);
+
+        var user = new AppUser
+        {
+            Id = Guid.NewGuid(),
+            Username = "bayan",
+            Email = "bayan@test.com",
+            Role = UserRole.Admin
+        };
+
+        var token = service.CreateToken(user);
+
+        Assert.False(string.IsNullOrWhiteSpace(token));
+
+        // Validate readable JWT
+        var handler = new JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(token);
+
+        Assert.Equal("bayan", jwt.Claims.First(c => c.Type == JwtRegisteredClaimNames.UniqueName).Value);
+        Assert.Equal("bayan@test.com", jwt.Claims.First(c => c.Type == JwtRegisteredClaimNames.Email).Value);
+        Assert.Contains(jwt.Claims, c => c.Type == "role" || c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role");
+    }
+}
