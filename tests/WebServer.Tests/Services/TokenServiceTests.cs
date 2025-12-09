@@ -163,3 +163,27 @@ public void CreateToken_Has_Expiration()
 }
 
 
+
+
+
+
+
+[Fact]
+public void CreateToken_ShouldIncludeCorrectUserIdClaim()
+{
+    // Arrange
+    var user = new User { Id = "12345", UserName = "testuser" };
+
+    // Act
+    var token = _service.CreateToken(user);
+    var handler = new JwtSecurityTokenHandler();
+    var jwt = handler.ReadJwtToken(token);
+
+    // Assert
+    var claim = jwt.Claims.FirstOrDefault(c => c.Type == "id");
+    Assert.NotNull(claim);
+    Assert.Equal("12345", claim!.Value);
+}
+
+
+
