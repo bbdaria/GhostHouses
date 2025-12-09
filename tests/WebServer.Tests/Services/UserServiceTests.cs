@@ -289,3 +289,15 @@ public async Task DeleteUserAsync_DoesNothing_WhenUserDoesNotExist()
 
     Assert.Empty(users); // should stay empty
 }
+
+
+
+    [Fact]
+public async Task GetAllUsersAsync_ReturnsEmpty_WhenNoUsers()
+{
+    var service = new UserService();
+
+    var result = await service.GetAllUsersAsync();
+
+    Assert.Empty(result);
+}
