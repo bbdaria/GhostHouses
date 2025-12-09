@@ -74,3 +74,21 @@ public class TwoFactorServiceTests
         Assert.True(result);
     }
 
+
+
+        [Fact]
+    public void ValidateCode_ReturnsFalse_ForWrongCodeOrToken()
+    {
+        var service = new TwoFactorService(new NullLogger<TwoFactorService>());
+
+        var user = new AppUser
+        {
+            PendingTwoFactorCode = "123456",
+            PendingTwoFactorToken = "abc123",
+            PendingTwoFactorExpiry = DateTimeOffset.UtcNow.AddMinutes(5)
+        };
+
+        Assert.False(service.ValidateCode(user, "999999", "abc123"));
+        Assert.False(service.ValidateCode(user, "123456", "wrongtoken"));
+    }
+
