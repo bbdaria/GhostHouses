@@ -384,3 +384,14 @@ public async Task AuthenticateAsync_ReturnsUser_WhenPasswordCorrect()
 }
 
 
+
+    [Fact]
+public async Task AuthenticateAsync_ReturnsNull_WhenUserNotFound()
+{
+    var service = new UserService();
+
+    var result = await service.AuthenticateAsync("idontexist", "pass");
+
+    Assert.Null(result);
+}
+
