@@ -246,3 +246,18 @@ public async Task GetAllUsers_ReturnsCorrectUsernames()
     Assert.Contains("alice", names);
     Assert.Contains("bob", names);
 }
+
+
+    [Fact]
+public async Task CreateUserAsync_Throws_WhenUsernameExists()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("bayan", "12345");
+
+    await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+    {
+        await service.CreateUserAsync("bayan", "another");
+    });
+}
+
