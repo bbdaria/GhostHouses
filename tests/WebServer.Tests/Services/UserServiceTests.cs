@@ -94,3 +94,17 @@ public async Task CreateUserAsync_HashesPasswordBeforeStoring()
     Assert.NotEmpty(created.PasswordHash);
 }
 
+
+
+    [Fact]
+public async Task CreateUserAsync_AssignsUniqueId()
+{
+    var service = new UserService();
+
+    var u1 = await service.CreateUserAsync("user1", "pass");
+    var u2 = await service.CreateUserAsync("user2", "pass");
+
+    Assert.NotNull(u1!.Id);
+    Assert.NotNull(u2!.Id);
+    Assert.NotEqual(u1.Id, u2.Id);
+}
