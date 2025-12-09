@@ -229,3 +229,20 @@ public async Task GetAllUsers_ReturnsAllCreatedUsers()
     Assert.Equal(2, users.Count());
 }
 
+
+
+
+    [Fact]
+public async Task GetAllUsers_ReturnsCorrectUsernames()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("alice", "123");
+    await service.CreateUserAsync("bob", "456");
+
+    var users = await service.GetAllUsersAsync();
+    var names = users.Select(u => u.Username).ToList();
+
+    Assert.Contains("alice", names);
+    Assert.Contains("bob", names);
+}
