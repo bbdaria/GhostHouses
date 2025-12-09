@@ -16,3 +16,20 @@ public class ParseStatusTests
             .GetMethod("ParseStatus", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, new object?[] { value })!;
 }
+
+
+public class ParseStatusTests_PendingSurvey
+{
+    [Fact]
+    public void ParseStatus_MapsPendingSurvey_ToUnderInspection()
+    {
+        var result = Invoke("Pending Survey");
+
+        Assert.Equal(BuildingStatus.UnderInspection, result);
+    }
+
+    private BuildingStatus Invoke(string? value)
+        => (BuildingStatus) typeof(AppDbContext)
+            .GetMethod("ParseStatus", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object?[] { value })!;
+}
