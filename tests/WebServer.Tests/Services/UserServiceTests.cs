@@ -204,3 +204,14 @@ public async Task DeleteUserAsync_RemovesUserFromStore()
     Assert.Null(auth);
 }
 
+
+    [Fact]
+public async Task GetAllUsers_ReturnsEmpty_WhenNoUsersExist()
+{
+    var service = new UserService();
+
+    var users = await service.GetAllUsersAsync();
+
+    Assert.Empty(users);
+}
+
