@@ -124,3 +124,23 @@ public void CreateToken_Returns_NonEmptyString()
 
     Assert.False(string.IsNullOrWhiteSpace(token));
 }
+
+
+[Fact]
+public void CreateToken_Includes_CorrectClaims()
+{
+    var options = Options.Create(new JwtOptions { SigningKey = "secret1234567890" });
+    var service = new TokenService(options);
+    var user = new AppUser { Id = Guid.NewGuid(), Username = "bayan", Email = "b@b.com", Role = UserRole.Editor };
+
+    var token = service.CreateToken(user);
+
+    var handler = new JwtSecurityTokenHandler();
+    var jwt = handler.ReadJwtToken(token);
+
+    Assert.Contains(jwt.Claims, c => c.Type == JwtRegisteredClaimNames.Sub && c.Value == user.Id.ToString());
+    Assert.Contains(jwt.Claims, c => c.Type == JwtRegisteredClaimNames.UniqueName && c.Value == "bayan");
+    Assert.Contains(jwt.Claims, c => c.Type == ClaimTypes.Email && c.Value == "b@b.com");
+    Assert.Contains(jwt.Claims, c => c.Type == ClaimTypes.Role && c.Value == "Editor");
+}
+
