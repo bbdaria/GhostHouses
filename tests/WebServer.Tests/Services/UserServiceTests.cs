@@ -448,3 +448,15 @@ public async Task AuthenticateAsync_UpdatesLastLoginAt()
 
     Assert.True(user.LastLoginAt > before);
 }
+
+
+
+    [Fact]
+public async Task AuthenticateAsync_ReturnsNull_WhenUserNotFound()
+{
+    var service = new UserService();
+
+    var result = await service.AuthenticateAsync("no-such-user", "123");
+
+    Assert.Null(result);
+}
