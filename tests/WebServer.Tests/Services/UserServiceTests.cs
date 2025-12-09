@@ -61,3 +61,22 @@ public void VerifyPassword_ReturnsFalse_WhenPasswordInvalid()
     Assert.False(ok);
 }
 
+
+
+
+    [Fact]
+public void VerifyPassword_ReturnsTrue_WhenPasswordMatches()
+{
+    var service = new UserService();
+
+    var user = new User
+    {
+        Id = "3",
+        UserName = "test2",
+        PasswordHash = "mypass"
+    };
+
+    var ok = service.VerifyPassword(user, "mypass");
+
+    Assert.True(ok);
+}
