@@ -111,3 +111,16 @@ public class TokenServiceTests
         Assert.Contains(jwt.Claims, c => c.Type == "role" || c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role");
     }
 }
+
+
+[Fact]
+public void CreateToken_Returns_NonEmptyString()
+{
+    var options = Options.Create(new JwtOptions { SigningKey = "secret1234567890" });
+    var service = new TokenService(options);
+    var user = new AppUser { Id = Guid.NewGuid(), Username = "test", Email = "t@t.com", Role = UserRole.Viewer };
+
+    var token = service.CreateToken(user);
+
+    Assert.False(string.IsNullOrWhiteSpace(token));
+}
