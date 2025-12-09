@@ -108,3 +108,17 @@ public async Task CreateUserAsync_AssignsUniqueId()
     Assert.NotNull(u2!.Id);
     Assert.NotEqual(u1.Id, u2.Id);
 }
+
+
+    [Fact]
+public async Task CreateUserAsync_Throws_WhenUsernameAlreadyExists()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("bayan", "123");
+
+    await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+    {
+        await service.CreateUserAsync("bayan", "999");
+    });
+}
