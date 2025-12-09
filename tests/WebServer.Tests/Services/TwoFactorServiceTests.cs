@@ -25,3 +25,28 @@ public class TwoFactorServiceTests
         Assert.False(string.IsNullOrWhiteSpace(result.Token));
     }
 }
+
+
+
+
+
+
+using WebServer.Services;
+using WebServer.Models.Users;
+using Microsoft.Extensions.Logging.Abstractions;
+
+public class TwoFactorServiceTests
+{
+    [Fact]
+    public void IssueCode_ReturnsCodeAndToken()
+    {
+        var service = new TwoFactorService(new NullLogger<TwoFactorService>());
+
+        var user = new AppUser { Username = "bayan" };
+
+        var (code, token) = service.IssueCode(user);
+
+        Assert.False(string.IsNullOrWhiteSpace(code));
+        Assert.False(string.IsNullOrWhiteSpace(token));
+        Assert.Equal(6, code.Length);
+    }
