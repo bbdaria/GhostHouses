@@ -215,3 +215,17 @@ public async Task GetAllUsers_ReturnsEmpty_WhenNoUsersExist()
     Assert.Empty(users);
 }
 
+
+    [Fact]
+public async Task GetAllUsers_ReturnsAllCreatedUsers()
+{
+    var service = new UserService();
+
+    await service.CreateUserAsync("u1", "p1");
+    await service.CreateUserAsync("u2", "p2");
+
+    var users = await service.GetAllUsersAsync();
+
+    Assert.Equal(2, users.Count());
+}
+
