@@ -207,3 +207,21 @@ public void CreateToken_ShouldHaveCorrectIssuerAndAudience()
     Assert.Contains(jwt.Audiences, aud => aud == "ghosthouses-clients");
 }
 
+
+
+
+[Fact]
+public void CreateToken_ShouldExpireIn60Minutes()
+{
+    // Arrange
+    var user = new User { Id = "999", UserName = "temp" };
+
+    // Act
+    var token = _service.CreateToken(user);
+    var handler = new JwtSecurityTokenHandler();
+    var jwt = handler.ReadJwtToken(token);
+
+    // Assert
+    var diff = jwt.ValidTo - DateTime.UtcNow;
+    Assert.InRange(diff.TotalMinutes, 59, 61); // allow small clock drift
+}
