@@ -144,3 +144,22 @@ public void CreateToken_Includes_CorrectClaims()
     Assert.Contains(jwt.Claims, c => c.Type == ClaimTypes.Role && c.Value == "Editor");
 }
 
+
+
+
+[Fact]
+public void CreateToken_Has_Expiration()
+{
+    var options = Options.Create(new JwtOptions { SigningKey = "secret1234567890", ExpirationMinutes = 60 });
+    var service = new TokenService(options);
+    var user = new AppUser { Id = Guid.NewGuid(), Username = "x", Email = "x@x.com", Role = UserRole.Viewer };
+
+    var token = service.CreateToken(user);
+
+    var handler = new JwtSecurityTokenHandler();
+    var jwt = handler.ReadJwtToken(token);
+
+    Assert.NotNull(jwt.ValidTo);
+}
+
+
