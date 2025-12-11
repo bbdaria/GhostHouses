@@ -3,7 +3,7 @@
 מידע כללי,StreetName,שם רחוב,nvarchar(MAX),,,
 מידע כללי,BldNum,מספר בית,nvarchar(MAX),,,
 מידע כללי,BldName,כינוי הבניין,nvarchar(MAX),,,
-מידע כללי,BIdSivug,סיווג,int,Tbl_Sivug,Yes,
+מידע כללי,BldSivug,סיווג,int,Tbl_Sivug,Yes,
 מידע כללי,ShikumStatus,סטטוס שיקום,int,Tbl_StatusShikum,Yes,
 מידע כללי,StatusSummary,תמצית מצב,nvarchar(MAX),,Yes,
 מידע כללי,StatusSummary_Update_Dt,תאריך עדכון תמצית מצב,date,,,

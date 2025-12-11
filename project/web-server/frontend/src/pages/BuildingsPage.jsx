@@ -112,7 +112,10 @@ export default function BuildingsPage() {
         area: selectedBuilding.area || '',
         statusSummary: selectedBuilding.statusSummary || '',
         shikumStatusId: statusOption ? String(statusOption.id) : '',
-        category: selectedBuilding.bldSivug || 'Unclassified'
+        category:
+          selectedBuilding.bldSivug === null || selectedBuilding.bldSivug === undefined
+            ? ''
+            : String(selectedBuilding.bldSivug)
       });
     }
   }, [selectedBuilding]);
@@ -176,12 +179,12 @@ export default function BuildingsPage() {
         (option) => String(option.id) === createForm.shikumStatusId
       );
       const payload = {
-        fldId: createForm.fldId || `GH-${Date.now()}`,
+        fldId: createForm.fldId,
         streetName: createForm.streetName,
         houseNumber: createForm.bldNum,
         buildingName: createForm.bldName || createForm.streetName,
         neighborhood: createForm.area,
-        bldSivug: createForm.category || 'Unclassified',
+        bldSivug: createForm.category,
         shikumStatus: statusOption ? statusOption.value : 'Unknown',
         statusSummary: createForm.statusSummary,
         complaints: createForm.complaints || ''
@@ -220,12 +223,12 @@ export default function BuildingsPage() {
         (option) => String(option.id) === editForm.shikumStatusId
       );
       const payload = {
-        fldId: selectedBuilding.fldId || String(selectedBuilding.id),
+        fldId: selectedBuilding.fldId ?? selectedBuilding.id,
         streetName: selectedBuilding.street,
         houseNumber: selectedBuilding.houseNumber,
         buildingName: editForm.bldName || selectedBuilding.nickname || selectedBuilding.street,
         neighborhood: editForm.area || selectedBuilding.area || '',
-        bldSivug: editForm.category || selectedBuilding.bldSivug || 'Unclassified',
+        bldSivug: editForm.category ?? selectedBuilding.bldSivug,
         shikumStatus: statusOption ? statusOption.value : selectedBuilding.status || 'Unknown',
         statusSummary: editForm.statusSummary,
         complaints: selectedBuilding.complaints || ''
