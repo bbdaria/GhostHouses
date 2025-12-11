@@ -58,6 +58,22 @@ namespace WebServer.Migrations
                     b.ToTable("AuditEntries");
                 });
 
+            modelBuilder.Entity("WebServer.Models.Street", b =>
+                {
+                    b.Property<int>("StreetId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("StreetId");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("Streets");
+                });
+
             modelBuilder.Entity("WebServer.Models.Building", b =>
                 {
                     b.Property<int>("Id")
@@ -180,6 +196,9 @@ namespace WebServer.Migrations
                     b.Property<int?>("LegalDespute")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PtorStage")
+                        .HasColumnType("integer");
+
                     b.Property<double?>("Longitude")
                         .HasColumnType("double precision");
 
@@ -235,6 +254,9 @@ namespace WebServer.Migrations
                     b.Property<int?>("PropNum")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("IsPlannedEmpty")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ReasonForNonUse")
                         .HasColumnType("text");
 
@@ -261,6 +283,9 @@ namespace WebServer.Migrations
                     b.Property<int?>("StreetCode")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("StreetId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("StreetName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -273,6 +298,9 @@ namespace WebServer.Migrations
 
                     b.Property<string>("TzavDangerBldg")
                         .HasColumnType("text");
+
+                    b.Property<int?>("HasDangerousBldgOrder")
+                        .HasColumnType("integer");
 
                     b.Property<string>("TzavShiputzFronts")
                         .HasColumnType("text");
@@ -299,6 +327,8 @@ namespace WebServer.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("StreetId");
 
                     b.ToTable("Buildings");
                 });
@@ -431,6 +461,16 @@ namespace WebServer.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("WebServer.Models.Building", b =>
+                {
+                    b.HasOne("WebServer.Models.Street", "Street")
+                        .WithMany("Buildings")
+                        .HasForeignKey("StreetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Street");
+                });
+
             modelBuilder.Entity("WebServer.Models.BuildingLog", b =>
                 {
                     b.HasOne("WebServer.Models.Building", "Building")
@@ -464,6 +504,11 @@ namespace WebServer.Migrations
                     b.Navigation("ExternalSnapshots");
 
                     b.Navigation("Logs");
+                });
+
+            modelBuilder.Entity("WebServer.Models.Street", b =>
+                {
+                    b.Navigation("Buildings");
                 });
 
             modelBuilder.Entity("WebServer.Models.Users.AppUser", b =>

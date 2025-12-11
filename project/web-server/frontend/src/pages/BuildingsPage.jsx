@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS } from '../i18n.js';
+import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 import {
   BUILDING_FIELD_LABELS,
@@ -11,34 +11,13 @@ import {
 } from '../constants.js';
 
 const initialFilters = {
-  street: '',
+  streetId: '',
   houseNumber: '',
   nickname: '',
   status: '',
   area: '',
   statusSummary: ''
 };
-
-const STATUS_ID_TO_VALUE = STATUS_OPTIONS.reduce((acc, option) => {
-  acc[option.id] = option.value;
-  return acc;
-}, {});
-
-const normalizeStatusValue = (value) => {
-  if (value === null || value === undefined) return 'Unknown';
-  if (typeof value === 'number') {
-    return STATUS_ID_TO_VALUE[value] || 'Unknown';
-  }
-  if (typeof value === 'string') {
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric) && STATUS_ID_TO_VALUE[numeric]) {
-      return STATUS_ID_TO_VALUE[numeric];
-    }
-    return value;
-  }
-  return 'Unknown';
-};
-
 
 export default function BuildingsPage() {
   const { user } = useAuth();
@@ -47,13 +26,16 @@ export default function BuildingsPage() {
   const [buildings, setBuildings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
+  const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
+  const [streets, setStreets] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [detailError, setDetailError] = useState('');
   const [detailTab, setDetailTab] = useState('summary');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createForm, setCreateForm] = useState({
     fldId: '',
-    streetName: '',
+    streetId: '',
     bldNum: '',
     bldName: '',
     area: '',
@@ -67,7 +49,8 @@ export default function BuildingsPage() {
     area: '',
     statusSummary: '',
     shikumStatusId: '',
-    category: ''
+    category: '',
+    streetId: ''
   });
   const [actionMessage, setActionMessage] = useState('');
 
@@ -77,7 +60,6 @@ export default function BuildingsPage() {
   );
   const isAdmin = user?.role === 'Admin';
   const roleLabel = ROLE_LABELS[user?.role] || user?.role;
-  const statusLabelMap = STATUS_LABEL_MAP;
   const israelDateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('he-IL', {
@@ -99,12 +81,47 @@ export default function BuildingsPage() {
   const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
 
   useEffect(() => {
+    const loadStatusOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_StatusShikum');
+        const mapped = options.map((opt) => ({
+          id: opt.value,
+          label: opt.label,
+          value: STATUS_VALUE_BY_ID[opt.value] || opt.label
+        }));
+        const labelMap = mapped.reduce(
+          (acc, opt) => {
+            acc[opt.value] = opt.label;
+            return acc;
+          },
+          { Unknown: 'לא ידוע' }
+        );
+        setStatusOptions(mapped);
+        setStatusLabelMap(labelMap);
+      } catch {
+        // Fall back to static defaults if lookup endpoint is unavailable.
+        setStatusOptions(STATUS_OPTIONS);
+        setStatusLabelMap(STATUS_LABEL_MAP);
+      }
+    };
+
+    const loadStreets = async () => {
+      try {
+        const data = await api.fetchStreets();
+        setStreets(data);
+      } catch {
+        setStreets([]);
+      }
+    };
+
+    loadStatusOptions();
+    loadStreets();
     loadBuildings(initialFilters);
   }, []);
 
   useEffect(() => {
     if (selectedBuilding) {
-      const statusOption = STATUS_OPTIONS.find(
+      const statusOption = statusOptions.find(
         (option) => option.value === selectedBuilding.status
       );
       setEditForm({
@@ -115,10 +132,14 @@ export default function BuildingsPage() {
         category:
           selectedBuilding.bldSivug === null || selectedBuilding.bldSivug === undefined
             ? ''
-            : String(selectedBuilding.bldSivug)
+            : String(selectedBuilding.bldSivug),
+        streetId:
+          selectedBuilding.streetId === null || selectedBuilding.streetId === undefined
+            ? ''
+            : String(selectedBuilding.streetId)
       });
     }
-  }, [selectedBuilding]);
+  }, [selectedBuilding, statusOptions]);
 
   const loadBuildings = async (appliedFilters = filters) => {
     setLoading(true);
@@ -175,14 +196,18 @@ export default function BuildingsPage() {
     event.preventDefault();
     setActionMessage('');
     try {
-      const statusOption = STATUS_OPTIONS.find(
+      const statusOption = statusOptions.find(
         (option) => String(option.id) === createForm.shikumStatusId
       );
+      const streetOption = streets.find((street) => String(street.streetId) === createForm.streetId);
+      if (!streetOption) {
+        throw new Error('יש לבחור רחוב מהרשימה');
+      }
       const payload = {
         fldId: createForm.fldId,
-        streetName: createForm.streetName,
+        streetId: streetOption.streetId,
         houseNumber: createForm.bldNum,
-        buildingName: createForm.bldName || createForm.streetName,
+        buildingName: createForm.bldName || streetOption.name,
         neighborhood: createForm.area,
         bldSivug: createForm.category,
         shikumStatus: statusOption ? statusOption.value : 'Unknown',
@@ -192,7 +217,7 @@ export default function BuildingsPage() {
       await api.createBuilding(payload);
       setCreateForm({
         fldId: '',
-        streetName: '',
+        streetId: '',
         bldNum: '',
         bldName: '',
         area: '',
@@ -219,14 +244,19 @@ export default function BuildingsPage() {
     if (!selectedBuilding) return;
     setActionMessage('');
     try {
-      const statusOption = STATUS_OPTIONS.find(
+      const statusOption = statusOptions.find(
         (option) => String(option.id) === editForm.shikumStatusId
       );
+      const chosenStreetId = editForm.streetId || (selectedBuilding.streetId ? String(selectedBuilding.streetId) : '');
+      const streetOption = streets.find((street) => String(street.streetId) === chosenStreetId);
+      if (!streetOption) {
+        throw new Error('יש לבחור רחוב מהרשימה');
+      }
       const payload = {
         fldId: selectedBuilding.fldId ?? selectedBuilding.id,
-        streetName: selectedBuilding.street,
+        streetId: streetOption.streetId,
         houseNumber: selectedBuilding.houseNumber,
-        buildingName: editForm.bldName || selectedBuilding.nickname || selectedBuilding.street,
+        buildingName: editForm.bldName || selectedBuilding.nickname || streetOption.name || selectedBuilding.street,
         neighborhood: editForm.area || selectedBuilding.area || '',
         bldSivug: editForm.category ?? selectedBuilding.bldSivug,
         shikumStatus: statusOption ? statusOption.value : selectedBuilding.status || 'Unknown',
@@ -256,7 +286,7 @@ export default function BuildingsPage() {
     }
   };
 
-  const statuses = useMemo(() => STATUS_OPTIONS, []);
+  const statuses = useMemo(() => statusOptions, [statusOptions]);
 
   const handleTabChange = (tab) => {
     setDetailTab(tab);
@@ -276,13 +306,14 @@ export default function BuildingsPage() {
         <form className="filters-grid" onSubmit={handleSearch}>
           <label>
             <span>{BUILDING_FIELD_LABELS.street}</span>
-            <input
-              type="text"
-              name="street"
-              value={filters.street}
-              onChange={handleFilterChange}
-              placeholder={BUILDING_FIELD_PLACEHOLDERS.street}
-            />
+            <select name="streetId" value={filters.streetId} onChange={handleFilterChange}>
+              <option value="">בחר רחוב</option>
+              {streets.map((street) => (
+                <option key={street.streetId} value={street.streetId}>
+                  {street.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             <span>{BUILDING_FIELD_LABELS.houseNumber}</span>
@@ -360,13 +391,14 @@ export default function BuildingsPage() {
           <form className="form-grid" onSubmit={handleCreateBuilding}>
             <label>
               שם רחוב
-              <input
-                name="streetName"
-                value={createForm.streetName}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.street}
-                required
-              />
+              <select name="streetId" value={createForm.streetId} onChange={handleCreateChange} required>
+                <option value="">בחר רחוב</option>
+                {streets.map((street) => (
+                  <option key={street.streetId} value={street.streetId}>
+                    {street.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               מספר בית
@@ -395,7 +427,7 @@ export default function BuildingsPage() {
                 onChange={handleCreateChange}
               >
                 <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
-                {STATUS_OPTIONS.map((option) => (
+                {statusOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
                   </option>
@@ -553,6 +585,17 @@ export default function BuildingsPage() {
                     <input name="bldName" value={editForm.bldName} onChange={handleEditChange} />
                   </label>
                   <label>
+                    רחוב
+                    <select name="streetId" value={editForm.streetId} onChange={handleEditChange} required>
+                      <option value="">בחר רחוב</option>
+                      {streets.map((street) => (
+                        <option key={street.streetId} value={street.streetId}>
+                          {street.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
                     אזור
                     <input name="area" value={editForm.area} onChange={handleEditChange} />
                   </label>
@@ -564,7 +607,7 @@ export default function BuildingsPage() {
                       onChange={handleEditChange}
                     >
                       <option value="">Leave unchanged</option>
-                      {STATUS_OPTIONS.map((option) => (
+                      {statusOptions.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.label}
                         </option>

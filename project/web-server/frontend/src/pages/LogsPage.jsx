@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
-import { STATUS_LABEL_MAP, STATUS_OPTIONS } from '../i18n.js';
+import { STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import {
   BUILDING_FIELD_LABELS,
   BUILDING_FIELD_PLACEHOLDERS,
@@ -20,20 +20,15 @@ const todayIso = () =>
     .format(new Date())
     .replace(/\//g, '-');
 
-const STATUS_ID_TO_VALUE = STATUS_OPTIONS.reduce((acc, option) => {
-  acc[option.id] = option.value;
-  return acc;
-}, {});
-
-const normalizeStatusValue = (value) => {
+const normalizeStatusValue = (value, statusIdToValue = {}) => {
   if (value === null || value === undefined) return 'Unknown';
   if (typeof value === 'number') {
-    return STATUS_ID_TO_VALUE[value] || 'Unknown';
+    return statusIdToValue[value] || STATUS_VALUE_BY_ID[value] || 'Unknown';
   }
   if (typeof value === 'string') {
     const numeric = Number(value);
-    if (!Number.isNaN(numeric) && STATUS_ID_TO_VALUE[numeric]) {
-      return STATUS_ID_TO_VALUE[numeric];
+    if (!Number.isNaN(numeric) && (statusIdToValue[numeric] || STATUS_VALUE_BY_ID[numeric])) {
+      return statusIdToValue[numeric] || STATUS_VALUE_BY_ID[numeric];
     }
     return value;
   }
@@ -46,6 +41,7 @@ const baseFilters = {
   user: '',
   actionType: '',
   street: '',
+  streetId: '',
   houseNumber: '',
   nickname: '',
   status: '',
@@ -87,8 +83,18 @@ export default function LogsPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const statusLabelMap = STATUS_LABEL_MAP;
-  const statuses = STATUS_OPTIONS;
+  const [streets, setStreets] = useState([]);
+  const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
+  const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
+  const statusIdToValue = useMemo(
+    () =>
+      statusOptions.reduce((acc, opt) => {
+        acc[opt.id] = opt.value;
+        return acc;
+      }, {}),
+    [statusOptions]
+  );
+  const statuses = statusOptions;
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('he-IL', {
@@ -110,6 +116,40 @@ export default function LogsPage() {
   };
 
   useEffect(() => {
+    const loadStatusOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_StatusShikum');
+        const mapped = options.map((opt) => ({
+          id: opt.value,
+          label: opt.label,
+          value: STATUS_VALUE_BY_ID[opt.value] || opt.label
+        }));
+        const labelMap = mapped.reduce(
+          (acc, opt) => {
+            acc[opt.value] = opt.label;
+            return acc;
+          },
+          { Unknown: 'לא ידוע' }
+        );
+        setStatusOptions(mapped);
+        setStatusLabelMap(labelMap);
+      } catch {
+        setStatusOptions(STATUS_OPTIONS);
+        setStatusLabelMap(STATUS_LABEL_MAP);
+      }
+    };
+
+    const loadStreets = async () => {
+      try {
+        const data = await api.fetchStreets();
+        setStreets(data || []);
+      } catch {
+        setStreets([]);
+      }
+    };
+
+    loadStatusOptions();
+    loadStreets();
     loadLogs(buildDefaultFilters({ buildingId: initialBuildingId }));
   }, []);
 
@@ -183,12 +223,14 @@ export default function LogsPage() {
         <form className="filters-grid" onSubmit={handleSubmit}>
           <label>
             <span>{BUILDING_FIELD_LABELS.street}</span>
-            <input
-              name="street"
-              value={filters.street || ''}
-              onChange={handleChange}
-              placeholder={BUILDING_FIELD_PLACEHOLDERS.street}
-            />
+            <select name="streetId" value={filters.streetId || ''} onChange={handleChange}>
+              <option value="">{BUILDING_FIELD_PLACEHOLDERS.street}</option>
+              {streets.map((street) => (
+                <option key={street.streetId} value={street.streetId}>
+                  {street.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             <span>{BUILDING_FIELD_LABELS.houseNumber}</span>
@@ -286,7 +328,10 @@ export default function LogsPage() {
                 const houseNumber = snapshot.houseNumber || log.buildingHouseNumber || '—';
                 const nickname = snapshot.buildingName || log.buildingNickname || '—';
                 const neighborhood = snapshot.neighborhood || log.buildingNeighborhood || '—';
-                const statusValue = normalizeStatusValue(snapshot.shikumStatus || log.buildingStatus || 'Unknown');
+                const statusValue = normalizeStatusValue(
+                  snapshot.shikumStatus || log.buildingStatus || 'Unknown',
+                  statusIdToValue
+                );
                 const statusLabel = statusLabelMap[statusValue] || statusValue || '—';
                 const summary = snapshot.statusSummary || log.buildingStatusSummary || log.description || '—';
                 const timestamp = snapshot.statusSummaryUpdatedAt || log.createdAt;

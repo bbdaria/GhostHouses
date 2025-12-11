@@ -31,6 +31,18 @@ namespace WebServer.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Streets",
+                columns: table => new
+                {
+                    StreetId = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Streets", x => x.StreetId);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Buildings",
                 columns: table => new
                 {
@@ -38,6 +50,7 @@ namespace WebServer.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     FIdId = table.Column<int>(type: "integer", nullable: true),
                     StreetName = table.Column<string>(type: "text", nullable: false),
+                    StreetId = table.Column<int>(type: "integer", nullable: true),
                     BldNum = table.Column<string>(type: "text", nullable: false),
                     BldName = table.Column<string>(type: "text", nullable: false),
                     Neighborhood = table.Column<string>(type: "text", nullable: false),
@@ -65,6 +78,7 @@ namespace WebServer.Migrations
                     OwnerDetails = table.Column<string>(type: "text", nullable: true),
                     HolderDetails = table.Column<string>(type: "text", nullable: true),
                     PropNum = table.Column<int>(type: "integer", nullable: true),
+                    IsPlannedEmpty = table.Column<int>(type: "integer", nullable: true),
                     WaterConsumption = table.Column<int>(type: "integer", nullable: true),
                     TimeFromLastWaterConsumption = table.Column<string>(type: "text", nullable: true),
                     ElectricityConsumption = table.Column<int>(type: "integer", nullable: true),
@@ -72,6 +86,7 @@ namespace WebServer.Migrations
                     ReasonForNonUse = table.Column<string>(type: "text", nullable: true),
                     Yeud = table.Column<int>(type: "integer", nullable: true),
                     ActualUse = table.Column<string>(type: "text", nullable: true),
+                    ArnonaUseType = table.Column<string>(type: "text", nullable: true),
                     ArnonaCodeShimush = table.Column<int>(type: "integer", nullable: true),
                     HeterBniya = table.Column<int>(type: "integer", nullable: true),
                     Tofes4 = table.Column<int>(type: "integer", nullable: true),
@@ -95,9 +110,11 @@ namespace WebServer.Migrations
                     Shiabud = table.Column<int>(type: "integer", nullable: true),
                     OwnerUnderExec = table.Column<int>(type: "integer", nullable: true),
                     LegalDespute = table.Column<int>(type: "integer", nullable: true),
+                    PtorStage = table.Column<int>(type: "integer", nullable: true),
                     ArnonaDept = table.Column<decimal>(type: "numeric(18,2)", nullable: true),
                     maintenance = table.Column<int>(type: "integer", nullable: true),
                     DangerousBldg = table.Column<int>(type: "integer", nullable: true),
+                    SuspectedDangerousBldg = table.Column<int>(type: "integer", nullable: true),
                     Itum = table.Column<int>(type: "integer", nullable: true),
                     LandQuality = table.Column<int>(type: "integer", nullable: true),
                     BldgRightsNotUsed = table.Column<int>(type: "integer", nullable: true),
@@ -107,11 +124,18 @@ namespace WebServer.Migrations
                     PikuachKlali = table.Column<string>(type: "text", nullable: true),
                     PikuachAlBniya = table.Column<string>(type: "text", nullable: true),
                     TzavDangerBldg = table.Column<string>(type: "text", nullable: true),
+                    HasDangerousBldgOrder = table.Column<int>(type: "integer", nullable: true),
                     TzavShiputzFronts = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Buildings", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Buildings_Streets_StreetId",
+                        column: x => x.StreetId,
+                        principalTable: "Streets",
+                        principalColumn: "StreetId",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -201,6 +225,11 @@ namespace WebServer.Migrations
                 column: "CreatedByUserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Buildings_StreetId",
+                table: "Buildings",
+                column: "StreetId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ExternalSystemSnapshots_BuildingId",
                 table: "ExternalSystemSnapshots",
                 column: "BuildingId");
@@ -210,6 +239,11 @@ namespace WebServer.Migrations
                 table: "Users",
                 column: "Username",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Streets_Name",
+                table: "Streets",
+                column: "Name");
         }
 
         /// <inheritdoc />
@@ -229,6 +263,9 @@ namespace WebServer.Migrations
 
             migrationBuilder.DropTable(
                 name: "Buildings");
+
+            migrationBuilder.DropTable(
+                name: "Streets");
         }
     }
 }

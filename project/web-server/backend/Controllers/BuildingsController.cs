@@ -39,6 +39,11 @@ public class BuildingsController : ApiControllerBase
             query = query.Where(b => EF.Functions.ILike(b.StreetName, $"%{filter.Street}%"));
         }
 
+        if (filter.StreetId.HasValue)
+        {
+            query = query.Where(b => b.StreetId == filter.StreetId.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
         {
             query = query.Where(b => b.HouseNumber == filter.HouseNumber);
@@ -73,8 +78,9 @@ public class BuildingsController : ApiControllerBase
             .Select(b => new BuildingSummaryDto(
                 b.Id,
                 b.FldId,
+                b.StreetId,
                 b.BuildingName,
-                b.StreetName,
+                b.Street != null ? b.Street.Name : b.StreetName,
                 b.HouseNumber,
                 b.Neighborhood,
                 b.ShikumStatus,
@@ -90,6 +96,7 @@ public class BuildingsController : ApiControllerBase
     public async Task<ActionResult<BuildingDetailDto>> GetBuilding(int id, CancellationToken cancellationToken)
     {
         var building = await _context.Buildings
+            .Include(b => b.Street)
             .Include(b => b.Logs.OrderByDescending(l => l.CreatedAt))
             .ThenInclude(l => l.CreatedByUser)
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
@@ -116,12 +123,12 @@ public class BuildingsController : ApiControllerBase
                 building.HouseNumber,
                 building.BuildingName,
                 building.Neighborhood,
-                building.ShikumStatus.ToString(),
+                building.ShikumStatus,
                 building.StatusSummary))
             .ToList();
 
         var detail = new BuildingDetailDto(
-            new BuildingSummaryDto(building.Id, building.FldId, building.BuildingName, building.StreetName, building.HouseNumber, building.Neighborhood, building.ShikumStatus, building.BldSivug, building.StatusSummary),
+            new BuildingSummaryDto(building.Id, building.FldId, building.StreetId, building.BuildingName, building.Street?.Name ?? building.StreetName, building.HouseNumber, building.Neighborhood, building.ShikumStatus, building.BldSivug, building.StatusSummary),
             building.StatusSummary,
             IsraelTime.Convert(building.StatusSummaryUpdatedAt),
             building.Complaints,
@@ -139,7 +146,6 @@ public class BuildingsController : ApiControllerBase
         var building = new Building
         {
             FldId = request.FldId,
-            StreetName = request.StreetName,
             HouseNumber = request.HouseNumber,
             BuildingName = request.BuildingName,
             Neighborhood = request.Neighborhood,
@@ -150,6 +156,15 @@ public class BuildingsController : ApiControllerBase
             PhotoUrls = request.Photos is null ? string.Empty : string.Join(',', request.Photos)
         };
 
+        var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == request.StreetId, cancellationToken);
+        if (street == null)
+        {
+            return BadRequest($"Street with id {request.StreetId} not found.");
+        }
+
+        building.StreetId = street.StreetId;
+        building.StreetName = street.Name;
+
         _context.Buildings.Add(building);
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -159,6 +174,7 @@ public class BuildingsController : ApiControllerBase
         {
             building.Id,
             building.FldId,
+            building.StreetId,
             building.BuildingName,
             building.StreetName,
             building.HouseNumber,
@@ -185,6 +201,7 @@ public class BuildingsController : ApiControllerBase
         return CreatedAtAction(nameof(GetBuilding), new { id = building.Id }, new BuildingSummaryDto(
             building.Id,
             building.FldId,
+            building.StreetId,
             building.BuildingName,
             building.StreetName,
             building.HouseNumber,
@@ -205,7 +222,6 @@ public class BuildingsController : ApiControllerBase
         }
 
         building.FldId = request.FldId;
-        building.StreetName = request.StreetName;
         building.HouseNumber = request.HouseNumber;
         if (!string.IsNullOrWhiteSpace(request.BuildingName))
         {
@@ -222,12 +238,22 @@ public class BuildingsController : ApiControllerBase
         building.PhotoUrls = request.Photos is null ? building.PhotoUrls : string.Join(',', request.Photos);
         building.StatusSummaryUpdatedAt = DateTime.UtcNow;
 
+        var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == request.StreetId, cancellationToken);
+        if (street == null)
+        {
+            return BadRequest($"Street with id {request.StreetId} not found.");
+        }
+
+        building.StreetId = street.StreetId;
+        building.StreetName = street.Name;
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var changeSnapshot = new
         {
             building.Id,
             building.FldId,
+            building.StreetId,
             building.BuildingName,
             building.StreetName,
             building.HouseNumber,

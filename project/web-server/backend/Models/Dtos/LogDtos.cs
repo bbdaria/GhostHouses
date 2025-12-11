@@ -12,6 +12,7 @@ public record LogFilterParameters(
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
     string? Street = null,
+    int? StreetId = null,
     string? HouseNumber = null,
     string? Name = null,
     BuildingStatus? Status = null,
@@ -20,6 +21,7 @@ public record LogFilterParameters(
         Page,
         PageSize,
         Street,
+        StreetId,
         HouseNumber,
         Name,
         Status,
@@ -39,7 +41,7 @@ public record BuildingLogDto(
     string? BuildingHouseNumber,
     string? BuildingNickname,
     string? BuildingNeighborhood,
-    string BuildingStatus,
+    BuildingStatus? BuildingStatus,
     string? BuildingStatusSummary);
 
 public class BuildingLogRequest

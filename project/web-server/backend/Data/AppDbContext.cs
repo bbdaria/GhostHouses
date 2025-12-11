@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<Building> Buildings => Set<Building>();
+    public DbSet<Street> Streets => Set<Street>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<BuildingLog> BuildingLogs => Set<BuildingLog>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
@@ -35,6 +36,18 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<BuildingLog>()
             .HasQueryFilter(log => !log.IsDeleted);
+
+        modelBuilder.Entity<Street>()
+            .HasKey(s => s.StreetId);
+
+        modelBuilder.Entity<Street>()
+            .HasIndex(s => s.Name);
+
+        modelBuilder.Entity<Building>()
+            .HasOne(b => b.Street)
+            .WithMany(s => s.Buildings)
+            .HasForeignKey(b => b.StreetId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
 }
