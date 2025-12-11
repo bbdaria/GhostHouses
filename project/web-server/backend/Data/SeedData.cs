@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using WebServer.Models;
 using WebServer.Models.Users;
 
@@ -11,6 +12,8 @@ public static class SeedData
     {
         using var scope = services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var hostEnvironment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
+
         await context.Database.MigrateAsync(cancellationToken);
 
         if (!await context.Users.AnyAsync(cancellationToken))
@@ -47,8 +50,13 @@ public static class SeedData
             viewer.PasswordHash = hasher.HashPassword(viewer, "viewer");
             context.Users.Add(viewer);
 
-            // No buildings seeded by default
             await context.SaveChangesAsync(cancellationToken);
+        }
+
+        if (!await context.Buildings.AnyAsync(cancellationToken))
+        {
+            var seedFilePath = Path.Combine(hostEnvironment.ContentRootPath, "Data", "BuildingsSeedData.xlsx");
+            await BuildingsExcelImporter.SeedFromFileAsync(context, seedFilePath, cancellationToken);
         }
     }
 }
