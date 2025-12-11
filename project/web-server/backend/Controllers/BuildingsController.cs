@@ -143,7 +143,7 @@ public class BuildingsController : ApiControllerBase
             HouseNumber = request.HouseNumber,
             BuildingName = request.BuildingName,
             Neighborhood = request.Neighborhood,
-            BldSivug = request.BldSivug ?? "Unclassified",
+            BldSivug = request.BldSivug,
             ShikumStatus = request.ShikumStatus ?? BuildingStatus.Unknown,
             StatusSummary = request.StatusSummary ?? string.Empty,
             Complaints = request.Complaints ?? string.Empty,

@@ -4,6 +4,17 @@ let authToken = null;
 
 const toCamel = (key) => (key ? key.charAt(0).toLowerCase() + key.slice(1) : key);
 
+const toOptionalInt = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+};
+
+const generateFieldId = () => {
+  const candidate = Math.trunc(Date.now() % 2000000000);
+  return candidate <= 0 ? 1 : candidate;
+};
+
 const normalizeSnapshot = (value) => {
   if (value === null || typeof value !== 'object') {
     return value;
@@ -180,13 +191,15 @@ const api = {
     return mapBuildingDetail(data);
   },
   async createBuilding(form) {
+    const fldId = toOptionalInt(form.fldId) ?? generateFieldId();
+    const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
-      fldId: form.fldId || `GH-${Date.now()}`,
+      fldId,
       streetName: form.streetName || '',
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || form.streetName || 'מבנה',
       neighborhood: form.area || form.neighborhood || '',
-      bldSivug: form.category || 'Unclassified',
+      bldSivug,
       shikumStatus: form.status || form.shikumStatus || 'Unknown',
       statusSummary: form.statusSummary || '',
       complaints: form.complaints || ''
@@ -195,13 +208,15 @@ const api = {
     return mapBuildingSummary(created);
   },
   async updateBuilding(id, form) {
+    const fldId = toOptionalInt(form.fldId) ?? generateFieldId();
+    const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
-      fldId: String(form.fldId || `GH-${id}`),
+      fldId,
       streetName: form.streetName || form.street || '',
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || '',
       neighborhood: form.area || form.neighborhood || '',
-      bldSivug: form.category || 'Unclassified',
+      bldSivug,
       shikumStatus: form.status || form.shikumStatus || 'Unknown',
       statusSummary: form.statusSummary || '',
       complaints: form.complaints || ''

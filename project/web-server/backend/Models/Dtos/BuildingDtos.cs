@@ -16,13 +16,13 @@ public record BuildingFilterParameters(
 
 public record BuildingSummaryDto(
     int Id,
-    string FldId,
+    int? FldId,
     string BuildingName,
     string StreetName,
     string HouseNumber,
     string Neighborhood,
     BuildingStatus ShikumStatus,
-    string BldSivug,
+    int? BldSivug,
     string StatusSummary);
 
 public record BuildingDetailDto(
@@ -49,7 +49,7 @@ public record ExternalSystemSnapshotDto(
 public record BuildingEditRequest
 {
     [Required]
-    public string FldId { get; set; } = string.Empty;
+    public int FldId { get; set; }
 
     [Required]
     public string StreetName { get; set; } = string.Empty;
@@ -59,7 +59,7 @@ public record BuildingEditRequest
 
     public string BuildingName { get; set; } = string.Empty;
     public string Neighborhood { get; set; } = string.Empty;
-    public string? BldSivug { get; set; }
+    public int? BldSivug { get; set; }
     public BuildingStatus? ShikumStatus { get; set; }
     public string? StatusSummary { get; set; }
     public string? Complaints { get; set; }
