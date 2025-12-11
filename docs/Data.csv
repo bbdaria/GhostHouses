@@ -1,4 +1,4 @@
-﻿Category,Field ID,Field Name,Type,Foreign Field ID,Include in event log (date of change & the change),
+﻿Category,Field ID,Field Name,Type,Select Table Name,Include in event log (date of change & the change),
 מידע כללי,FIdId,ID נכס לצורך מערכת זו בלבד,int,,,
 מידע כללי,StreetName,שם רחוב,nvarchar(MAX),,,
 מידע כללי,BldNum,מספר בית,nvarchar(MAX),,,

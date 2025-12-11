@@ -90,6 +90,7 @@ async function request(path, options = {}) {
 const mapBuildingSummary = (item) => ({
   id: item.id,
   fldId: item.fldId,
+  streetId: item.streetId,
   street: item.streetName,
   houseNumber: item.houseNumber,
   nickname: item.buildingName,
@@ -118,6 +119,7 @@ const mapLog = (log) => ({
 const mapBuildingDetail = (data) => ({
   id: data.summary.id,
   fldId: data.summary.fldId,
+  streetId: data.summary.streetId,
   street: data.summary.streetName,
   houseNumber: data.summary.houseNumber,
   nickname: data.summary.buildingName,
@@ -177,6 +179,7 @@ const api = {
   async fetchBuildings(filters = {}) {
     const params = new URLSearchParams();
     if (filters.street) params.append('street', filters.street);
+    if (filters.streetId) params.append('streetId', filters.streetId);
     if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
@@ -195,7 +198,7 @@ const api = {
     const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
       fldId,
-      streetName: form.streetName || '',
+      streetId: toOptionalInt(form.streetId),
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || form.streetName || 'מבנה',
       neighborhood: form.area || form.neighborhood || '',
@@ -212,7 +215,7 @@ const api = {
     const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
       fldId,
-      streetName: form.streetName || form.street || '',
+      streetId: toOptionalInt(form.streetId) ?? toOptionalInt(form.street),
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || '',
       neighborhood: form.area || form.neighborhood || '',
@@ -229,6 +232,20 @@ const api = {
       method: 'DELETE',
       body: { reason, confirm: true }
     });
+  },
+  async fetchStreets(search = '') {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    return request(`/streets${params.toString() ? `?${params}` : ''}`);
+  },
+  async createStreet(payload) {
+    return request('/streets', { method: 'POST', body: payload });
+  },
+  async updateStreet(id, payload) {
+    return request(`/streets/${id}`, { method: 'PUT', body: payload });
+  },
+  async deleteStreet(id) {
+    return request(`/streets/${id}`, { method: 'DELETE' });
   },
   async fetchBuildingLogs(id) {
     const data = await request(`/logs/building/${id}`);
@@ -252,6 +269,7 @@ const api = {
     if (filters.userId) params.append('userId', filters.userId);
     if (filters.user) params.append('user', filters.user);
     if (filters.street) params.append('street', filters.street);
+    if (filters.streetId) params.append('streetId', filters.streetId);
     if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
@@ -262,6 +280,10 @@ const api = {
     const data = await request(`/logs${params.toString() ? `?${params}` : ''}`);
     const items = Array.isArray(data.items) ? data.items : data;
     return (items || []).map(mapLog);
+  },
+  async fetchSelectTable(name) {
+    if (!name) throw new Error('select table name is required');
+    return request(`/select-tables/${encodeURIComponent(name)}`);
   },
   async fetchUsers() {
     const data = await request('/users');

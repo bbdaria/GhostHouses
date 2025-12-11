@@ -4,6 +4,7 @@ import { ROLE_LABELS } from '../i18n.js';
 
 const NAV_LINKS = [
   { to: '/buildings', label: 'מאגר מבנים', roles: ['Viewer', 'Editor', 'Admin'] },
+  { to: '/streets', label: 'מאגר רחובות', roles: ['Viewer', 'Editor', 'Admin'] },
   { to: '/logs', label: 'יומן פעילויות', roles: ['Viewer', 'Editor', 'Admin'] },
   { to: '/settings', label: 'הגדרות אישיות', roles: ['Viewer', 'Editor', 'Admin'] },
   { to: '/users', label: 'ניהול משתמשים', roles: ['Admin'] }

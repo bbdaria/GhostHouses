@@ -7,6 +7,6 @@ public sealed class FieldSpecAttribute : Attribute
 {
     public string Category { get; set; } = string.Empty;
     public string FieldName { get; set; } = string.Empty;
-    public string? ForeignFieldId { get; set; }
+    public string? SelectTableName { get; set; }
     public bool IncludeInEventLog { get; set; }
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
 using System.Xml.Linq;
+using Microsoft.EntityFrameworkCore;
 using WebServer.Models;
 
 namespace WebServer.Data;
@@ -12,6 +13,35 @@ namespace WebServer.Data;
 /// </summary>
 public static class BuildingsExcelImporter
 {
+    private static readonly IReadOnlyDictionary<string, BuildingStatus> ShikumStatusByLabel =
+        new Dictionary<string, BuildingStatus>(StringComparer.Ordinal)
+        {
+            { "מיפוי החסמים וגיבוש פתרון", BuildingStatus.MappingBarriersAndSolution },
+            { "העברת בעלות", BuildingStatus.OwnershipTransfer },
+            { "חסמים המונעים פיתוח", BuildingStatus.DevelopmentBarriers },
+            { "הבעלים בוחן אפיק פעולה לשיקום", BuildingStatus.OwnerConsideringAction },
+            { "הכנת תכנית שיקום", BuildingStatus.PreparingRehabPlan },
+            { "תכנית מאושרת, הכנה לביצוע", BuildingStatus.PlanApprovedPreparingExecution },
+            { "בביצוע", BuildingStatus.InExecution },
+            { "הליך אכלוס", BuildingStatus.OccupancyProcess }
+        };
+
+    private static readonly IReadOnlyDictionary<string, string> HeaderAliases =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            // Excel header -> canonical FieldSpec.FieldName (from Data.csv)
+            { "תמונת מצב", "תמצית מצב" },
+            { "תאריך עדכון סטטוס", "תאריך עדכון תמצית מצב" },
+            { "שטח החלקה (מ\"ר)", "שטח החלקה (מ״ר)" },
+            { "סה\"כ זכויות בניה מאושרות (מ\"ר)", "סה\"כ זכויות בניה מאושרות (מ״ר)" },
+            { "סה\"כ שטח בנוי (מ\"ר)", "סה\"כ שטח בנוי (מ״ר)" },
+            { "פרטי מחזיק", "פרטי מחזיקים" },
+            { "צריכת מים ב-6 החודשים האחרונים", "האם הייתה צריכת מים ב־6 החודשים האחרונים" },
+            { "צריכת חשמל ב-6 החודשים האחרונים", "האם הייתה צריכת חשמל ב־6 החודשים האחרונים" },
+            { "ID", "ID נכס לצורך מערכת זו בלבד" },
+            { "ציון", "ציון עמידה בסטנדרט" }
+        };
+
     public static async Task SeedFromFileAsync(AppDbContext context, string filePath, CancellationToken cancellationToken = default)
     {
         try
@@ -24,10 +54,49 @@ public static class BuildingsExcelImporter
 
             var buildings = ReadBuildingsFromExcel(filePath);
 
+            Console.WriteLine($"[BuildingsExcelImporter] Parsed {buildings.Count} building rows from '{filePath}'.");
+
             if (buildings.Count == 0)
             {
                 Console.WriteLine($"[BuildingsExcelImporter] No usable building rows found in '{filePath}', skipping building seeding.");
                 return;
+            }
+
+            var streetLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var streets = await context.Streets.AsNoTracking().ToListAsync(cancellationToken);
+            foreach (var street in streets)
+            {
+                var name = street.Name?.Trim();
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+
+                // Keep the first StreetId encountered for a given name; skip duplicates with the same name.
+                if (!streetLookup.ContainsKey(name))
+                {
+                    streetLookup[name] = street.StreetId;
+                }
+            }
+
+            foreach (var building in buildings)
+            {
+                if (building.StreetId.HasValue)
+                {
+                    continue;
+                }
+
+                var streetName = building.StreetName?.Trim();
+                if (string.IsNullOrEmpty(streetName))
+                {
+                    continue;
+                }
+
+                if (streetLookup.TryGetValue(streetName, out var sid))
+                {
+                    building.StreetId = sid;
+                    building.StreetName = streetName;
+                }
             }
 
             await context.Buildings.AddRangeAsync(buildings, cancellationToken);
@@ -179,7 +248,13 @@ public static class BuildingsExcelImporter
                 continue;
             }
 
-            headers[colIndex] = text.Trim();
+            text = text.Trim();
+            if (HeaderAliases.TryGetValue(text, out var canonical))
+            {
+                text = canonical;
+            }
+
+            headers[colIndex] = text;
         }
 
         return headers;
@@ -374,6 +449,22 @@ public static class BuildingsExcelImporter
 
         if (underlying.IsEnum)
         {
+            if (underlying == typeof(BuildingStatus))
+            {
+                if (int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var statusInt) &&
+                    Enum.IsDefined(underlying, statusInt))
+                {
+                    return (BuildingStatus)statusInt;
+                }
+
+                if (ShikumStatusByLabel.TryGetValue(raw, out var status))
+                {
+                    return status;
+                }
+
+                // Fall through to generic enum parsing as a last resort.
+            }
+
             if (int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var enumInt))
             {
                 if (Enum.IsDefined(underlying, enumInt))
@@ -416,4 +507,3 @@ public static class BuildingsExcelImporter
         return true;
     }
 }
-

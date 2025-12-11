@@ -8,6 +8,7 @@ public record BuildingFilterParameters(
     int Page = 1,
     int PageSize = 20,
     string? Street = null,
+    int? StreetId = null,
     string? HouseNumber = null,
     string? Name = null,
     BuildingStatus? Status = null,
@@ -17,6 +18,7 @@ public record BuildingFilterParameters(
 public record BuildingSummaryDto(
     int Id,
     int? FldId,
+    int? StreetId,
     string BuildingName,
     string StreetName,
     string HouseNumber,
@@ -52,6 +54,8 @@ public record BuildingEditRequest
     public int FldId { get; set; }
 
     [Required]
+    public int StreetId { get; set; }
+
     public string StreetName { get; set; } = string.Empty;
 
     [Required]

@@ -62,6 +62,16 @@ public class LogsController : ApiControllerBase
             query = query.Where(l => EF.Functions.ILike(l.Building.StreetName, $"%{filter.Street}%"));
         }
 
+        if (filter.StreetId.HasValue)
+        {
+            query = query.Where(l => l.Building.StreetId == filter.StreetId.Value);
+        }
+
+        if (filter.StreetId.HasValue)
+        {
+            query = query.Where(l => l.Building.StreetId == filter.StreetId.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
         {
             query = query.Where(l => l.Building.HouseNumber == filter.HouseNumber);
@@ -105,7 +115,7 @@ public class LogsController : ApiControllerBase
                 l.Building.HouseNumber,
                 l.Building.BuildingName,
                 l.Building.Neighborhood,
-                l.Building.ShikumStatus.ToString(),
+                l.Building.ShikumStatus,
                 l.Building.StatusSummary))
             .ToListAsync(cancellationToken);
 
@@ -134,7 +144,7 @@ public class LogsController : ApiControllerBase
                 l.Building.HouseNumber,
                 l.Building.BuildingName,
                 l.Building.Neighborhood,
-                l.Building.ShikumStatus.ToString(),
+                l.Building.ShikumStatus,
                 l.Building.StatusSummary))
             .ToListAsync(cancellationToken);
 
@@ -190,7 +200,7 @@ public class LogsController : ApiControllerBase
             building.HouseNumber,
             building.BuildingName,
             building.Neighborhood,
-            building.ShikumStatus.ToString(),
+            building.ShikumStatus,
             building.StatusSummary);
         return CreatedAtAction(nameof(GetBuildingLogs), new { buildingId }, dto);
     }
