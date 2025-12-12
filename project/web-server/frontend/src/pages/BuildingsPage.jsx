@@ -18,6 +18,13 @@ const initialFilters = {
   area: '',
   statusSummary: ''
 };
+const SORT_FIELDS = [
+  { value: 'street', label: 'שם רחוב' },
+  { value: 'houseNumber', label: 'מספר בית' },
+  { value: 'nickname', label: 'כינוי' },
+  { value: 'status', label: 'סטטוס' },
+  { value: 'area', label: 'אזור' }
+];
 
 export default function BuildingsPage() {
   const { user } = useAuth();
@@ -53,6 +60,15 @@ export default function BuildingsPage() {
     streetId: ''
   });
   const [actionMessage, setActionMessage] = useState('');
+  const [selectedView, setSelectedView] = useState('summary');
+  const [sortCriteria, setSortCriteria] = useState([
+    { field: 'street', direction: 'asc' },
+    { field: 'houseNumber', direction: 'asc' },
+    { field: '', direction: 'asc' },
+    { field: '', direction: 'asc' },
+    { field: '', direction: 'asc' },
+    { field: '', direction: 'asc' }
+  ]);
 
   const canEdit = useMemo(
     () => user && (user.role === 'Editor' || user.role === 'Admin'),
@@ -160,12 +176,13 @@ export default function BuildingsPage() {
     }
   };
 
-  const loadBuildingDetails = async (id) => {
+  const loadBuildingDetails = async (id, view = 'summary') => {
     setDetailError('');
     try {
       const building = await api.fetchBuilding(id);
       setSelectedBuilding(building);
-      setDetailTab('summary');
+      setDetailTab(view);
+      setSelectedView(view);
       sessionStorage.setItem(LAST_BUILDING_KEY, String(id));
     } catch (err) {
       setDetailError(err.message);
@@ -272,12 +289,13 @@ export default function BuildingsPage() {
     }
   };
 
-  const handleDeleteBuilding = async () => {
-    if (!selectedBuilding) return;
+  const handleDeleteBuilding = async (buildingId) => {
+    const id = buildingId ?? selectedBuilding?.id;
+    if (!id) return;
     const confirmed = window.confirm('למחוק את המבנה לצמיתות?');
     if (!confirmed) return;
     try {
-      await api.deleteBuilding(selectedBuilding.id);
+      await api.deleteBuilding(id);
       setSelectedBuilding(null);
       loadBuildings(filters);
       setActionMessage('המבנה הוסר.');
@@ -290,7 +308,61 @@ export default function BuildingsPage() {
 
   const handleTabChange = (tab) => {
     setDetailTab(tab);
+    setSelectedView(tab);
   };
+
+  const handleSortFieldChange = (index, value) => {
+    setSortCriteria((prev) => {
+      const next = [...prev];
+      next.forEach((c, i) => {
+        if (i !== index && c.field === value) {
+          next[i] = { ...next[i], field: '' };
+        }
+      });
+      next[index] = { ...next[index], field: value };
+      return next;
+    });
+  };
+
+  const handleSortDirectionChange = (index, value) => {
+    setSortCriteria((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], direction: value };
+      return next;
+    });
+  };
+
+  const sortedBuildings = useMemo(() => {
+    if (!buildings || buildings.length === 0) return [];
+    const criteria = sortCriteria.filter((c) => c.field);
+    if (criteria.length === 0) return buildings;
+
+    const compare = (a, b, field, direction) => {
+      let result = 0;
+      if (field === 'houseNumber') {
+        result = (a.houseNumber || '').localeCompare(b.houseNumber || '', 'he');
+      } else if (field === 'status') {
+        result = (a.status || '').localeCompare(b.status || '', 'he');
+      } else if (field === 'street') {
+        result = (a.street || '').localeCompare(b.street || '', 'he');
+      } else if (field === 'nickname') {
+        result = (a.nickname || '').localeCompare(b.nickname || '', 'he');
+      } else if (field === 'area') {
+        result = (a.area || '').localeCompare(b.area || '', 'he');
+      }
+      return direction === 'desc' ? -result : result;
+    };
+
+    const copy = [...buildings];
+    copy.sort((a, b) => {
+      for (const c of criteria) {
+        const cmp = compare(a, b, c.field, c.direction);
+        if (cmp !== 0) return cmp;
+      }
+      return 0;
+    });
+    return copy;
+  }, [buildings, sortCriteria]);
 
   return (
     <main className="app buildings-app">
@@ -462,10 +534,43 @@ export default function BuildingsPage() {
       )}
 
       <section className="content-layout">
-        <div className="list-panel">
+        <div className="list-panel full-span">
           <div className="panel-header">
             <h2>תוצאות ({buildings.length})</h2>
           </div>
+          <section className="panel">
+            <h3>מיון</h3>
+            <div className="form-grid">
+              {sortCriteria.map((crit, idx) => (
+                <div key={idx}>
+                  <label>
+                    {`עדיפות ${idx + 1}`}
+                    <select
+                      value={crit.field}
+                      onChange={(e) => handleSortFieldChange(idx, e.target.value)}
+                    >
+                      <option value="">ללא</option>
+                      {SORT_FIELDS.map((f) => (
+                        <option key={f.value} value={f.value}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    סדר
+                    <select
+                      value={crit.direction}
+                      onChange={(e) => handleSortDirectionChange(idx, e.target.value)}
+                    >
+                      <option value="asc">עולה</option>
+                      <option value="desc">יורד</option>
+                    </select>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </section>
           <div className="table-wrapper">
             <table>
               <thead>
@@ -476,34 +581,182 @@ export default function BuildingsPage() {
                   <th>סטטוס</th>
                   <th>אזור</th>
                   <th>תקציר מצב</th>
+                  <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
-                {buildings.map((building) => {
+                {sortedBuildings.map((building) => {
                   const isActive = selectedBuilding && building.id === selectedBuilding.id;
                   const statusValue = building.status || 'Unknown';
                   const statusLabel = statusLabelMap[statusValue] || statusValue;
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
                   return (
-                    <tr
-                      key={building.id}
-                      onClick={() => loadBuildingDetails(building.id)}
-                      className={isActive ? 'active' : ''}
-                    >
-                      <td>{building.street}</td>
-                      <td>{building.houseNumber}</td>
-                      <td>{building.nickname || '—'}</td>
-                      <td>
-                        <span className={`status status-${statusSlug}`}>{statusLabel}</span>
-                      </td>
-                      <td>{building.area || '—'}</td>
-                      <td>{building.statusSummary || '—'}</td>
-                    </tr>
+                    <>
+                      <tr key={building.id} className={isActive ? 'active' : ''}>
+                        <td>{building.street}</td>
+                        <td>{building.houseNumber}</td>
+                        <td>{building.nickname || '—'}</td>
+                        <td>
+                          <span className={`status status-${statusSlug}`}>{statusLabel}</span>
+                        </td>
+                        <td>{building.area || '—'}</td>
+                        <td>{building.statusSummary || '—'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => loadBuildingDetails(building.id, 'summary')}
+                          >
+                            הצג
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => loadBuildingDetails(building.id, 'all')}
+                          >
+                            הצג הכל
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => loadBuildingDetails(building.id, 'edit')}
+                          >
+                            עריכה
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => {
+                              if (window.confirm('למחוק את המבנה לצמיתות?')) {
+                                handleDeleteBuilding(building.id);
+                              }
+                            }}
+                          >
+                            מחק
+                          </button>
+                        </td>
+                      </tr>
+                      {isActive && selectedBuilding && (
+                        <tr>
+                          <td colSpan="7">
+                            {selectedView === 'edit' && canEdit && (
+                              <form className="details-card form-grid" onSubmit={handleUpdateBuilding}>
+                                <label>
+                                  כינוי
+                                  <input
+                                    name="bldName"
+                                    value={editForm.bldName}
+                                    onChange={handleEditChange}
+                                  />
+                                </label>
+                                <label>
+                                  רחוב
+                                  <select name="streetId" value={editForm.streetId} onChange={handleEditChange} required>
+                                    <option value="">בחר רחוב</option>
+                                    {streets.map((street) => (
+                                      <option key={street.streetId} value={street.streetId}>
+                                        {street.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label>
+                                  מספר בית
+                                  <input
+                                    name="houseNumber"
+                                    value={selectedBuilding.houseNumber}
+                                    onChange={() => {}}
+                                    disabled
+                                  />
+                                </label>
+                                <label>
+                                  אזור
+                                  <input name="area" value={editForm.area} onChange={handleEditChange} />
+                                </label>
+                                <label>
+                                  סטטוס
+                                  <select
+                                    name="shikumStatusId"
+                                    value={editForm.shikumStatusId}
+                                    onChange={handleEditChange}
+                                  >
+                                    <option value="">Leave unchanged</option>
+                                    {statusOptions.map((option) => (
+                                      <option key={option.id} value={option.id}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="full-span">
+                                  תקציר מצב
+                                  <textarea
+                                    name="statusSummary"
+                                    value={editForm.statusSummary}
+                                    onChange={handleEditChange}
+                                  />
+                                </label>
+                                <div className="filters-actions">
+                                  <button type="submit" className="primary">
+                                    שמירת שינויים
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    onClick={() => setSelectedBuilding(null)}
+                                  >
+                                    סגירה
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+                            {selectedView === 'summary' && (
+                              <div className="details-card">
+                                <div>
+                                  <p className="eyebrow">כתובת</p>
+                                  <h3>
+                                    {selectedBuilding.street} {selectedBuilding.houseNumber}
+                                  </h3>
+                                  {selectedBuilding.nickname && (
+                                    <p className="nickname">“{selectedBuilding.nickname}”</p>
+                                  )}
+                                </div>
+                                <dl>
+                                  <div>
+                                    <dt>סטטוס</dt>
+                                    <dd>{statusLabelMap[selectedBuilding.status || 'Unknown']}</dd>
+                                  </div>
+                                  <div>
+                                    <dt>אזור</dt>
+                                    <dd>{selectedBuilding.area || 'לא צוין'}</dd>
+                                  </div>
+                                  <div>
+                                    <dt>עודכן לאחרונה</dt>
+                                    <dd>{formatLogDate(selectedBuilding.updatedAt)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt>תקציר מצב</dt>
+                                    <dd>{selectedBuilding.statusSummary || '—'}</dd>
+                                  </div>
+                                </dl>
+                              </div>
+                            )}
+                            {selectedView === 'all' && (
+                              <div className="details-card">
+                                <pre style={{ whiteSpace: 'pre-wrap', direction: 'ltr' }}>
+{JSON.stringify(selectedBuilding, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   );
                 })}
                 {buildings.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="6" className="muted">
+                    <td colSpan="7" className="muted">
                       אין מבנים שעונים על הסינון.
                     </td>
                   </tr>
@@ -513,125 +766,6 @@ export default function BuildingsPage() {
           </div>
         </div>
 
-        <div className="details-panel">
-          <div className="panel-header">
-            <h2>פרטי מבנה</h2>
-          </div>
-          {detailError && <p className="error">שגיאה: {detailError}</p>}
-          {!selectedBuilding && <p className="muted">בחרו מבנה להצגת הנתונים.</p>}
-          {selectedBuilding && (
-            <>
-              <div className="tab-bar">
-                <button
-                  className={detailTab === 'summary' ? 'tab active' : 'tab'}
-                  onClick={() => handleTabChange('summary')}
-                >
-                  תקציר
-                </button>
-                {canEdit && (
-                  <button
-                    className={detailTab === 'edit' ? 'tab active' : 'tab'}
-                    onClick={() => handleTabChange('edit')}
-                  >
-                    עריכה
-                  </button>
-                )}
-              </div>
-
-              {detailTab === 'summary' && (
-                <div className="details-card">
-                  <div>
-                    <p className="eyebrow">כתובת</p>
-                    <h3>
-                      {selectedBuilding.street} {selectedBuilding.houseNumber}
-                    </h3>
-                    {selectedBuilding.nickname && (
-                      <p className="nickname">“{selectedBuilding.nickname}”</p>
-                    )}
-                  </div>
-                  <dl>
-                    <div>
-                      <dt>סטטוס</dt>
-                      <dd>{statusLabelMap[selectedBuilding.status || 'Unknown']}</dd>
-                    </div>
-                    <div>
-                      <dt>אזור</dt>
-                      <dd>{selectedBuilding.area || 'לא צוין'}</dd>
-                    </div>
-                    <div>
-                      <dt>עודכן לאחרונה</dt>
-                      <dd>{formatLogDate(selectedBuilding.updatedAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>תקציר מצב</dt>
-                      <dd>{selectedBuilding.statusSummary || '—'}</dd>
-                    </div>
-                  </dl>
-                  <div className="photos-placeholder">
-                    <p>תמונות (טרם זמין)</p>
-                  </div>
-                  {isAdmin && (
-                    <button className="danger" onClick={handleDeleteBuilding}>
-                      מחיקת מבנה
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {detailTab === 'edit' && canEdit && (
-                <form className="details-card form-grid" onSubmit={handleUpdateBuilding}>
-                  <label>
-                    כינוי
-                    <input name="bldName" value={editForm.bldName} onChange={handleEditChange} />
-                  </label>
-                  <label>
-                    רחוב
-                    <select name="streetId" value={editForm.streetId} onChange={handleEditChange} required>
-                      <option value="">בחר רחוב</option>
-                      {streets.map((street) => (
-                        <option key={street.streetId} value={street.streetId}>
-                          {street.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    אזור
-                    <input name="area" value={editForm.area} onChange={handleEditChange} />
-                  </label>
-                  <label>
-                    סטטוס
-                    <select
-                      name="shikumStatusId"
-                      value={editForm.shikumStatusId}
-                      onChange={handleEditChange}
-                    >
-                      <option value="">Leave unchanged</option>
-                      {statusOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="full-span">
-                    תקציר מצב
-                    <textarea
-                      name="statusSummary"
-                      value={editForm.statusSummary}
-                      onChange={handleEditChange}
-                    />
-                  </label>
-                  <div className="filters-actions">
-                    <button type="submit" className="primary">
-                      שמירת שינויים
-                    </button>
-                  </div>
-                </form>
-              )}
-            </>
-          )}
-        </div>
       </section>
     </main>
   );
