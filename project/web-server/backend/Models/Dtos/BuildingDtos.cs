@@ -34,7 +34,17 @@ public record BuildingDetailDto(
     string? Complaints,
     string[] Photos,
     BuildingExternalDataDto ExternalData,
-    IEnumerable<BuildingLogDto> RecentLogs);
+    IEnumerable<BuildingLogDto> RecentLogs,
+    IEnumerable<BuildingFieldDto> Fields);
+
+public record BuildingFieldDto(
+    string Category,
+    string FieldName,
+    string ColumnName,
+    string? SelectTableName,
+    bool IncludeInEventLog,
+    string? Value,
+    int? RawValue);
 
 public record BuildingExternalDataDto(
     ExternalSystemSnapshotDto Gis,
@@ -73,5 +83,8 @@ public record BuildingEditRequest
 public record DeleteBuildingRequest(
     string Reason,
     bool Confirm);
+
+public record BuildingFieldsUpdateRequest(
+    IDictionary<string, string?> Fields);
 
 public record PaginatedResult<T>(IEnumerable<T> Items, int Total, int Page, int PageSize);

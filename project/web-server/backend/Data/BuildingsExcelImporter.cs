@@ -32,6 +32,7 @@ public static class BuildingsExcelImporter
             // Excel header -> canonical FieldSpec.FieldName (from Data.csv)
             { "תמונת מצב", "תמצית מצב" },
             { "תאריך עדכון סטטוס", "תאריך עדכון תמצית מצב" },
+            { "אחוז המבנה שעומד ניזוק", "אחוז המבנה שמוגדר ניזוק" },
             { "שטח החלקה (מ\"ר)", "שטח החלקה (מ״ר)" },
             { "סה\"כ זכויות בניה מאושרות (מ\"ר)", "סה\"כ זכויות בניה מאושרות (מ״ר)" },
             { "סה\"כ שטח בנוי (מ\"ר)", "סה\"כ שטח בנוי (מ״ר)" },
@@ -40,6 +41,18 @@ public static class BuildingsExcelImporter
             { "צריכת חשמל ב-6 החודשים האחרונים", "האם הייתה צריכת חשמל ב־6 החודשים האחרונים" },
             { "ID", "ID נכס לצורך מערכת זו בלבד" },
             { "ציון", "ציון עמידה בסטנדרט" }
+        };
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> SelectLabelAliasesByTable =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Excel label -> canonical SelectTables label
+            ["Tbl_SugBaalut"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                { "ממשלתי", "ממשלה" },
+                { "עיריית חיפה", "רשות מקומית" },
+                { "פרטי", "פרטי (בודד)" }
+            }
         };
 
     public static async Task SeedFromFileAsync(AppDbContext context, string filePath, CancellationToken cancellationToken = default)
@@ -81,7 +94,7 @@ public static class BuildingsExcelImporter
 
             foreach (var building in buildings)
             {
-                if (building.StreetId.HasValue)
+                if (building.StreetCode.HasValue)
                 {
                     continue;
                 }
@@ -94,7 +107,7 @@ public static class BuildingsExcelImporter
 
                 if (streetLookup.TryGetValue(streetName, out var sid))
                 {
-                    building.StreetId = sid;
+                    building.StreetCode = sid;
                     building.StreetName = streetName;
                 }
             }
@@ -208,7 +221,7 @@ public static class BuildingsExcelImporter
                     continue;
                 }
 
-                var value = ConvertCellValue(raw, property.PropertyType);
+                var value = ConvertCellValue(raw, property);
                 if (value == null)
                 {
                     continue;
@@ -361,8 +374,9 @@ public static class BuildingsExcelImporter
         return index - 1;
     }
 
-    private static object? ConvertCellValue(string raw, Type targetType)
+    private static object? ConvertCellValue(string raw, PropertyInfo property)
     {
+        var targetType = property.PropertyType;
         var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
         if (underlying == typeof(string))
@@ -372,14 +386,59 @@ public static class BuildingsExcelImporter
 
         if (underlying == typeof(int))
         {
+            var normalizedRaw = raw.Trim().Replace("\"\"", "\"");
             if (int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var i))
             {
+                if (property.Name == nameof(Building.DamagePercentage) && i is >= 0 and <= 1)
+                {
+                    // Excel percentage cells can show 100% as "1" (stored as a fraction).
+                    return i * 100;
+                }
+
                 return i;
             }
 
             if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
             {
+                if (property.Name == nameof(Building.DamagePercentage))
+                {
+                    // Excel percentage cells are stored as fractions (e.g., 0.873... = 87.3%).
+                    if (d is >= 0 and <= 1)
+                    {
+                        return (int)Math.Round(d * 100, MidpointRounding.AwayFromZero);
+                    }
+
+                    return (int)Math.Round(d, MidpointRounding.AwayFromZero);
+                }
+
                 return (int)d;
+            }
+
+            var fieldSpec = property.GetCustomAttribute<FieldSpecAttribute>();
+            var selectTableName = fieldSpec?.SelectTableName?.Trim();
+            if (!string.IsNullOrWhiteSpace(selectTableName))
+            {
+                var option = SelectTables
+                    .GetOptions(selectTableName)
+                    .FirstOrDefault(o => string.Equals(o.Label?.Trim().Replace("\"\"", "\""), normalizedRaw, StringComparison.Ordinal));
+
+                if (option != null)
+                {
+                    return option.Value;
+                }
+
+                if (SelectLabelAliasesByTable.TryGetValue(selectTableName, out var aliases) &&
+                    aliases.TryGetValue(normalizedRaw, out var canonicalLabel))
+                {
+                    option = SelectTables
+                        .GetOptions(selectTableName)
+                        .FirstOrDefault(o => string.Equals(o.Label?.Trim().Replace("\"\"", "\""), canonicalLabel, StringComparison.Ordinal));
+
+                    if (option != null)
+                    {
+                        return option.Value;
+                    }
+                }
             }
 
             return null;
@@ -427,7 +486,7 @@ public static class BuildingsExcelImporter
 
         if (underlying == typeof(DateTime))
         {
-            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+            if (TryParseCommonDateString(raw, out var dt))
             {
                 return dt;
             }
@@ -485,6 +544,43 @@ public static class BuildingsExcelImporter
         }
 
         return null;
+    }
+
+    private static bool TryParseCommonDateString(string raw, out DateTime dt)
+    {
+        raw = raw.Trim();
+
+        // Common Israeli/Excel formats from the seed file (e.g., "22.12.2024", "22.1.25").
+        var formats = new[]
+        {
+            "d.M.yyyy",
+            "dd.MM.yyyy",
+            "d.M.yy",
+            "dd.MM.yy",
+            "d/M/yyyy",
+            "dd/MM/yyyy",
+            "d/M/yy",
+            "dd/MM/yy",
+            "yyyy-MM-dd"
+        };
+
+        if (DateTime.TryParseExact(raw, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
+        {
+            return true;
+        }
+
+        // Last resort: try parsing with he-IL and invariant culture.
+        if (DateTime.TryParse(raw, CultureInfo.GetCultureInfo("he-IL"), DateTimeStyles.None, out dt))
+        {
+            return true;
+        }
+
+        if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static bool IsBuildingEmpty(Building building)

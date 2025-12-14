@@ -3,8 +3,6 @@ services:
     build:
       context: .
       dockerfile_inline: |
-        # syntax=docker/dockerfile:1.7-labs
-        
         # Build the React frontend
         FROM node:20 AS client-build
         WORKDIR /workspace

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
@@ -26,6 +26,19 @@ const SORT_FIELDS = [
   { value: 'area', label: 'אזור' }
 ];
 
+const EXCEL_LABEL_OVERRIDES = {
+  'ID נכס לצורך מערכת זו בלבד': 'ID',
+  'תמצית מצב': 'תמונת מצב',
+  'תאריך עדכון תמצית מצב': 'תאריך עדכון סטטוס',
+  'ציון עמידה בסטנדרט': 'ציון',
+  'פרטי מחזיקים': 'פרטי מחזיק',
+  'האם הייתה צריכת מים ב־6 החודשים האחרונים': 'צריכת מים ב-6 החודשים האחרונים',
+  'האם הייתה צריכת חשמל ב־6 החודשים האחרונים': 'צריכת חשמל ב-6 החודשים האחרונים',
+  'אחוז המבנה שמוגדר ניזוק': 'אחוז המבנה שעומד ניזוק',
+  'קוארדינטות אורך': 'קוארדינטות',
+  'קוארדינטות רוחב': 'קוארדינטות'
+};
+
 export default function BuildingsPage() {
   const { user } = useAuth();
   useDocumentTitle('מאגר מבנים - מוקד המבנים העירוני');
@@ -51,23 +64,14 @@ export default function BuildingsPage() {
     complaints: '',
     category: ''
   });
-  const [editForm, setEditForm] = useState({
-    bldName: '',
-    area: '',
-    statusSummary: '',
-    shikumStatusId: '',
-    category: '',
-    streetId: ''
-  });
+  const [editFieldValues, setEditFieldValues] = useState({});
+  const [selectTablesByName, setSelectTablesByName] = useState({});
+  const [selectTablesLoading, setSelectTablesLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [selectedView, setSelectedView] = useState('summary');
   const [sortCriteria, setSortCriteria] = useState([
     { field: 'street', direction: 'asc' },
-    { field: 'houseNumber', direction: 'asc' },
-    { field: '', direction: 'asc' },
-    { field: '', direction: 'asc' },
-    { field: '', direction: 'asc' },
-    { field: '', direction: 'asc' }
+    { field: 'houseNumber', direction: 'asc' }
   ]);
 
   const canEdit = useMemo(
@@ -136,26 +140,68 @@ export default function BuildingsPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedBuilding) {
-      const statusOption = statusOptions.find(
-        (option) => option.value === selectedBuilding.status
-      );
-      setEditForm({
-        bldName: selectedBuilding.nickname || '',
-        area: selectedBuilding.area || '',
-        statusSummary: selectedBuilding.statusSummary || '',
-        shikumStatusId: statusOption ? String(statusOption.id) : '',
-        category:
-          selectedBuilding.bldSivug === null || selectedBuilding.bldSivug === undefined
-            ? ''
-            : String(selectedBuilding.bldSivug),
-        streetId:
-          selectedBuilding.streetId === null || selectedBuilding.streetId === undefined
-            ? ''
-            : String(selectedBuilding.streetId)
-      });
+    if (!selectedBuilding) {
+      setEditFieldValues({});
+      return;
     }
-  }, [selectedBuilding, statusOptions]);
+
+    const nextValues = {};
+    (selectedBuilding.fields || []).forEach((field) => {
+      if (!field?.columnName) return;
+      if (field.columnName.toLowerCase() === 'streetname') return;
+
+      if (field.selectTableName) {
+        nextValues[field.columnName] =
+          field.rawValue === null || field.rawValue === undefined ? '' : String(field.rawValue);
+      } else {
+        nextValues[field.columnName] = field.value ?? '';
+      }
+    });
+
+    if (selectedBuilding.streetId !== null && selectedBuilding.streetId !== undefined) {
+      nextValues.StreetId = String(selectedBuilding.streetId);
+    }
+
+    setEditFieldValues(nextValues);
+  }, [selectedBuilding]);
+
+  useEffect(() => {
+    const loadSelectTables = async () => {
+      if (!selectedBuilding || selectedView !== 'edit') return;
+      const tableNames = new Set(
+        (selectedBuilding.fields || [])
+          .map((field) => field.selectTableName)
+          .filter((name) => name && name.trim())
+      );
+      const missing = [...tableNames].filter((name) => !selectTablesByName[name]);
+      if (missing.length === 0) return;
+
+      setSelectTablesLoading(true);
+      try {
+        const results = await Promise.all(
+          missing.map(async (name) => {
+            try {
+              const options = await api.fetchSelectTable(name);
+              return [name, options];
+            } catch {
+              return [name, []];
+            }
+          })
+        );
+        setSelectTablesByName((prev) => {
+          const next = { ...prev };
+          results.forEach(([name, options]) => {
+            next[name] = options;
+          });
+          return next;
+        });
+      } finally {
+        setSelectTablesLoading(false);
+      }
+    };
+
+    loadSelectTables();
+  }, [selectedBuilding, selectedView, selectTablesByName]);
 
   const loadBuildings = async (appliedFilters = filters) => {
     setLoading(true);
@@ -220,18 +266,17 @@ export default function BuildingsPage() {
       if (!streetOption) {
         throw new Error('יש לבחור רחוב מהרשימה');
       }
-      const payload = {
+      await api.createBuilding({
         fldId: createForm.fldId,
         streetId: streetOption.streetId,
         houseNumber: createForm.bldNum,
-        buildingName: createForm.bldName || streetOption.name,
-        neighborhood: createForm.area,
+        nickname: createForm.bldName || streetOption.name,
+        area: createForm.area,
         bldSivug: createForm.category,
-        shikumStatus: statusOption ? statusOption.value : 'Unknown',
+        status: statusOption ? statusOption.value : 'Unknown',
         statusSummary: createForm.statusSummary,
         complaints: createForm.complaints || ''
-      };
-      await api.createBuilding(payload);
+      });
       setCreateForm({
         fldId: '',
         streetId: '',
@@ -251,36 +296,21 @@ export default function BuildingsPage() {
     }
   };
 
-  const handleEditChange = (event) => {
-    const { name, value } = event.target;
-    setEditForm((form) => ({ ...form, [name]: value }));
+  const handleEditFieldChange = (columnName, value) => {
+    setEditFieldValues((prev) => ({ ...prev, [columnName]: value }));
   };
 
-  const handleUpdateBuilding = async (event) => {
+  const handleUpdateBuildingFields = async (event) => {
     event.preventDefault();
     if (!selectedBuilding) return;
     setActionMessage('');
     try {
-      const statusOption = statusOptions.find(
-        (option) => String(option.id) === editForm.shikumStatusId
-      );
-      const chosenStreetId = editForm.streetId || (selectedBuilding.streetId ? String(selectedBuilding.streetId) : '');
-      const streetOption = streets.find((street) => String(street.streetId) === chosenStreetId);
-      if (!streetOption) {
-        throw new Error('יש לבחור רחוב מהרשימה');
-      }
-      const payload = {
-        fldId: selectedBuilding.fldId ?? selectedBuilding.id,
-        streetId: streetOption.streetId,
-        houseNumber: selectedBuilding.houseNumber,
-        buildingName: editForm.bldName || selectedBuilding.nickname || streetOption.name || selectedBuilding.street,
-        neighborhood: editForm.area || selectedBuilding.area || '',
-        bldSivug: editForm.category ?? selectedBuilding.bldSivug,
-        shikumStatus: statusOption ? statusOption.value : selectedBuilding.status || 'Unknown',
-        statusSummary: editForm.statusSummary,
-        complaints: selectedBuilding.complaints || ''
-      };
-      const updated = await api.updateBuilding(selectedBuilding.id, payload);
+      const cleaned = Object.entries(editFieldValues).reduce((acc, [key, value]) => {
+        acc[key] = value === '' ? null : value;
+        return acc;
+      }, {});
+
+      const updated = await api.updateBuildingFields(selectedBuilding.id, cleaned);
       setSelectedBuilding(updated);
       loadBuildings(filters);
       setActionMessage('פרטי המבנה עודכנו.');
@@ -363,6 +393,76 @@ export default function BuildingsPage() {
     });
     return copy;
   }, [buildings, sortCriteria]);
+
+  const tryParseJson = (value) => {
+    if (!value) return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const externalEntries = useMemo(() => {
+    if (!selectedBuilding?.external) return [];
+    const entries = [
+      { key: 'gis', label: 'GIS' },
+      { key: 'water', label: 'מים' },
+      { key: 'electricity', label: 'חשמל' },
+      { key: 'tax', label: 'ארנונה' },
+      { key: 'complaints106', label: 'מוקד 106' }
+    ];
+    return entries
+      .map((entry) => ({
+        ...entry,
+        snapshot: selectedBuilding.external?.[entry.key]
+      }))
+      .filter((entry) => entry.snapshot);
+  }, [selectedBuilding]);
+
+  const fieldsByCategory = useMemo(() => {
+    const fields = selectedBuilding?.fields || [];
+    return fields.reduce((acc, field) => {
+      const category = field.category || 'כללי';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(field);
+      return acc;
+    }, {});
+  }, [selectedBuilding]);
+
+  const getExcelAwareLabel = (fieldName) => {
+    if (!fieldName) return '';
+    const excelName = EXCEL_LABEL_OVERRIDES[fieldName];
+    if (!excelName || excelName === fieldName) return fieldName;
+    if (excelName === 'קוארדינטות') {
+      if (fieldName.includes('אורך')) return 'קוארדינטות (אורך)';
+      if (fieldName.includes('רוחב')) return 'קוארדינטות (רוחב)';
+      return excelName;
+    }
+    return `${excelName} (${fieldName})`;
+  };
+
+  const shouldUseTextarea = (fieldName) => {
+    if (!fieldName) return false;
+    return (
+      fieldName.includes('פרטי') ||
+      fieldName.includes('תלונות') ||
+      fieldName.includes('תמצית') ||
+      fieldName.includes('תקציר') ||
+      fieldName.includes('הסיבה') ||
+      fieldName.includes('הערות')
+    );
+  };
+
+  const isDateField = (field) => {
+    if (!field) return false;
+    const name = field.fieldName || '';
+    const column = (field.columnName || '').toLowerCase();
+    if (name.includes('תאריך')) return true;
+    if (column.endsWith('dt') || column.includes('date')) return true;
+    if (typeof field.value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(field.value)) return true;
+    return false;
+  };
 
   return (
     <main className="app buildings-app">
@@ -591,8 +691,17 @@ export default function BuildingsPage() {
                   const statusLabel = statusLabelMap[statusValue] || statusValue;
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
                   return (
-                    <>
-                      <tr key={building.id} className={isActive ? 'active' : ''}>
+                    <Fragment key={building.id}>
+                      <tr
+                        className={isActive ? 'active' : ''}
+                        onClick={() => {
+                          if (isActive) {
+                            setSelectedBuilding(null);
+                            return;
+                          }
+                          loadBuildingDetails(building.id, 'summary');
+                        }}
+                      >
                         <td>{building.street}</td>
                         <td>{building.houseNumber}</td>
                         <td>{building.nickname || '—'}</td>
@@ -605,106 +714,148 @@ export default function BuildingsPage() {
                           <button
                             type="button"
                             className="ghost"
-                            onClick={() => loadBuildingDetails(building.id, 'summary')}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              loadBuildingDetails(building.id, 'summary');
+                            }}
                           >
                             הצג
                           </button>
                           <button
                             type="button"
                             className="ghost"
-                            onClick={() => loadBuildingDetails(building.id, 'all')}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              loadBuildingDetails(building.id, 'all');
+                            }}
                           >
                             הצג הכל
                           </button>
-                          <button
-                            type="button"
-                            className="ghost"
-                            onClick={() => loadBuildingDetails(building.id, 'edit')}
-                          >
-                            עריכה
-                          </button>
-                          <button
-                            type="button"
-                            className="danger"
-                            onClick={() => {
-                              if (window.confirm('למחוק את המבנה לצמיתות?')) {
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                loadBuildingDetails(building.id, 'edit');
+                              }}
+                            >
+                              עריכה
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="danger"
+                              onClick={(event) => {
+                                event.stopPropagation();
                                 handleDeleteBuilding(building.id);
-                              }
-                            }}
-                          >
-                            מחק
-                          </button>
+                              }}
+                            >
+                              מחק
+                            </button>
+                          )}
                         </td>
                       </tr>
                       {isActive && selectedBuilding && (
                         <tr>
                           <td colSpan="7">
                             {selectedView === 'edit' && canEdit && (
-                              <form className="details-card form-grid" onSubmit={handleUpdateBuilding}>
-                                <label>
-                                  כינוי
-                                  <input
-                                    name="bldName"
-                                    value={editForm.bldName}
-                                    onChange={handleEditChange}
-                                  />
-                                </label>
-                                <label>
-                                  רחוב
-                                  <select name="streetId" value={editForm.streetId} onChange={handleEditChange} required>
-                                    <option value="">בחר רחוב</option>
-                                    {streets.map((street) => (
-                                      <option key={street.streetId} value={street.streetId}>
-                                        {street.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <label>
-                                  מספר בית
-                                  <input
-                                    name="houseNumber"
-                                    value={selectedBuilding.houseNumber}
-                                    onChange={() => {}}
-                                    disabled
-                                  />
-                                </label>
-                                <label>
-                                  אזור
-                                  <input name="area" value={editForm.area} onChange={handleEditChange} />
-                                </label>
-                                <label>
-                                  סטטוס
-                                  <select
-                                    name="shikumStatusId"
-                                    value={editForm.shikumStatusId}
-                                    onChange={handleEditChange}
-                                  >
-                                    <option value="">Leave unchanged</option>
-                                    {statusOptions.map((option) => (
-                                      <option key={option.id} value={option.id}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <label className="full-span">
-                                  תקציר מצב
-                                  <textarea
-                                    name="statusSummary"
-                                    value={editForm.statusSummary}
-                                    onChange={handleEditChange}
-                                  />
-                                </label>
+                              <form onSubmit={handleUpdateBuildingFields} className="details-card">
+                                {selectTablesLoading && <p className="muted">טוען טבלאות בחירה…</p>}
+                                {Object.entries(fieldsByCategory).map(([category, fields]) => (
+                                  <div key={category} className="details-section">
+                                    <h4>{category}</h4>
+                                    <div className="form-grid">
+                                        {fields.map((field) => {
+                                          const columnName = field.columnName;
+                                          const fieldName = field.fieldName;
+                                          if (!columnName) return null;
+                                          if (columnName.toLowerCase() === 'streetid') {
+                                            return (
+                                              <label key={columnName}>
+                                                {getExcelAwareLabel(fieldName)}
+                                                <input type="text" value={editFieldValues[columnName] ?? ''} disabled />
+                                              </label>
+                                            );
+                                          }
+
+                                          if (columnName.toLowerCase() === 'streetname') {
+                                            return (
+                                              <label key={columnName}>
+                                                {getExcelAwareLabel(fieldName)}
+                                              <select
+                                                value={editFieldValues.StreetId ?? ''}
+                                                onChange={(e) => handleEditFieldChange('StreetId', e.target.value)}
+                                                required
+                                              >
+                                                <option value="">בחר רחוב</option>
+                                                {streets.map((street) => (
+                                                  <option key={street.streetId} value={street.streetId}>
+                                                    {street.name}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </label>
+                                          );
+                                        }
+
+                                        const selectTableName = field.selectTableName;
+                                        const selectOptions =
+                                          selectTableName && selectTablesByName[selectTableName]
+                                            ? selectTablesByName[selectTableName]
+                                            : [];
+                                        const currentValue = editFieldValues[columnName] ?? '';
+
+                                        if (selectTableName && selectOptions.length > 0) {
+                                          return (
+                                            <label key={columnName}>
+                                              {getExcelAwareLabel(fieldName)}
+                                              <select
+                                                value={currentValue}
+                                                onChange={(e) => handleEditFieldChange(columnName, e.target.value)}
+                                              >
+                                                <option value="">—</option>
+                                                {selectOptions.map((opt) => (
+                                                  <option key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </label>
+                                          );
+                                        }
+
+                                        const useTextarea = shouldUseTextarea(fieldName);
+                                        const isDate = isDateField(field);
+                                        const inputType = isDate ? 'date' : 'text';
+
+                                        return (
+                                          <label key={columnName} className={useTextarea ? 'full-span' : ''}>
+                                            {getExcelAwareLabel(fieldName)}
+                                            {useTextarea ? (
+                                              <textarea
+                                                value={currentValue}
+                                                onChange={(e) => handleEditFieldChange(columnName, e.target.value)}
+                                              />
+                                            ) : (
+                                              <input
+                                                type={inputType}
+                                                value={currentValue}
+                                                onChange={(e) => handleEditFieldChange(columnName, e.target.value)}
+                                              />
+                                            )}
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
                                 <div className="filters-actions">
                                   <button type="submit" className="primary">
                                     שמירת שינויים
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="ghost"
-                                    onClick={() => setSelectedBuilding(null)}
-                                  >
+                                  <button type="button" className="ghost" onClick={() => setSelectedBuilding(null)}>
                                     סגירה
                                   </button>
                                 </div>
@@ -743,15 +894,96 @@ export default function BuildingsPage() {
                             )}
                             {selectedView === 'all' && (
                               <div className="details-card">
-                                <pre style={{ whiteSpace: 'pre-wrap', direction: 'ltr' }}>
-{JSON.stringify(selectedBuilding, null, 2)}
-                                </pre>
+                                <div>
+                                  <p className="eyebrow">פרטי מבנה</p>
+                                  <h3>
+                                    {selectedBuilding.street} {selectedBuilding.houseNumber}
+                                  </h3>
+                                </div>
+
+                                {Object.keys(fieldsByCategory).length > 0 ? (
+                                  Object.entries(fieldsByCategory).map(([category, fields]) => (
+                                    <div key={category} className="details-section">
+                                      <h4>{category}</h4>
+                                      <dl>
+                                        {fields.map((field) => {
+                                          const value = displayOrDash(field.value);
+                                          const titleParts = [];
+                                          if (field.selectTableName)
+                                            titleParts.push(`טבלת בחירה: ${field.selectTableName}`);
+                                          return (
+                                            <div key={`${field.columnName}-${field.fieldName}`}>
+                                              <dt title={titleParts.join(' | ')}>{getExcelAwareLabel(field.fieldName)}</dt>
+                                              <dd>{value}</dd>
+                                            </div>
+                                          );
+                                        })}
+                                      </dl>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="muted">אין שדות להצגה.</p>
+                                )}
+
+                                <div className="details-section">
+                                  <h4>נתונים ממערכות חיצוניות</h4>
+                                  {externalEntries.length === 0 && <p className="muted">אין נתונים.</p>}
+                                  {externalEntries.map((entry) => {
+                                    const payload = entry.snapshot?.payload;
+                                    const parsed = typeof payload === 'string' ? tryParseJson(payload) : null;
+                                    const status = parsed?.status || null;
+                                    const notes = parsed?.notes || null;
+                                    const updatedAt = parsed?.updatedAt || null;
+                                    return (
+                                      <div key={entry.key} className="external-card">
+                                        <div className="external-card__header">
+                                          <strong>{entry.label}</strong>
+                                          <span className="muted small">
+                                            {formatLogDate(entry.snapshot?.retrievedAt)}
+                                          </span>
+                                        </div>
+                                        <dl>
+                                          <div>
+                                            <dt>סטטוס</dt>
+                                            <dd>{displayOrDash(status)}</dd>
+                                          </div>
+                                          <div>
+                                            <dt>עודכן במקור</dt>
+                                            <dd>{displayOrDash(updatedAt)}</dd>
+                                          </div>
+                                          <div>
+                                            <dt>הערות</dt>
+                                            <dd>{displayOrDash(notes)}</dd>
+                                          </div>
+                                        </dl>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                <div className="details-section">
+                                  <h4>יומן פעולות (אחרונות)</h4>
+                                  {selectedBuilding.logs?.length ? (
+                                    <ul className="log-list">
+                                      {selectedBuilding.logs.map((log) => (
+                                        <li key={log.id}>
+                                          <span>
+                                            {displayOrDash(log.actionType)} — {displayOrDash(log.username)}
+                                          </span>
+                                          <span className="muted">{formatLogDate(log.createdAt)}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="muted">אין רישומים.</p>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
                 {buildings.length === 0 && !loading && (
