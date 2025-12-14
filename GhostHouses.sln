@@ -1,0 +1,35 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{EB1B1211-640D-0C76-A929-990D115248FD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "web-server", "web-server", "{B45973A9-EB80-FED8-D906-1BB87B30BD67}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{0DFBE690-0C14-42B6-038D-53EAC40AE77B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebServer", "project\web-server\backend\WebServer.csproj", "{F21C663B-9C55-68ED-F4DA-EDD01C2D4DDD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F21C663B-9C55-68ED-F4DA-EDD01C2D4DDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F21C663B-9C55-68ED-F4DA-EDD01C2D4DDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F21C663B-9C55-68ED-F4DA-EDD01C2D4DDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F21C663B-9C55-68ED-F4DA-EDD01C2D4DDD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B45973A9-EB80-FED8-D906-1BB87B30BD67} = {EB1B1211-640D-0C76-A929-990D115248FD}
+		{0DFBE690-0C14-42B6-038D-53EAC40AE77B} = {B45973A9-EB80-FED8-D906-1BB87B30BD67}
+		{F21C663B-9C55-68ED-F4DA-EDD01C2D4DDD} = {0DFBE690-0C14-42B6-038D-53EAC40AE77B}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {22350C48-378B-4BF4-94DF-1C780AE83935}
+	EndGlobalSection
+EndGlobal

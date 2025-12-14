@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api/client.js';
 import { ROLE_LABELS } from '../i18n.js';
@@ -14,6 +14,14 @@ const todayIsoIsrael = () =>
   })
     .format(new Date())
     .replace(/\//g, '-');
+
+const SORT_FIELDS = [
+  { value: 'username', label: 'שם משתמש' },
+  { value: 'email', label: 'דוא"ל' },
+  { value: 'role', label: 'תפקיד' },
+  { value: 'twoFactorEnabled', label: 'OTP' },
+  { value: 'createdAt', label: 'תאריך יצירה' }
+];
 
 export default function UsersListPage() {
   const { id: selectedParamId } = useParams();
@@ -34,6 +42,7 @@ export default function UsersListPage() {
     role: 'Viewer'
   });
   const [message, setMessage] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedLogs, setSelectedLogs] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -43,6 +52,10 @@ export default function UsersListPage() {
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
   const [passwordMessage, setPasswordMessage] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [sortCriteria, setSortCriteria] = useState([
+    { field: 'username', direction: 'asc' },
+    { field: 'role', direction: 'asc' }
+  ]);
   useDocumentTitle('ניהול משתמשים - מוקד המבנים העירוני');
 
   useEffect(() => {
@@ -51,7 +64,7 @@ export default function UsersListPage() {
 
   useEffect(() => {
     if (selectedParamId) {
-      handleSelectUser(selectedParamId);
+      openUser(selectedParamId);
     }
   }, [selectedParamId]);
 
@@ -72,6 +85,14 @@ export default function UsersListPage() {
       }
       const data = await api.fetchUsers(query);
       setUsers(data);
+      if (selectedUserId) {
+        const stillExists = (data || []).some((u) => String(u.id) === String(selectedUserId));
+        if (!stillExists) {
+          setSelectedUserId('');
+          setSelectedUser(null);
+          setSelectedLogs([]);
+        }
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -102,7 +123,11 @@ export default function UsersListPage() {
     }
   };
 
-  const handleSelectUser = async (userId) => {
+  const openUser = async (userId) => {
+    const asString = String(userId);
+    setSelectedUserId(asString);
+    setSelectedUser(null);
+    setSelectedLogs([]);
     setDetailLoading(true);
     setDetailError('');
     setDetailMessage('');
@@ -117,6 +142,26 @@ export default function UsersListPage() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const closeUser = () => {
+    setSelectedUserId('');
+    setSelectedUser(null);
+    setSelectedLogs([]);
+    setDetailLoading(false);
+    setDetailError('');
+    setDetailMessage('');
+    setPasswordMessage('');
+    setPasswordForm({ newPassword: '', confirmPassword: '' });
+  };
+
+  const toggleUser = async (userId) => {
+    const asString = String(userId);
+    if (selectedUserId && String(selectedUserId) === asString) {
+      closeUser();
+      return;
+    }
+    await openUser(userId);
   };
 
   const handleDetailChange = (event) => {
@@ -180,6 +225,67 @@ export default function UsersListPage() {
       setPasswordMessage(err.message);
     }
   };
+
+  const handleSortFieldChange = (index, value) => {
+    setSortCriteria((prev) => {
+      const next = [...prev];
+      next.forEach((c, i) => {
+        if (i !== index && c.field === value) {
+          next[i] = { ...next[i], field: '' };
+        }
+      });
+      next[index] = { ...next[index], field: value };
+      return next;
+    });
+  };
+
+  const handleSortDirectionChange = (index, value) => {
+    setSortCriteria((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], direction: value };
+      return next;
+    });
+  };
+
+  const sortedUsers = useMemo(() => {
+    if (!users || users.length === 0) return [];
+    const criteria = sortCriteria.filter((c) => c.field);
+    if (criteria.length === 0) return users;
+
+    const compare = (a, b, field, direction) => {
+      let result = 0;
+
+      if (field === 'createdAt') {
+        const ad = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bd = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        result = ad - bd;
+      } else if (field === 'twoFactorEnabled') {
+        const av = a.twoFactorEnabled ? 1 : 0;
+        const bv = b.twoFactorEnabled ? 1 : 0;
+        result = av - bv;
+      } else if (field === 'role') {
+        const av = ROLE_LABELS[a.role] || a.role || '';
+        const bv = ROLE_LABELS[b.role] || b.role || '';
+        result = av.localeCompare(bv, 'he');
+      } else {
+        const av = (a[field] || '').toString();
+        const bv = (b[field] || '').toString();
+        result = av.localeCompare(bv, 'he');
+      }
+
+      return direction === 'desc' ? -result : result;
+    };
+
+    const copy = [...users];
+    copy.sort((a, b) => {
+      for (const c of criteria) {
+        const cmp = compare(a, b, c.field, c.direction);
+        if (cmp !== 0) return cmp;
+      }
+      return 0;
+    });
+    return copy;
+  }, [users, sortCriteria]);
 
   return (
     <main className="app users-app">
@@ -280,10 +386,43 @@ export default function UsersListPage() {
       )}
 
       <section className="content-layout">
-        <div className="list-panel">
+        <div className="list-panel full-span">
           <div className="panel-header">
             <h2>משתמשים ({users.length})</h2>
           </div>
+          <section className="panel">
+            <h3>מיון</h3>
+            <div className="form-grid">
+              {sortCriteria.map((crit, idx) => (
+                <div key={idx}>
+                  <label>
+                    {`עדיפות ${idx + 1}`}
+                    <select
+                      value={crit.field}
+                      onChange={(e) => handleSortFieldChange(idx, e.target.value)}
+                    >
+                      <option value="">ללא</option>
+                      {SORT_FIELDS.map((f) => (
+                        <option key={f.value} value={f.value}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    סדר
+                    <select
+                      value={crit.direction}
+                      onChange={(e) => handleSortDirectionChange(idx, e.target.value)}
+                    >
+                      <option value="asc">עולה</option>
+                      <option value="desc">יורד</option>
+                    </select>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </section>
           <div className="table-wrapper">
             <table>
               <thead>
@@ -304,38 +443,159 @@ export default function UsersListPage() {
                     </td>
                   </tr>
                 )}
-                {users.map((u) => (
-                  <tr key={u.id} className={selectedUser && selectedUser.id === u.id ? 'active' : ''}>
-                    <td>
-                      <button type="button" className="ghost" onClick={() => handleSelectUser(u.id)}>
-                        {u.username}
-                      </button>
-                    </td>
-                    <td>{u.email || '—'}</td>
-                    <td>{ROLE_LABELS[u.role] || u.role}</td>
-                    <td>{u.twoFactorEnabled ? 'פעיל' : 'מנוטרל'}</td>
-                    <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('he-IL') : '—'}</td>
-                    <td>
-                      <button type="button" className="ghost" onClick={() => handleSelectUser(u.id)}>
-                        עריכה
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost"
-                        onClick={async () => {
-                          try {
-                            await api.resetUserTwoFactor(u.id);
-                            setMessage('קוד ה-OTP אופס עבור המשתמש.');
-                          } catch (err) {
-                            setMessage(err.message);
-                          }
-                        }}
-                      >
-                        איפוס OTP
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {sortedUsers.map((u) => {
+                  const isActive = selectedUserId && String(selectedUserId) === String(u.id);
+                  return (
+                    <Fragment key={u.id}>
+                      <tr className={isActive ? 'active' : ''} onClick={() => toggleUser(u.id)}>
+                        <td>{u.username}</td>
+                        <td>{u.email || '—'}</td>
+                        <td>{ROLE_LABELS[u.role] || u.role}</td>
+                        <td>{u.twoFactorEnabled ? 'פעיל' : 'מנוטרל'}</td>
+                        <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('he-IL') : '—'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openUser(u.id);
+                            }}
+                          >
+                            עריכה
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={async (event) => {
+                              event.stopPropagation();
+                              try {
+                                await api.resetUserTwoFactor(u.id);
+                                setMessage('קוד ה-OTP אופס עבור המשתמש.');
+                              } catch (err) {
+                                setMessage(err.message);
+                              }
+                            }}
+                          >
+                            איפוס OTP
+                          </button>
+                        </td>
+                      </tr>
+                      {isActive && (
+                        <tr>
+                          <td colSpan="6">
+                            {detailLoading && <p className="muted">טוען משתמש…</p>}
+                            {detailError && <p className="error">שגיאה: {detailError}</p>}
+                            {!detailLoading && !selectedUser && !detailError && (
+                              <p className="muted">לא נמצאו פרטים למשתמש.</p>
+                            )}
+                            {selectedUser && !detailLoading && (
+                              <div className="details-card">
+                                <div>
+                                  <p className="eyebrow">חשבון</p>
+                                  <h3>{selectedUser.username}</h3>
+                                  <p className="subtitle">{selectedUser.email || 'ללא דוא\"ל'}</p>
+                                </div>
+
+                                <form className="form-grid" onSubmit={handleUpdateUser}>
+                                  <label>
+                                    תפקיד
+                                    <select name="role" value={detailForm.role} onChange={handleDetailChange}>
+                                      <option value="Viewer">{ROLE_LABELS.Viewer}</option>
+                                      <option value="Editor">{ROLE_LABELS.Editor}</option>
+                                      <option value="Admin">{ROLE_LABELS.Admin}</option>
+                                    </select>
+                                  </label>
+                                  <label>
+                                    דוא"ל
+                                    <input
+                                      name="email"
+                                      value={detailForm.email}
+                                      onChange={handleDetailChange}
+                                      type="email"
+                                    />
+                                  </label>
+                                  <label className="checkbox">
+                                    <input
+                                      type="checkbox"
+                                      name="twoFactorEnabled"
+                                      checked={detailForm.twoFactorEnabled}
+                                      onChange={handleDetailChange}
+                                    />
+                                    דרוש OTP
+                                  </label>
+                                  <div className="filters-actions">
+                                    <button type="submit" className="primary">
+                                      שמירה
+                                    </button>
+                                    <button type="button" className="ghost" onClick={closeUser}>
+                                      סגירה
+                                    </button>
+                                  </div>
+                                </form>
+                                {detailMessage && <p className="muted">{detailMessage}</p>}
+
+                                <hr />
+                                <form className="form-grid" onSubmit={handlePasswordSubmit}>
+                                  <label className="full-span">
+                                    <strong>איפוס סיסמה</strong>
+                                  </label>
+                                  <label>
+                                    סיסמה חדשה
+                                    <input
+                                      type="password"
+                                      name="newPassword"
+                                      value={passwordForm.newPassword}
+                                      onChange={(e) =>
+                                        setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                  <label>
+                                    אימות סיסמה
+                                    <input
+                                      type="password"
+                                      name="confirmPassword"
+                                      value={passwordForm.confirmPassword}
+                                      onChange={(e) =>
+                                        setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                  <div className="filters-actions full-span">
+                                    <button type="submit" className="ghost">
+                                      שמירת סיסמה חדשה
+                                    </button>
+                                  </div>
+                                </form>
+                                {passwordMessage && <p className="muted">{passwordMessage}</p>}
+
+                                <div className="details-section">
+                                  <h4>יומן פעילות</h4>
+                                  {selectedLogs.length === 0 && <p className="muted">אין רשומות להצגה.</p>}
+                                  {selectedLogs.length > 0 && (
+                                    <ul className="log-list">
+                                      {selectedLogs.map((log) => (
+                                        <li key={log.id}>
+                                          <span>
+                                            {log.actionType} — {log.username}
+                                          </span>
+                                          <span className="muted">{log.createdAt}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
                 {users.length === 0 && !loading && (
                   <tr>
                     <td colSpan="6" className="muted">
@@ -346,90 +606,6 @@ export default function UsersListPage() {
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div className="details-panel">
-          <div className="panel-header">
-            <h2>פרטי משתמש</h2>
-          </div>
-          {detailLoading && <p className="muted">טוען משתמש…</p>}
-          {detailError && <p className="error">שגיאה: {detailError}</p>}
-          {!detailLoading && !selectedUser && !detailError && <p className="muted">בחר משתמש לעריכה.</p>}
-          {selectedUser && !detailLoading && (
-            <div className="details-card">
-              <div>
-                <p className="eyebrow">חשבון</p>
-                <h3>{selectedUser.username}</h3>
-                <p className="subtitle">{selectedUser.email || 'ללא דוא"ל'}</p>
-              </div>
-              <form className="form-grid" onSubmit={handleUpdateUser}>
-                <label>
-                  תפקיד
-                  <select name="role" value={detailForm.role} onChange={handleDetailChange}>
-                    <option value="Viewer">{ROLE_LABELS.Viewer}</option>
-                    <option value="Editor">{ROLE_LABELS.Editor}</option>
-                    <option value="Admin">{ROLE_LABELS.Admin}</option>
-                  </select>
-                </label>
-                <label>
-                  דוא"ל
-                  <input name="email" value={detailForm.email} onChange={handleDetailChange} type="email" />
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    name="twoFactorEnabled"
-                    checked={detailForm.twoFactorEnabled}
-                    onChange={handleDetailChange}
-                  />
-                  דרוש OTP
-                </label>
-                <div className="filters-actions">
-                  <button type="submit" className="primary">
-                    שמירה
-                  </button>
-                </div>
-              </form>
-              {detailMessage && <p className="muted">{detailMessage}</p>}
-
-              <hr />
-              <form className="form-grid" onSubmit={handlePasswordSubmit}>
-                <label className="full-span">
-                  <strong>איפוס סיסמה</strong>
-                </label>
-                <label>
-                  סיסמה חדשה
-                  <input
-                    type="password"
-                    name="newPassword"
-                    value={passwordForm.newPassword}
-                    onChange={(e) =>
-                      setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
-                    }
-                    required
-                  />
-                </label>
-                <label>
-                  אימות סיסמה
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) =>
-                      setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
-                    }
-                    required
-                  />
-                </label>
-                <div className="filters-actions full-span">
-                  <button type="submit" className="ghost">
-                    שמירת סיסמה חדשה
-                  </button>
-                </div>
-              </form>
-              {passwordMessage && <p className="muted">{passwordMessage}</p>}
-            </div>
-          )}
         </div>
       </section>
     </main>

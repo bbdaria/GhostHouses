@@ -64,12 +64,12 @@ public class LogsController : ApiControllerBase
 
         if (filter.StreetId.HasValue)
         {
-            query = query.Where(l => l.Building.StreetId == filter.StreetId.Value);
+            query = query.Where(l => l.Building.StreetCode == filter.StreetId.Value);
         }
 
         if (filter.StreetId.HasValue)
         {
-            query = query.Where(l => l.Building.StreetId == filter.StreetId.Value);
+            query = query.Where(l => l.Building.StreetCode == filter.StreetId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.HouseNumber))

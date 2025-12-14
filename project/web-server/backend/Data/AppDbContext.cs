@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using WebServer.Models;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using WebServer.Models.Users;
 
 namespace WebServer.Data;
@@ -30,9 +31,17 @@ public class AppDbContext : DbContext
             v => v.HasValue ? v.Value.Amount : null,
             v => v.HasValue ? new Money(v.Value) : null);
 
+        var moneyComparer = new ValueComparer<Money?>(
+            (left, right) =>
+                left.HasValue == right.HasValue &&
+                (!left.HasValue || left.Value.Amount == right!.Value.Amount),
+            value => value.HasValue ? value.Value.Amount.GetHashCode() : 0,
+            value => value);
+
         modelBuilder.Entity<Building>()
             .Property(b => b.ArnonaDept)
-            .HasConversion(moneyConverter);
+            .HasConversion(moneyConverter)
+            .Metadata.SetValueComparer(moneyComparer);
 
         modelBuilder.Entity<BuildingLog>()
             .HasQueryFilter(log => !log.IsDeleted);
@@ -46,7 +55,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Building>()
             .HasOne(b => b.Street)
             .WithMany(s => s.Buildings)
-            .HasForeignKey(b => b.StreetId)
+            .HasForeignKey(b => b.StreetCode)
             .OnDelete(DeleteBehavior.SetNull);
     }
 

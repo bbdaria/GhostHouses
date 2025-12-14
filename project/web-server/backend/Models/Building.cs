@@ -21,8 +21,12 @@ public class Building
     public string StreetName { get; set; } = string.Empty;
 
     [Column("StreetId", TypeName = "integer")]
-    public int? StreetId { get; set; }
+    [Display(Name = "קוד רחוב")]
+    [FieldSpec(Category = "פרטים מזהים", FieldName = "קוד רחוב")]
+    // Category: פרטים מזהים | Field Name: קוד רחוב | Select Table Name: — | Event Log: No
+    public int? StreetCode { get; set; }
 
+    [ForeignKey(nameof(StreetCode))]
     public Street? Street { get; set; }
 
     [Column("BldNum", TypeName = "text")]
@@ -67,6 +71,24 @@ public class Building
     // Category: מידע כללי | Field Name: תלונות תושבים | Select Table Name: — | Event Log: Yes
     public string Complaints { get; set; } = string.Empty;
 
+    [Column(TypeName = "date")]
+    [Display(Name = "תאריך כניסה למרשם")]
+    [FieldSpec(Category = "מידע כללי", FieldName = "תאריך כניסה למרשם")]
+    // Category: מידע כללי | Field Name: תאריך כניסה למרשם | Select Table Name: — | Event Log: No
+    public DateTime? RegistryEntryDate { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "מקור המידע")]
+    [FieldSpec(Category = "מידע כללי", FieldName = "מקור המידע")]
+    // Category: מידע כללי | Field Name: מקור המידע | Select Table Name: — | Event Log: No
+    public string? InfoSource { get; set; }
+
+    [Column(TypeName = "integer")]
+    [Display(Name = "בטיפול")]
+    [FieldSpec(Category = "מידע כללי", FieldName = "בטיפול", SelectTableName = "Tbl_Y_N_Maybe", IncludeInEventLog = true)]
+    // Category: מידע כללי | Field Name: בטיפול | Select Table Name: Tbl_Y_N_Maybe | Event Log: Yes
+    public int? InTreatment { get; set; }
+
     // Identifiers
     [Column(TypeName = "double precision")]
     [Display(Name = "קוארדינטות אורך")]
@@ -110,11 +132,17 @@ public class Building
     // Category: פרטים מזהים | Field Name: תת חלקה | Select Table Name: — | Event Log: No
     public string? ParcelTat { get; set; }
 
-    [Column(TypeName = "integer")]
-    [Display(Name = "קוד רחוב")]
-    [FieldSpec(Category = "פרטים מזהים", FieldName = "קוד רחוב")]
-    // Category: פרטים מזהים | Field Name: קוד רחוב | Select Table Name: — | Event Log: No
-    public int? StreetCode { get; set; }
+    [Column(TypeName = "text")]
+    [Display(Name = "רווח")]
+    [FieldSpec(Category = "פרטים מזהים", FieldName = "רווח")]
+    // Category: פרטים מזהים | Field Name: רווח | Select Table Name: — | Event Log: No
+    public string? Revach { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "רחוב+בית מאוחד")]
+    [FieldSpec(Category = "פרטים מזהים", FieldName = "רחוב+בית מאוחד")]
+    // Category: פרטים מזהים | Field Name: רחוב+בית מאוחד | Select Table Name: — | Event Log: No
+    public string? StreetHouseCombined { get; set; }
 
     [Column(TypeName = "text")]
     [Display(Name = "מספר תיק בניין (הנדסה)")]
@@ -145,6 +173,24 @@ public class Building
     [FieldSpec(Category = "פרטים מזהים", FieldName = "האם מדובר ביחידה בתוך בניין שכולו ריק", SelectTableName = "Tbl_Y_N_Maybe")]
     // Category: פרטים מזהים | Field Name: האם מדובר ביחידה בתוך בניין שכולו ריק | Select Table Name: Tbl_Y_N_Maybe | Event Log: No
     public int? IsUnitInEmptyBuilding { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "רובע")]
+    [FieldSpec(Category = "פרטים מזהים", FieldName = "רובע")]
+    // Category: פרטים מזהים | Field Name: רובע | Select Table Name: — | Event Log: No
+    public string? Quarter { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "תת רובע")]
+    [FieldSpec(Category = "פרטים מזהים", FieldName = "תת רובע")]
+    // Category: פרטים מזהים | Field Name: תת רובע | Select Table Name: — | Event Log: No
+    public string? SubQuarter { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "א\"ס")]
+    [FieldSpec(Category = "פרטים מזהים", FieldName = "א\"ס")]
+    // Category: פרטים מזהים | Field Name: א"ס | Select Table Name: — | Event Log: No
+    public string? StatisticalArea { get; set; }
 
     [Column(TypeName = "integer")]
     [Display(Name = "אחוז המבנה שמוגדר ניזוק")]
@@ -227,6 +273,12 @@ public class Building
     public string? ActualUse { get; set; }
 
     [Column(TypeName = "text")]
+    [Display(Name = "סוג השימוש (לנכסי עירייה בלבד)")]
+    [FieldSpec(Category = "תכנון ורישוי", FieldName = "סוג השימוש (לנכסי עירייה בלבד)")]
+    // Category: תכנון ורישוי | Field Name: סוג השימוש (לנכסי עירייה בלבד) | Select Table Name: — | Event Log: No
+    public string? MunicipalUseType { get; set; }
+
+    [Column(TypeName = "text")]
     [Display(Name = "שימוש לפי הארנונה")]
     [FieldSpec(Category = "תכנון ורישוי", FieldName = "שימוש לפי הארנונה")]
     // Category: תכנון ורישוי | Field Name: שימוש לפי הארנונה | Select Table Name: — | Event Log: No
@@ -279,6 +331,12 @@ public class Building
     [FieldSpec(Category = "תכנון ורישוי", FieldName = "סה\"כ שטח בנוי (מ״ר)")]
     // Category: תכנון ורישוי | Field Name: סה"כ שטח בנוי (מ״ר) | Select Table Name: — | Event Log: No
     public string? ShtachBanuySum { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "סה\"כ שטח ניזוק בכתובת (מ\"ר)")]
+    [FieldSpec(Category = "תכנון ורישוי", FieldName = "סה\"כ שטח ניזוק בכתובת (מ\"ר)")]
+    // Category: תכנון ורישוי | Field Name: סה"כ שטח ניזוק בכתובת (מ"ר) | Select Table Name: — | Event Log: No
+    public string? DamagedAreaAtAddress { get; set; }
 
     [Column(TypeName = "integer")]
     [Display(Name = "מספר קומות")]
@@ -379,6 +437,12 @@ public class Building
     public Money? ArnonaDept { get; set; }
 
     [Column(TypeName = "integer")]
+    [Display(Name = "פטור מארנונה (נהרס או ניזוק)")]
+    [FieldSpec(Category = "סטטוס משפטי", FieldName = "פטור מארנונה (נהרס או ניזוק)", SelectTableName = "Tbl_Y_N_Maybe", IncludeInEventLog = true)]
+    // Category: סטטוס משפטי | Field Name: פטור מארנונה (נהרס או ניזוק) | Select Table Name: Tbl_Y_N_Maybe | Event Log: Yes
+    public int? ArnonaExemption { get; set; }
+
+    [Column(TypeName = "integer")]
     [Display(Name = "שלב הפטור (תקופה)")]
     [FieldSpec(Category = "סטטוס משפטי", FieldName = "שלב הפטור (תקופה)", SelectTableName = "Tbl_PtorStage")]
     // Category: סטטוס משפטי | Field Name: שלב הפטור (תקופה) | Select Table Name: Tbl_PtorStage | Event Log: No
@@ -465,11 +529,48 @@ public class Building
     // Category: אכיפה | Field Name: קיום צו מבנה מסוכן | Select Table Name: Tbl_IsThere | Event Log: No
     public int? HasDangerousBldgOrder { get; set; }
 
+    [Column(TypeName = "date")]
+    [Display(Name = "תאריך הוצאת צו מבנה מסוכן")]
+    [FieldSpec(Category = "אכיפה", FieldName = "תאריך הוצאת צו מבנה מסוכן")]
+    // Category: אכיפה | Field Name: תאריך הוצאת צו מבנה מסוכן | Select Table Name: — | Event Log: No
+    public DateTime? DangerousBldgOrderIssuedAt { get; set; }
+
     [Column(TypeName = "text")]
     [Display(Name = "צו שיפוץ חזיתות")]
     [FieldSpec(Category = "אכיפה", FieldName = "צו שיפוץ חזיתות", IncludeInEventLog = true)]
     // Category: אכיפה | Field Name: צו שיפוץ חזיתות | Select Table Name: — | Event Log: Yes
     public string? TzavShiputzFronts { get; set; }
+
+    // Neighborhood attributes
+    [Column(TypeName = "text")]
+    [Display(Name = "רמת התחזוקה באזור")]
+    [FieldSpec(Category = "מאפייני הסביבה", FieldName = "רמת התחזוקה באזור")]
+    // Category: מאפייני הסביבה | Field Name: רמת התחזוקה באזור | Select Table Name: — | Event Log: No
+    public string? AreaMaintenanceLevel { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "רמת הפעילות המסחרית")]
+    [FieldSpec(Category = "מאפייני הסביבה", FieldName = "רמת הפעילות המסחרית")]
+    // Category: מאפייני הסביבה | Field Name: רמת הפעילות המסחרית | Select Table Name: — | Event Log: No
+    public string? CommercialActivityLevel { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "תחושת הבטחון")]
+    [FieldSpec(Category = "מאפייני הסביבה", FieldName = "תחושת הבטחון")]
+    // Category: מאפייני הסביבה | Field Name: תחושת הבטחון | Select Table Name: — | Event Log: No
+    public string? SafetyFeeling { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "תנועת הולכי רגל באזור")]
+    [FieldSpec(Category = "מאפייני הסביבה", FieldName = "תנועת הולכי רגל באזור")]
+    // Category: מאפייני הסביבה | Field Name: תנועת הולכי רגל באזור | Select Table Name: — | Event Log: No
+    public string? PedestrianTrafficInArea { get; set; }
+
+    [Column(TypeName = "text")]
+    [Display(Name = "מחירי הנדל\"ן באזור")]
+    [FieldSpec(Category = "מאפייני הסביבה", FieldName = "מחירי הנדל\"ן באזור")]
+    // Category: מאפייני הסביבה | Field Name: מחירי הנדל"ן באזור | Select Table Name: — | Event Log: No
+    public string? RealEstatePricesInArea { get; set; }
 
     // App-specific fields not defined in the CSV spec
     [Column(TypeName = "text")]

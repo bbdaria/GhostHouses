@@ -131,6 +131,17 @@ const mapBuildingDetail = (data) => ({
   complaints: data.complaints,
   photos: data.photos || [],
   external: data.externalData || {},
+  fields: Array.isArray(data.fields)
+    ? data.fields.map((field) => ({
+        category: field.category,
+        fieldName: field.fieldName,
+        columnName: field.columnName,
+        selectTableName: field.selectTableName,
+        includeInEventLog: field.includeInEventLog,
+        value: field.value,
+        rawValue: field.rawValue
+      }))
+    : [],
   logs: (data.recentLogs || []).map((log) => ({
     ...mapLog(log),
     username: log.createdBy || 'system'
@@ -226,6 +237,11 @@ const api = {
     };
     await request(`/buildings/${id}`, { method: 'PUT', body: payload });
     return this.fetchBuilding(id);
+  },
+  async updateBuildingFields(id, fields) {
+    const payload = { fields };
+    const data = await request(`/buildings/${id}/fields`, { method: 'PUT', body: payload });
+    return mapBuildingDetail(data);
   },
   async deleteBuilding(id, reason = 'Administrative request') {
     return request(`/buildings/${id}`, {
