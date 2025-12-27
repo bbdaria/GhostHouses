@@ -1,5 +1,6 @@
-using System.Text.Json;
 using System.Globalization;
+using System.Text.Json;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -150,6 +151,129 @@ public class BuildingsController : ApiControllerBase
             fields);
 
         return Ok(detail);
+    }
+
+    [HttpGet("export")]
+    [Authorize(Policy = "Admin")]
+    public async Task<IActionResult> ExportBuildings(
+        [FromQuery] BuildingFilterParameters filter,
+        CancellationToken cancellationToken)
+    {
+        var query = _context.Buildings.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(filter.Street))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.StreetName, $"%{filter.Street}%"));
+        }
+
+        if (filter.StreetId.HasValue)
+        {
+            query = query.Where(b => b.StreetCode == filter.StreetId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
+        {
+            query = query.Where(b => b.HouseNumber == filter.HouseNumber);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Name))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.BuildingName, $"%{filter.Name}%"));
+        }
+
+        if (filter.Status.HasValue)
+        {
+            query = query.Where(b => b.ShikumStatus == filter.Status.Value);
+        }
+
+        if (filter.BldSivug.HasValue)
+        {
+            query = query.Where(b => b.BldSivug == filter.BldSivug.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Neighborhood))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.Neighborhood, $"%{filter.Neighborhood}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StatusSummary))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.StatusSummary, $"%{filter.StatusSummary}%"));
+        }
+
+        var buildings = await query
+            .OrderBy(b => b.StreetName)
+            .ThenBy(b => b.HouseNumber)
+            .ToListAsync(cancellationToken);
+
+        var fieldDefinitions = BuildFieldsSnapshot(buildings.FirstOrDefault() ?? new Building());
+        var groupedFields = fieldDefinitions
+            .GroupBy(field => field.Category)
+            .Select(group => new
+            {
+                Category = group.Key,
+                Fields = group.ToList()
+            })
+            .ToList();
+
+        using var workbook = new XLWorkbook();
+        var worksheet = workbook.Worksheets.Add("Buildings");
+
+        var columnIndex = 1;
+        foreach (var group in groupedFields)
+        {
+            var startColumn = columnIndex;
+            foreach (var field in group.Fields)
+            {
+                worksheet.Cell(2, columnIndex).Value = GetExcelAwareLabel(field.FieldName);
+                columnIndex++;
+            }
+
+            if (columnIndex == startColumn)
+            {
+                continue;
+            }
+
+            var endColumn = columnIndex - 1;
+            var categoryRange = worksheet.Range(1, startColumn, 1, endColumn);
+            categoryRange.Merge();
+            categoryRange.Value = group.Category;
+        }
+
+        worksheet.Row(1).Style.Font.Bold = true;
+        worksheet.Row(2).Style.Font.Bold = true;
+
+        for (var i = 0; i < buildings.Count; i++)
+        {
+            var building = buildings[i];
+            var snapshot = BuildFieldsSnapshot(building);
+            var valuesByColumn = snapshot
+                .Where(field => !string.IsNullOrWhiteSpace(field.ColumnName))
+                .ToDictionary(
+                    field => field.ColumnName,
+                    field => field.Value ?? string.Empty,
+                    StringComparer.OrdinalIgnoreCase);
+
+            var row = i + 3;
+            for (var col = 0; col < fieldDefinitions.Count; col++)
+            {
+                var columnName = fieldDefinitions[col].ColumnName;
+                valuesByColumn.TryGetValue(columnName, out var value);
+                worksheet.Cell(row, col + 1).Value = value ?? string.Empty;
+            }
+        }
+
+        worksheet.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+
+        var fileName = $"buildings-{DateTimeOffset.UtcNow:yyyy-MM-dd}.xlsx";
+        return File(
+            stream.ToArray(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
     }
 
     [HttpPost]
@@ -570,6 +694,50 @@ public class BuildingsController : ApiControllerBase
             .OrderBy(f => f.Category)
             .ThenBy(f => f.FieldName)
             .ToList();
+    }
+
+    private static string GetExcelAwareLabel(string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(fieldName))
+        {
+            return string.Empty;
+        }
+
+        var overrides = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ID נכס לצורך מערכת זו בלבד"] = "ID",
+            ["תמצית מצב"] = "תמונת מצב",
+            ["תאריך עדכון תמצית מצב"] = "תאריך עדכון סטטוס",
+            ["ציון עמידה בסטנדרט"] = "ציון",
+            ["פרטי מחזיקים"] = "פרטי מחזיק",
+            ["האם הייתה צריכת מים ב־6 החודשים האחרונים"] = "צריכת מים ב-6 החודשים האחרונים",
+            ["האם הייתה צריכת חשמל ב־6 החודשים האחרונים"] = "צריכת חשמל ב-6 החודשים האחרונים",
+            ["אחוז המבנה שמוגדר ניזוק"] = "אחוז המבנה שעומד ניזוק",
+            ["קוארדינטות אורך"] = "קוארדינטות",
+            ["קוארדינטות רוחב"] = "קוארדינטות"
+        };
+
+        if (!overrides.TryGetValue(fieldName, out var excelName) || excelName == fieldName)
+        {
+            return fieldName;
+        }
+
+        if (excelName == "קוארדינטות")
+        {
+            if (fieldName.Contains("אורך", StringComparison.Ordinal))
+            {
+                return "קוארדינטות (אורך)";
+            }
+
+            if (fieldName.Contains("רוחב", StringComparison.Ordinal))
+            {
+                return "קוארדינטות (רוחב)";
+            }
+
+            return excelName;
+        }
+
+        return $"{excelName} ({fieldName})";
     }
 
     private static IReadOnlyList<FieldChange> BuildCreateChanges(Building building)
