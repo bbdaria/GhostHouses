@@ -35,6 +35,17 @@ const normalizeStatusValue = (value, statusIdToValue = {}) => {
   return 'Unknown';
 };
 
+const SORT_FIELDS = [
+  { value: 'street', label: 'שם רחוב' },
+  { value: 'houseNumber', label: 'מספר בית' },
+  { value: 'nickname', label: 'כינוי הבניין' },
+  { value: 'status', label: 'סטטוס שיקום' },
+  { value: 'bldSivug', label: 'סיווג' },
+  { value: 'summary', label: 'תמונת מצב (תמצית מצב)' },
+  { value: 'user', label: 'משתמש' },
+  { value: 'date', label: 'תאריך שינוי' }
+];
+
 const baseFilters = {
   buildingId: '',
   user: '',
@@ -98,6 +109,10 @@ export default function LogsPage() {
   const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
   const [sivugOptions, setSivugOptions] = useState([]);
   const [expandedLogId, setExpandedLogId] = useState(null);
+  const [sortCriteria, setSortCriteria] = useState([
+    { field: 'date', direction: 'desc' },
+    { field: 'street', direction: 'asc' }
+  ]);
   const statusIdToValue = useMemo(
     () =>
       statusOptions.reduce((acc, opt) => {
@@ -154,6 +169,27 @@ export default function LogsPage() {
 
   const handleShowLog = (log) => {
     setExpandedLogId((prev) => (prev === log.id ? null : log.id));
+  };
+
+  const handleSortFieldChange = (index, value) => {
+    setSortCriteria((prev) => {
+      const next = [...prev];
+      next.forEach((c, i) => {
+        if (i !== index && c.field === value) {
+          next[i] = { ...next[i], field: '' };
+        }
+      });
+      next[index] = { ...next[index], field: value };
+      return next;
+    });
+  };
+
+  const handleSortDirectionChange = (index, value) => {
+    setSortCriteria((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], direction: value };
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -261,6 +297,71 @@ export default function LogsPage() {
     loadLogs(reset);
   };
 
+  const sortedLogs = useMemo(() => {
+    if (!logs || logs.length === 0) return [];
+    const criteria = sortCriteria.filter((c) => c.field);
+    if (criteria.length === 0) return logs;
+
+    const getSortValue = (log, field) => {
+      const snapshot = log.snapshot || {};
+      const street = snapshot.streetName || log.buildingStreet || '';
+      const houseNumber = snapshot.houseNumber || log.buildingHouseNumber || '';
+      const nickname = snapshot.buildingName || log.buildingNickname || '';
+      const sivugValue = snapshot.bldSivug ?? log.buildingBldSivug;
+      const statusValue = normalizeStatusValue(
+        snapshot.shikumStatus || log.buildingStatus || 'Unknown',
+        statusIdToValue
+      );
+      const statusLabel = statusLabelMap[statusValue] || statusValue || '';
+      const summary = snapshot.statusSummary || log.buildingStatusSummary || log.description || '';
+      const user = log.username || '';
+      const dateValue = log.createdAt ? new Date(log.createdAt).getTime() : 0;
+
+      switch (field) {
+        case 'street':
+          return street;
+        case 'houseNumber':
+          return houseNumber;
+        case 'nickname':
+          return nickname;
+        case 'status':
+          return statusLabel;
+        case 'bldSivug':
+          return getSivugLabel(sivugValue);
+        case 'summary':
+          return summary;
+        case 'user':
+          return user;
+        case 'date':
+          return dateValue;
+        default:
+          return '';
+      }
+    };
+
+    const compare = (a, b, field, direction) => {
+      const aValue = getSortValue(a, field);
+      const bValue = getSortValue(b, field);
+      let result = 0;
+      if (field === 'date') {
+        result = (aValue || 0) - (bValue || 0);
+      } else {
+        result = String(aValue || '').localeCompare(String(bValue || ''), 'he');
+      }
+      return direction === 'desc' ? -result : result;
+    };
+
+    const copy = [...logs];
+    copy.sort((a, b) => {
+      for (const c of criteria) {
+        const cmp = compare(a, b, c.field, c.direction);
+        if (cmp !== 0) return cmp;
+      }
+      return 0;
+    });
+    return copy;
+  }, [logs, sortCriteria, statusIdToValue, statusLabelMap, sivugOptions]);
+
   return (
     <main className="app logs-app">
       <header className="page-header">
@@ -358,6 +459,37 @@ export default function LogsPage() {
       </section>
 
       <section className="panel">
+        <h3>מיון</h3>
+        <div className="form-grid">
+          {sortCriteria.map((crit, idx) => (
+            <div key={idx}>
+              <label>
+                {`עדיפות ${idx + 1}`}
+                <select value={crit.field} onChange={(e) => handleSortFieldChange(idx, e.target.value)}>
+                  <option value="">ללא</option>
+                  {SORT_FIELDS.map((field) => (
+                    <option key={field.value} value={field.value}>
+                      {field.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                סדר
+                <select
+                  value={crit.direction}
+                  onChange={(e) => handleSortDirectionChange(idx, e.target.value)}
+                >
+                  <option value="asc">עולה</option>
+                  <option value="desc">יורד</option>
+                </select>
+              </label>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
         <div className="table-wrapper">
           <table>
             <thead>
@@ -375,7 +507,7 @@ export default function LogsPage() {
                   </td>
                 </tr>
               )}
-              {logs.map((log) => {
+              {sortedLogs.map((log) => {
                 const snapshot = log.snapshot || {};
                 const changeEntries = Array.isArray(snapshot.changes) ? snapshot.changes : [];
                 const snapshotFields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
@@ -599,7 +731,7 @@ export default function LogsPage() {
                   </Fragment>
                 );
               })}
-              {logs.length === 0 && !loading && (
+              {sortedLogs.length === 0 && !loading && (
                 <tr>
                   {LOG_TABLE_COLUMNS.map((col) => (
                     <td key={col.key} />
