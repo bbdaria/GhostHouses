@@ -27,6 +27,6 @@ export const LOG_TABLE_COLUMNS = [
   { key: 'bldSivug', label: 'סיווג' },
   { key: 'summary', label: 'תמונת מצב (תמצית מצב)' },
   { key: 'user', label: 'משתמש' },
-  { key: 'date', label: 'תאריך עדכון' },
+  { key: 'date', label: 'תאריך שינוי' },
   { key: 'actions', label: 'פעולות' }
 ];
