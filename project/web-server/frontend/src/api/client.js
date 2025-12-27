@@ -94,6 +94,7 @@ const mapBuildingSummary = (item) => ({
   street: item.streetName,
   houseNumber: item.houseNumber,
   nickname: item.buildingName,
+  bldSivug: item.bldSivug,
   status: item.shikumStatus,
   area: item.neighborhood,
   statusSummary: item.statusSummary || '',
