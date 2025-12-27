@@ -86,6 +86,7 @@ export default function LogsPage() {
   const [streets, setStreets] = useState([]);
   const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
   const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
+  const [sivugOptions, setSivugOptions] = useState([]);
   const statusIdToValue = useMemo(
     () =>
       statusOptions.reduce((acc, opt) => {
@@ -106,6 +107,11 @@ export default function LogsPage() {
   );
   useDocumentTitle('יומן פעילויות - מוקד המבנים העירוני');
   const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
+  const getSivugLabel = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    const match = sivugOptions.find((option) => String(option.value) === String(value));
+    return match ? match.label : String(value);
+  };
   const formatDate = (value) => {
     if (!value) return '—';
     try {
@@ -148,7 +154,17 @@ export default function LogsPage() {
       }
     };
 
+    const loadSivugOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_Sivug');
+        setSivugOptions(options);
+      } catch {
+        setSivugOptions([]);
+      }
+    };
+
     loadStatusOptions();
+    loadSivugOptions();
     loadStreets();
     loadLogs(buildDefaultFilters({ buildingId: initialBuildingId }));
   }, []);
@@ -327,7 +343,7 @@ export default function LogsPage() {
                 const street = snapshot.streetName || log.buildingStreet || '—';
                 const houseNumber = snapshot.houseNumber || log.buildingHouseNumber || '—';
                 const nickname = snapshot.buildingName || log.buildingNickname || '—';
-                const neighborhood = snapshot.neighborhood || log.buildingNeighborhood || '—';
+                const sivugValue = snapshot.bldSivug ?? log.buildingBldSivug;
                 const statusValue = normalizeStatusValue(
                   snapshot.shikumStatus || log.buildingStatus || 'Unknown',
                   statusIdToValue
@@ -340,7 +356,7 @@ export default function LogsPage() {
                   houseNumber: displayOrDash(houseNumber),
                   nickname: displayOrDash(nickname),
                   status: statusLabel,
-                  area: displayOrDash(neighborhood),
+                  bldSivug: getSivugLabel(sivugValue),
                   summary: displayOrDash(summary),
                   user: displayOrDash(log.username),
                   date: formatDate(timestamp),

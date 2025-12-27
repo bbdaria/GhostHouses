@@ -132,6 +132,7 @@ public class BuildingsController : ApiControllerBase
                 building.HouseNumber,
                 building.BuildingName,
                 building.Neighborhood,
+                building.BldSivug,
                 building.ShikumStatus,
                 building.StatusSummary))
             .ToList();

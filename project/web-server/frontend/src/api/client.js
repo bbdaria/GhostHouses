@@ -113,6 +113,7 @@ const mapLog = (log) => ({
   buildingHouseNumber: log.buildingHouseNumber,
   buildingNickname: log.buildingNickname,
   buildingNeighborhood: log.buildingNeighborhood,
+  buildingBldSivug: log.buildingBldSivug,
   buildingStatus: log.buildingStatus,
   buildingStatusSummary: log.buildingStatusSummary
 });
