@@ -87,6 +87,11 @@ public class LogsController : ApiControllerBase
             query = query.Where(l => l.Building.ShikumStatus == filter.Status.Value);
         }
 
+        if (filter.BldSivug.HasValue)
+        {
+            query = query.Where(l => l.Building.BldSivug == filter.BldSivug.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(filter.Neighborhood))
         {
             query = query.Where(l => EF.Functions.ILike(l.Building.Neighborhood, $"%{filter.Neighborhood}%"));
