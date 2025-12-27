@@ -61,6 +61,8 @@ export default function BuildingsPage() {
   const [detailError, setDetailError] = useState('');
   const [detailTab, setDetailTab] = useState('summary');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [createForm, setCreateForm] = useState({
     fldId: '',
     streetId: '',
@@ -270,6 +272,28 @@ export default function BuildingsPage() {
   const handleReset = () => {
     setFilters(initialFilters);
     loadBuildings(initialFilters);
+  };
+
+  const handleExport = async () => {
+    if (exporting) return;
+    setExportError('');
+    setExporting(true);
+    try {
+      const blob = await api.exportBuildings(filters);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `buildings-${dateStamp}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err.message || 'שגיאה בייצוא קובץ האקסל.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleCreateChange = (event) => {
@@ -612,9 +636,15 @@ export default function BuildingsPage() {
             {showCreateForm ? 'סגור טופס הוספה' : 'הוסף מבנה'}
           </button>
         )}
+        {isAdmin && (
+          <button className="ghost" type="button" onClick={handleExport} disabled={exporting}>
+            {exporting ? 'מייצא...' : 'יצוא לאקסל'}
+          </button>
+        )}
         {loading && <p className="muted">טוען מבנים…</p>}
         {error && <p className="error">שגיאה בטעינת מבנים: {error}</p>}
         {actionMessage && <p className="success">{actionMessage}</p>}
+        {exportError && <p className="error">שגיאה בייצוא: {exportError}</p>}
       </section>
 
       {canEdit && showCreateForm && (

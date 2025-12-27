@@ -87,6 +87,35 @@ async function request(path, options = {}) {
   return payload;
 }
 
+async function requestBlob(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: options.method || 'GET',
+    headers,
+    body: options.body
+  });
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const text = await response.text();
+      if (text) {
+        const parsed = JSON.parse(text);
+        message = parsed && parsed.error ? parsed.error : message;
+      }
+    } catch {
+      // Ignore parsing errors and keep status text.
+    }
+    throw new Error(message || 'Request failed');
+  }
+
+  return response.blob();
+}
+
 const mapBuildingSummary = (item) => ({
   id: item.id,
   fldId: item.fldId,
@@ -208,6 +237,20 @@ const api = {
 
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
     return (data.items || []).map(mapBuildingSummary);
+  },
+  async exportBuildings(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.street) params.append('street', filters.street);
+    if (filters.streetId) params.append('streetId', filters.streetId);
+    if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);
+    if (filters.nickname) params.append('name', filters.nickname);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+    if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
+
+    const query = params.toString();
+    const path = query ? `/buildings/export?${query}` : '/buildings/export';
+    return requestBlob(path);
   },
   async fetchBuilding(id) {
     const data = await request(`/buildings/${id}`);
