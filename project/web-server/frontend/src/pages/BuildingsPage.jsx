@@ -21,6 +21,17 @@ const SORT_FIELDS = [
   { value: 'bldSivug', label: 'סיווג' },
   { value: 'statusSummary', label: 'תמונת מצב (תמצית מצב)' }
 ];
+const REQUIRED_EDIT_FIELDS = [
+  { key: 'StreetId', label: 'שם רחוב' },
+  { key: 'BldNum', label: 'מספר בית' },
+  { key: 'BldName', label: 'כינוי הבניין' },
+  { key: 'ShikumStatus', label: 'סטטוס שיקום' },
+  { key: 'BldSivug', label: 'סיווג' },
+  { key: 'StatusSummary', label: 'תמונת מצב (תמצית מצב)' }
+];
+const REQUIRED_EDIT_COLUMNS = new Set(
+  REQUIRED_EDIT_FIELDS.filter((field) => field.key !== 'StreetId').map((field) => field.key)
+);
 
 const EXCEL_LABEL_OVERRIDES = {
   'ID נכס לצורך מערכת זו בלבד': 'ID',
@@ -99,6 +110,7 @@ export default function BuildingsPage() {
     const match = sivugOptions.find((option) => String(option.value) === String(value));
     return match ? match.label : String(value);
   };
+  const isRequiredEditColumn = (columnName) => REQUIRED_EDIT_COLUMNS.has(columnName);
 
   useEffect(() => {
     const loadStatusOptions = async () => {
@@ -338,6 +350,13 @@ export default function BuildingsPage() {
     event.preventDefault();
     if (!selectedBuilding) return;
     setActionMessage('');
+    const isMissing = (value) =>
+      value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+    const missingField = REQUIRED_EDIT_FIELDS.find((field) => isMissing(editFieldValues[field.key]));
+    if (missingField) {
+      setActionMessage(`חובה למלא ${missingField.label}.`);
+      return;
+    }
     try {
       const cleaned = Object.entries(editFieldValues).reduce((acc, [key, value]) => {
         acc[key] = value === '' ? null : value;
@@ -787,6 +806,14 @@ export default function BuildingsPage() {
                               className="ghost"
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (
+                                  selectedBuilding &&
+                                  selectedBuilding.id === building.id &&
+                                  selectedView === 'edit'
+                                ) {
+                                  setSelectedBuilding(null);
+                                  return;
+                                }
                                 loadBuildingDetails(building.id, 'edit');
                               }}
                             >
@@ -821,6 +848,7 @@ export default function BuildingsPage() {
                                           const columnName = field.columnName;
                                           const fieldName = field.fieldName;
                                           if (!columnName) return null;
+                                          const required = isRequiredEditColumn(columnName);
                                           if (columnName.toLowerCase() === 'streetid') {
                                             return (
                                               <label key={columnName}>
@@ -864,6 +892,7 @@ export default function BuildingsPage() {
                                               <select
                                                 value={currentValue}
                                                 onChange={(e) => handleEditFieldChange(columnName, e.target.value)}
+                                                required={required}
                                               >
                                                 <option value="">—</option>
                                                 {selectOptions.map((opt) => (
@@ -876,8 +905,8 @@ export default function BuildingsPage() {
                                           );
                                         }
 
-                                        const useTextarea = shouldUseTextarea(fieldName);
                                         const isDate = isDateField(field);
+                                        const useTextarea = shouldUseTextarea(fieldName) && !isDate;
                                         const inputType = isDate ? 'date' : 'text';
 
                                         return (
@@ -887,12 +916,14 @@ export default function BuildingsPage() {
                                               <textarea
                                                 value={currentValue}
                                                 onChange={(e) => handleEditFieldChange(columnName, e.target.value)}
+                                                required={required}
                                               />
                                             ) : (
                                               <input
                                                 type={inputType}
                                                 value={currentValue}
                                                 onChange={(e) => handleEditFieldChange(columnName, e.target.value)}
+                                                required={required}
                                               />
                                             )}
                                           </label>
