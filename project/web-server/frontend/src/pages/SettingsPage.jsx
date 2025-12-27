@@ -49,11 +49,6 @@ export default function SettingsPage() {
           <h1>הגדרות אישיות</h1>
           <p className="subtitle">ניהול פרטי משתמש, סיסמה והעדפות תצוגה.</p>
         </div>
-        <div className="user-pill">
-          <p className="muted">מחובר כ</p>
-          <strong>{user?.username}</strong>
-          <small className="muted">{ROLE_LABELS[user?.role] || user?.role || '—'}</small>
-        </div>
       </header>
 
       <section className="panel">
