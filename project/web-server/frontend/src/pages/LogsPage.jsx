@@ -539,7 +539,7 @@ export default function LogsPage() {
                   statusIdToValue
                 );
                 const statusLabel = statusLabelMap[statusValue] || statusValue || '—';
-                const summary = snapshot.statusSummary || log.buildingStatusSummary || log.description || '—';
+                const summary = snapshot.statusSummary ?? log.buildingStatusSummary ?? '';
                 const timestamp = log.createdAt;
                 const isExpanded = expandedLogId === log.id;
                 const fieldOrder = new Map(

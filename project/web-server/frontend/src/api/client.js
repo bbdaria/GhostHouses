@@ -101,12 +101,22 @@ const mapBuildingSummary = (item) => ({
   updatedAt: item.statusSummaryUpdatedAt
 });
 
+const getLogUsername = (log) => {
+  if (log.createdBy || log.createdByUser || log.createdByUserId) {
+    return log.createdBy || log.createdByUser || log.createdByUserId;
+  }
+  if (log.category === 'Seed' || log.title === 'אתחול מערכת') {
+    return 'אתחול מערכת';
+  }
+  return 'system';
+};
+
 const mapLog = (log) => ({
   id: log.id,
   buildingId: log.buildingId,
   actionType: log.category || log.severity || log.title,
   description: log.message,
-  username: log.createdBy || log.createdByUser || log.createdByUserId || 'system',
+  username: getLogUsername(log),
   createdAt: log.createdAt,
   snapshot: parseSnapshot(log.message),
   buildingStreet: log.buildingStreet,
@@ -144,10 +154,7 @@ const mapBuildingDetail = (data) => ({
         rawValue: field.rawValue
       }))
     : [],
-  logs: (data.recentLogs || []).map((log) => ({
-    ...mapLog(log),
-    username: log.createdBy || 'system'
-  }))
+  logs: (data.recentLogs || []).map((log) => mapLog(log))
 });
 
 const mapUser = (user) => ({

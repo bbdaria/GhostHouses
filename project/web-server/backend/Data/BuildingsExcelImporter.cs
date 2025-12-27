@@ -1,9 +1,14 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
+using System.Text.Json;
 using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
 using WebServer.Models;
+using WebServer.Models.Dtos;
+using WebServer.Utilities;
 
 namespace WebServer.Data;
 
@@ -114,6 +119,55 @@ public static class BuildingsExcelImporter
 
             await context.Buildings.AddRangeAsync(buildings, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
+
+            var createdAt = IsraelTime.NowUtc;
+            var logs = buildings.Select(building =>
+            {
+                var fieldsSnapshot = BuildFieldsSnapshot(building);
+                var changes = fieldsSnapshot
+                    .Where(field => !string.IsNullOrWhiteSpace(field.Value))
+                    .Select(field => new
+                    {
+                        field.ColumnName,
+                        field.FieldName,
+                        OldValue = (string?)null,
+                        NewValue = field.Value
+                    })
+                    .ToList();
+                var snapshot = new
+                {
+                    building.Id,
+                    building.FldId,
+                    building.StreetCode,
+                    building.BuildingName,
+                    building.StreetName,
+                    building.HouseNumber,
+                    building.Neighborhood,
+                    building.BldSivug,
+                    building.ShikumStatus,
+                    building.StatusSummary,
+                    building.StatusSummaryUpdatedAt,
+                    Changes = changes,
+                    Fields = fieldsSnapshot,
+                    ExternalData = (object?)null
+                };
+
+                return new BuildingLog
+                {
+                    BuildingId = building.Id,
+                    Title = "אתחול מערכת",
+                    Message = JsonSerializer.Serialize(snapshot),
+                    Category = "Seed",
+                    Severity = "info",
+                    CreatedAt = createdAt
+                };
+            }).ToList();
+
+            if (logs.Count > 0)
+            {
+                await context.BuildingLogs.AddRangeAsync(logs, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+            }
 
             Console.WriteLine($"[BuildingsExcelImporter] Seeded {buildings.Count} buildings from '{filePath}'.");
         }
@@ -581,6 +635,92 @@ public static class BuildingsExcelImporter
         }
 
         return false;
+    }
+
+    private static IReadOnlyList<BuildingFieldDto> BuildFieldsSnapshot(Building building)
+    {
+        return typeof(Building)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.CanRead)
+            .Where(p =>
+            {
+                if (p.Name is nameof(Building.Logs) or nameof(Building.ExternalSnapshots) or nameof(Building.Street))
+                {
+                    return false;
+                }
+
+                if (p.Name is nameof(Building.Neighborhood) or nameof(Building.PhotoUrls))
+                {
+                    return false;
+                }
+
+                if (typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) &&
+                    p.PropertyType != typeof(string))
+                {
+                    return false;
+                }
+
+                return p.GetCustomAttribute<ColumnAttribute>() is not null;
+            })
+            .Select(p =>
+            {
+                var columnAttribute = p.GetCustomAttribute<ColumnAttribute>();
+                var columnName = string.IsNullOrWhiteSpace(columnAttribute?.Name) ? p.Name : columnAttribute!.Name!;
+                var fieldSpec = p.GetCustomAttribute<FieldSpecAttribute>();
+                var displayAttribute = p.GetCustomAttribute<DisplayAttribute>();
+
+                var category = fieldSpec?.Category ?? "כללי";
+                var fieldName = fieldSpec?.FieldName ?? displayAttribute?.Name ?? p.Name;
+                var selectTableName = fieldSpec?.SelectTableName;
+                var includeInEventLog = fieldSpec?.IncludeInEventLog ?? false;
+
+                var raw = p.GetValue(building);
+                int? rawInt = raw switch
+                {
+                    null => null,
+                    int i => i,
+                    BuildingStatus s => (int)s,
+                    _ => null
+                };
+
+                string? value = null;
+                if (raw is null)
+                {
+                    value = null;
+                }
+                else if (!string.IsNullOrWhiteSpace(selectTableName) && rawInt.HasValue)
+                {
+                    var label = SelectTables
+                        .GetOptions(selectTableName)
+                        .FirstOrDefault(o => o.Value == rawInt.Value)
+                        ?.Label;
+                    value = label ?? raw.ToString();
+                }
+                else if (raw is DateTime dtValue)
+                {
+                    value = dtValue.ToString("yyyy-MM-dd");
+                }
+                else if (raw is DateTimeOffset dto)
+                {
+                    value = dto.ToString("O");
+                }
+                else
+                {
+                    value = raw.ToString();
+                }
+
+                return new BuildingFieldDto(
+                    category,
+                    fieldName,
+                    columnName,
+                    selectTableName,
+                    includeInEventLog,
+                    value,
+                    rawInt);
+            })
+            .OrderBy(f => f.Category)
+            .ThenBy(f => f.FieldName)
+            .ToList();
     }
 
     private static bool IsBuildingEmpty(Building building)
