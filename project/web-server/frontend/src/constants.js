@@ -3,13 +3,13 @@ export const LAST_BUILDING_KEY = 'ghosthouses:lastBuildingId';
 export const BUILDING_FIELD_LABELS = {
   street: 'שם רחוב',
   houseNumber: 'מספר בית',
-  nickname: 'כינוי',
-  status: 'סטטוס',
+  nickname: 'כינוי הבניין',
+  status: 'סטטוס שיקום',
   area: 'אזור',
-  statusSummary: 'תקציר מצב'
+  statusSummary: 'תמונת מצב (תמצית מצב)'
 };
 
-export const STATUS_SELECT_PLACEHOLDER = 'בחר סטטוס';
+export const STATUS_SELECT_PLACEHOLDER = 'בחר סטטוס שיקום';
 
 export const BUILDING_FIELD_PLACEHOLDERS = {
   street: 'לדוגמה: הרצל',
@@ -22,11 +22,11 @@ export const BUILDING_FIELD_PLACEHOLDERS = {
 export const LOG_TABLE_COLUMNS = [
   { key: 'street', label: 'שם רחוב' },
   { key: 'houseNumber', label: 'מספר בית' },
-  { key: 'nickname', label: 'כינוי' },
-  { key: 'status', label: 'סטטוס' },
-  { key: 'area', label: 'אזור' },
-  { key: 'summary', label: 'תקציר מצב' },
+  { key: 'nickname', label: 'כינוי הבניין' },
+  { key: 'status', label: 'סטטוס שיקום' },
+  { key: 'bldSivug', label: 'סיווג' },
+  { key: 'summary', label: 'תמונת מצב (תמצית מצב)' },
   { key: 'user', label: 'משתמש' },
   { key: 'date', label: 'תאריך עדכון' },
-  { key: 'actions', label: 'ניהול' }
+  { key: 'actions', label: 'פעולות' }
 ];

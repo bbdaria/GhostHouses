@@ -43,6 +43,7 @@ public record BuildingLogDto(
     string? BuildingHouseNumber,
     string? BuildingNickname,
     string? BuildingNeighborhood,
+    int? BuildingBldSivug,
     BuildingStatus? BuildingStatus,
     string? BuildingStatusSummary);
 

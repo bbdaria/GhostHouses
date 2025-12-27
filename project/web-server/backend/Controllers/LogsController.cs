@@ -120,6 +120,7 @@ public class LogsController : ApiControllerBase
                 l.Building.HouseNumber,
                 l.Building.BuildingName,
                 l.Building.Neighborhood,
+                l.Building.BldSivug,
                 l.Building.ShikumStatus,
                 l.Building.StatusSummary))
             .ToListAsync(cancellationToken);
@@ -149,6 +150,7 @@ public class LogsController : ApiControllerBase
                 l.Building.HouseNumber,
                 l.Building.BuildingName,
                 l.Building.Neighborhood,
+                l.Building.BldSivug,
                 l.Building.ShikumStatus,
                 l.Building.StatusSummary))
             .ToListAsync(cancellationToken);
@@ -205,6 +207,7 @@ public class LogsController : ApiControllerBase
             building.HouseNumber,
             building.BuildingName,
             building.Neighborhood,
+            building.BldSivug,
             building.ShikumStatus,
             building.StatusSummary);
         return CreatedAtAction(nameof(GetBuildingLogs), new { buildingId }, dto);
