@@ -137,7 +137,358 @@ public class BuildingsController : ApiControllerBase
                 building.StatusSummary))
             .ToList();
 
-        var fields = typeof(Building)
+        var fields = BuildFieldsSnapshot(building);
+
+        var detail = new BuildingDetailDto(
+            new BuildingSummaryDto(building.Id, building.FldId, building.StreetCode, building.BuildingName, building.Street?.Name ?? building.StreetName, building.HouseNumber, building.Neighborhood, building.ShikumStatus, building.BldSivug, building.StatusSummary),
+            building.StatusSummary,
+            IsraelTime.Convert(building.StatusSummaryUpdatedAt),
+            building.Complaints,
+            string.IsNullOrWhiteSpace(building.PhotoUrls) ? Array.Empty<string>() : building.PhotoUrls.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+            externalData,
+            logs,
+            fields);
+
+        return Ok(detail);
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "Editor")]
+    public async Task<ActionResult<BuildingSummaryDto>> CreateBuilding([FromBody] BuildingEditRequest request, CancellationToken cancellationToken)
+    {
+        var building = new Building
+        {
+            FldId = request.FldId,
+            HouseNumber = request.HouseNumber,
+            BuildingName = request.BuildingName,
+            Neighborhood = request.Neighborhood,
+            BldSivug = request.BldSivug,
+            ShikumStatus = request.ShikumStatus ?? BuildingStatus.Unknown,
+            StatusSummary = request.StatusSummary ?? string.Empty,
+            Complaints = request.Complaints ?? string.Empty,
+            PhotoUrls = request.Photos is null ? string.Empty : string.Join(',', request.Photos)
+        };
+
+        var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == request.StreetId, cancellationToken);
+        if (street == null)
+        {
+            return BadRequest($"Street with id {request.StreetId} not found.");
+        }
+
+        building.StreetCode = street.StreetId;
+        building.StreetName = street.Name;
+
+        _context.Buildings.Add(building);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
+
+        var fieldsSnapshot = BuildFieldsSnapshot(building);
+        var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
+        var createChanges = BuildCreateChanges(building);
+        var createSnapshot = new
+        {
+            building.Id,
+            building.FldId,
+            building.StreetCode,
+            building.BuildingName,
+            building.StreetName,
+            building.HouseNumber,
+            building.Neighborhood,
+            building.BldSivug,
+            building.ShikumStatus,
+            building.StatusSummary,
+            building.StatusSummaryUpdatedAt,
+            Changes = createChanges,
+            Fields = fieldsSnapshot,
+            ExternalData = externalData
+        };
+
+        _context.BuildingLogs.Add(new BuildingLog
+        {
+            BuildingId = building.Id,
+            Title = "יצירת מבנה",
+            Message = JsonSerializer.Serialize(createSnapshot),
+            Category = "Create",
+            Severity = "info",
+            CreatedByUserId = actorId,
+            CreatedAt = IsraelTime.NowUtc
+        });
+        await _context.SaveChangesAsync(cancellationToken);
+        await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Create", request, cancellationToken);
+
+        return CreatedAtAction(nameof(GetBuilding), new { id = building.Id }, new BuildingSummaryDto(
+            building.Id,
+            building.FldId,
+            building.StreetCode,
+            building.BuildingName,
+            building.StreetName,
+            building.HouseNumber,
+            building.Neighborhood,
+            building.ShikumStatus,
+            building.BldSivug,
+            building.StatusSummary));
+    }
+
+    [HttpPut("{id:int}")]
+    [Authorize(Policy = "Editor")]
+    public async Task<ActionResult> UpdateBuilding(int id, [FromBody] BuildingEditRequest request, CancellationToken cancellationToken)
+    {
+        var building = await _context.Buildings.FindAsync(new object[] { id }, cancellationToken);
+        if (building is null)
+        {
+            return NotFound();
+        }
+
+        var oldStreetName = building.StreetName;
+        var oldHouseNumber = building.HouseNumber;
+        var oldBuildingName = building.BuildingName;
+        var oldBldSivug = building.BldSivug;
+        var oldShikumStatus = building.ShikumStatus;
+        var oldStatusSummary = building.StatusSummary;
+        var oldStatusSummaryUpdatedAt = building.StatusSummaryUpdatedAt;
+
+        building.FldId = request.FldId;
+        building.HouseNumber = request.HouseNumber;
+        if (!string.IsNullOrWhiteSpace(request.BuildingName))
+        {
+            building.BuildingName = request.BuildingName;
+        }
+        building.Neighborhood = request.Neighborhood;
+        building.BldSivug = request.BldSivug ?? building.BldSivug;
+        if (request.ShikumStatus.HasValue)
+        {
+            building.ShikumStatus = request.ShikumStatus.Value;
+        }
+        building.StatusSummary = request.StatusSummary ?? building.StatusSummary;
+        building.Complaints = request.Complaints ?? building.Complaints;
+        building.PhotoUrls = request.Photos is null ? building.PhotoUrls : string.Join(',', request.Photos);
+        building.StatusSummaryUpdatedAt = DateTime.UtcNow;
+
+        var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == request.StreetId, cancellationToken);
+        if (street == null)
+        {
+            return BadRequest($"Street with id {request.StreetId} not found.");
+        }
+
+        building.StreetCode = street.StreetId;
+        building.StreetName = street.Name;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var fieldsSnapshot = BuildFieldsSnapshot(building);
+        var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
+        var changeSnapshot = new
+        {
+            building.Id,
+            building.FldId,
+            building.StreetCode,
+            building.BuildingName,
+            building.StreetName,
+            building.HouseNumber,
+            building.Neighborhood,
+            building.BldSivug,
+            building.ShikumStatus,
+            building.StatusSummary,
+            building.StatusSummaryUpdatedAt,
+            Changes = BuildCoreChanges(
+                oldStreetName,
+                oldHouseNumber,
+                oldBuildingName,
+                oldBldSivug,
+                oldShikumStatus,
+                oldStatusSummary,
+                oldStatusSummaryUpdatedAt,
+                building),
+            Fields = fieldsSnapshot,
+            ExternalData = externalData
+        };
+
+        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
+
+        _context.BuildingLogs.Add(new BuildingLog
+        {
+            BuildingId = building.Id,
+            Title = "עדכון מבנה",
+            Message = JsonSerializer.Serialize(changeSnapshot),
+            Category = "Edit",
+            Severity = "info",
+            CreatedByUserId = actorId,
+            CreatedAt = IsraelTime.NowUtc
+        });
+        await _context.SaveChangesAsync(cancellationToken);
+        await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Update", request, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/fields")]
+    [Authorize(Policy = "Editor")]
+    public async Task<ActionResult<BuildingDetailDto>> UpdateBuildingFields(
+        int id,
+        [FromBody] BuildingFieldsUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Fields is null || request.Fields.Count == 0)
+        {
+            return BadRequest("No fields supplied.");
+        }
+
+        var building = await _context.Buildings
+            .Include(b => b.Street)
+            .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
+
+        if (building is null)
+        {
+            return NotFound();
+        }
+
+        var propertyByColumn = typeof(Building)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.CanWrite)
+            .Select(p => new
+            {
+                Property = p,
+                Column = p.GetCustomAttribute<ColumnAttribute>()
+            })
+            .Where(x => x.Column is not null)
+            .ToDictionary(
+                x => string.IsNullOrWhiteSpace(x.Column!.Name) ? x.Property.Name : x.Column!.Name!,
+                x => x.Property,
+                StringComparer.OrdinalIgnoreCase);
+
+        bool streetIdProvided = false;
+        int? desiredStreetId = null;
+
+        var originalStreetName = building.StreetName;
+        var changes = new List<FieldChange>();
+
+        foreach (var (columnName, rawValue) in request.Fields)
+        {
+            if (string.IsNullOrWhiteSpace(columnName))
+            {
+                continue;
+            }
+
+            if (string.Equals(columnName, "StreetName", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (string.Equals(columnName, "StreetId", StringComparison.OrdinalIgnoreCase))
+            {
+                streetIdProvided = true;
+                if (string.IsNullOrWhiteSpace(rawValue))
+                {
+                    desiredStreetId = null;
+                }
+                else if (int.TryParse(rawValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var sid))
+                {
+                    desiredStreetId = sid;
+                }
+                else
+                {
+                    return BadRequest("StreetId must be an integer.");
+                }
+
+                continue;
+            }
+
+            if (!propertyByColumn.TryGetValue(columnName, out var property))
+            {
+                continue;
+            }
+
+            var oldValue = property.GetValue(building);
+            var converted = ConvertFieldValue(rawValue, property);
+            if (converted is InvalidFieldValue invalid)
+            {
+                return BadRequest($"Invalid value for '{columnName}': {invalid.Message}");
+            }
+
+            var change = BuildChange(property, oldValue, converted);
+            if (change is not null)
+            {
+                changes.Add(change);
+            }
+            property.SetValue(building, converted);
+        }
+
+        if (streetIdProvided)
+        {
+            if (!desiredStreetId.HasValue)
+            {
+                return BadRequest("StreetId is required.");
+            }
+
+            var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == desiredStreetId.Value, cancellationToken);
+            if (street is null)
+            {
+                return BadRequest($"Street with id {desiredStreetId.Value} not found.");
+            }
+
+            building.StreetCode = street.StreetId;
+            building.StreetName = street.Name;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        if (!string.Equals(originalStreetName, building.StreetName, StringComparison.Ordinal))
+        {
+            var streetNameProperty = propertyByColumn.TryGetValue("StreetName", out var property)
+                ? property
+                : typeof(Building).GetProperty(nameof(Building.StreetName));
+            if (streetNameProperty is not null)
+            {
+                var change = BuildChange(streetNameProperty, originalStreetName, building.StreetName);
+                if (change is not null)
+                {
+                    changes.Add(change);
+                }
+            }
+        }
+
+        var fieldsSnapshot = BuildFieldsSnapshot(building);
+        var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
+        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
+        _context.BuildingLogs.Add(new BuildingLog
+        {
+            BuildingId = building.Id,
+            Title = "עדכון שדות",
+            Message = JsonSerializer.Serialize(new
+            {
+                building.Id,
+                building.FldId,
+                building.StreetCode,
+                building.BuildingName,
+                building.StreetName,
+                building.HouseNumber,
+                building.Neighborhood,
+                building.BldSivug,
+                building.ShikumStatus,
+                building.StatusSummary,
+                building.StatusSummaryUpdatedAt,
+                Changes = changes,
+                Fields = fieldsSnapshot,
+                ExternalData = externalData
+            }),
+            Category = "Edit",
+            Severity = "info",
+            CreatedByUserId = actorId,
+            CreatedAt = IsraelTime.NowUtc
+        });
+        await _context.SaveChangesAsync(cancellationToken);
+        await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "UpdateFields", request, cancellationToken);
+
+        return await GetBuilding(id, cancellationToken);
+    }
+
+    private sealed record InvalidFieldValue(string Message);
+
+    private sealed record FieldChange(string ColumnName, string FieldName, string? OldValue, string? NewValue);
+
+    private static IReadOnlyList<BuildingFieldDto> BuildFieldsSnapshot(Building building)
+    {
+        return typeof(Building)
             .GetProperties(BindingFlags.Instance | BindingFlags.Public)
             .Where(p => p.CanRead)
             .Where(p =>
@@ -219,282 +570,163 @@ public class BuildingsController : ApiControllerBase
             .OrderBy(f => f.Category)
             .ThenBy(f => f.FieldName)
             .ToList();
-
-        var detail = new BuildingDetailDto(
-            new BuildingSummaryDto(building.Id, building.FldId, building.StreetCode, building.BuildingName, building.Street?.Name ?? building.StreetName, building.HouseNumber, building.Neighborhood, building.ShikumStatus, building.BldSivug, building.StatusSummary),
-            building.StatusSummary,
-            IsraelTime.Convert(building.StatusSummaryUpdatedAt),
-            building.Complaints,
-            string.IsNullOrWhiteSpace(building.PhotoUrls) ? Array.Empty<string>() : building.PhotoUrls.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
-            externalData,
-            logs,
-            fields);
-
-        return Ok(detail);
     }
 
-    [HttpPost]
-    [Authorize(Policy = "Editor")]
-    public async Task<ActionResult<BuildingSummaryDto>> CreateBuilding([FromBody] BuildingEditRequest request, CancellationToken cancellationToken)
+    private static IReadOnlyList<FieldChange> BuildCreateChanges(Building building)
     {
-        var building = new Building
+        var changes = new List<FieldChange>();
+        AddChangeIfSet(changes, typeof(Building).GetProperty(nameof(Building.StreetName)), null, building.StreetName);
+        AddChangeIfSet(changes, typeof(Building).GetProperty(nameof(Building.HouseNumber)), null, building.HouseNumber);
+        AddChangeIfSet(changes, typeof(Building).GetProperty(nameof(Building.BuildingName)), null, building.BuildingName);
+        AddChangeIfSet(changes, typeof(Building).GetProperty(nameof(Building.ShikumStatus)), null, building.ShikumStatus);
+        AddChangeIfSet(changes, typeof(Building).GetProperty(nameof(Building.BldSivug)), null, building.BldSivug);
+        AddChangeIfSet(changes, typeof(Building).GetProperty(nameof(Building.StatusSummary)), null, building.StatusSummary);
+        AddChangeIfSet(
+            changes,
+            typeof(Building).GetProperty(nameof(Building.StatusSummaryUpdatedAt)),
+            null,
+            building.StatusSummaryUpdatedAt);
+        return changes;
+    }
+
+    private static IReadOnlyList<FieldChange> BuildCoreChanges(
+        string oldStreetName,
+        string oldHouseNumber,
+        string oldBuildingName,
+        int? oldBldSivug,
+        BuildingStatus oldShikumStatus,
+        string oldStatusSummary,
+        DateTime? oldStatusSummaryUpdatedAt,
+        Building building)
+    {
+        var changes = new List<FieldChange>();
+        AddChange(changes, typeof(Building).GetProperty(nameof(Building.StreetName)), oldStreetName, building.StreetName);
+        AddChange(changes, typeof(Building).GetProperty(nameof(Building.HouseNumber)), oldHouseNumber, building.HouseNumber);
+        AddChange(changes, typeof(Building).GetProperty(nameof(Building.BuildingName)), oldBuildingName, building.BuildingName);
+        AddChange(changes, typeof(Building).GetProperty(nameof(Building.ShikumStatus)), oldShikumStatus, building.ShikumStatus);
+        AddChange(changes, typeof(Building).GetProperty(nameof(Building.BldSivug)), oldBldSivug, building.BldSivug);
+        AddChange(changes, typeof(Building).GetProperty(nameof(Building.StatusSummary)), oldStatusSummary, building.StatusSummary);
+        AddChange(
+            changes,
+            typeof(Building).GetProperty(nameof(Building.StatusSummaryUpdatedAt)),
+            oldStatusSummaryUpdatedAt,
+            building.StatusSummaryUpdatedAt);
+        return changes;
+    }
+
+    private static void AddChange(List<FieldChange> changes, PropertyInfo? property, object? oldValue, object? newValue)
+    {
+        if (property is null || ValuesEqual(oldValue, newValue))
         {
-            FldId = request.FldId,
-            HouseNumber = request.HouseNumber,
-            BuildingName = request.BuildingName,
-            Neighborhood = request.Neighborhood,
-            BldSivug = request.BldSivug,
-            ShikumStatus = request.ShikumStatus ?? BuildingStatus.Unknown,
-            StatusSummary = request.StatusSummary ?? string.Empty,
-            Complaints = request.Complaints ?? string.Empty,
-            PhotoUrls = request.Photos is null ? string.Empty : string.Join(',', request.Photos)
+            return;
+        }
+
+        var change = BuildChange(property, oldValue, newValue);
+        if (change is not null)
+        {
+            changes.Add(change);
+        }
+    }
+
+    private static void AddChangeIfSet(
+        List<FieldChange> changes,
+        PropertyInfo? property,
+        object? oldValue,
+        object? newValue)
+    {
+        if (property is null || IsEmptyValue(newValue))
+        {
+            return;
+        }
+
+        var change = BuildChange(property, oldValue, newValue);
+        if (change is not null)
+        {
+            changes.Add(change);
+        }
+    }
+
+    private static FieldChange? BuildChange(PropertyInfo property, object? oldValue, object? newValue)
+    {
+        if (ValuesEqual(oldValue, newValue))
+        {
+            return null;
+        }
+
+        var columnName = GetColumnName(property);
+        var fieldName = GetFieldName(property);
+        return new FieldChange(
+            columnName,
+            fieldName,
+            FormatFieldValue(property, oldValue),
+            FormatFieldValue(property, newValue));
+    }
+
+    private static string GetColumnName(PropertyInfo property)
+    {
+        var columnAttribute = property.GetCustomAttribute<ColumnAttribute>();
+        return string.IsNullOrWhiteSpace(columnAttribute?.Name) ? property.Name : columnAttribute!.Name!;
+    }
+
+    private static string GetFieldName(PropertyInfo property)
+    {
+        var fieldSpec = property.GetCustomAttribute<FieldSpecAttribute>();
+        var display = property.GetCustomAttribute<DisplayAttribute>();
+        return fieldSpec?.FieldName ?? display?.Name ?? property.Name;
+    }
+
+    private static string? FormatFieldValue(PropertyInfo property, object? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var fieldSpec = property.GetCustomAttribute<FieldSpecAttribute>();
+        var selectTableName = fieldSpec?.SelectTableName?.Trim();
+        int? rawInt = value switch
+        {
+            int i => i,
+            BuildingStatus s => (int)s,
+            _ => null
         };
 
-        var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == request.StreetId, cancellationToken);
-        if (street == null)
+        if (!string.IsNullOrWhiteSpace(selectTableName) && rawInt.HasValue)
         {
-            return BadRequest($"Street with id {request.StreetId} not found.");
+            var label = SelectTables
+                .GetOptions(selectTableName)
+                .FirstOrDefault(o => o.Value == rawInt.Value)
+                ?.Label;
+            return label ?? value.ToString();
         }
 
-        building.StreetCode = street.StreetId;
-        building.StreetName = street.Name;
-
-        _context.Buildings.Add(building);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
-
-        var createSnapshot = new
+        if (value is DateTime dt)
         {
-            building.Id,
-            building.FldId,
-            building.StreetCode,
-            building.BuildingName,
-            building.StreetName,
-            building.HouseNumber,
-            building.Neighborhood,
-            building.BldSivug,
-            building.ShikumStatus,
-            building.StatusSummary,
-            building.StatusSummaryUpdatedAt
-        };
+            return dt.ToString("yyyy-MM-dd");
+        }
 
-        _context.BuildingLogs.Add(new BuildingLog
+        if (value is DateTimeOffset dto)
         {
-            BuildingId = building.Id,
-            Title = "יצירת מבנה",
-            Message = JsonSerializer.Serialize(createSnapshot),
-            Category = "Create",
-            Severity = "info",
-            CreatedByUserId = actorId,
-            CreatedAt = IsraelTime.NowUtc
-        });
-        await _context.SaveChangesAsync(cancellationToken);
-        await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Create", request, cancellationToken);
+            return dto.ToString("O");
+        }
 
-        return CreatedAtAction(nameof(GetBuilding), new { id = building.Id }, new BuildingSummaryDto(
-            building.Id,
-            building.FldId,
-            building.StreetCode,
-            building.BuildingName,
-            building.StreetName,
-            building.HouseNumber,
-            building.Neighborhood,
-            building.ShikumStatus,
-            building.BldSivug,
-            building.StatusSummary));
+        return value.ToString();
     }
 
-    [HttpPut("{id:int}")]
-    [Authorize(Policy = "Editor")]
-    public async Task<ActionResult> UpdateBuilding(int id, [FromBody] BuildingEditRequest request, CancellationToken cancellationToken)
+    private static bool ValuesEqual(object? oldValue, object? newValue)
     {
-        var building = await _context.Buildings.FindAsync(new object[] { id }, cancellationToken);
-        if (building is null)
+        if (IsEmptyValue(oldValue) && IsEmptyValue(newValue))
         {
-            return NotFound();
+            return true;
         }
 
-        building.FldId = request.FldId;
-        building.HouseNumber = request.HouseNumber;
-        if (!string.IsNullOrWhiteSpace(request.BuildingName))
-        {
-            building.BuildingName = request.BuildingName;
-        }
-        building.Neighborhood = request.Neighborhood;
-        building.BldSivug = request.BldSivug ?? building.BldSivug;
-        if (request.ShikumStatus.HasValue)
-        {
-            building.ShikumStatus = request.ShikumStatus.Value;
-        }
-        building.StatusSummary = request.StatusSummary ?? building.StatusSummary;
-        building.Complaints = request.Complaints ?? building.Complaints;
-        building.PhotoUrls = request.Photos is null ? building.PhotoUrls : string.Join(',', request.Photos);
-        building.StatusSummaryUpdatedAt = DateTime.UtcNow;
-
-        var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == request.StreetId, cancellationToken);
-        if (street == null)
-        {
-            return BadRequest($"Street with id {request.StreetId} not found.");
-        }
-
-        building.StreetCode = street.StreetId;
-        building.StreetName = street.Name;
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        var changeSnapshot = new
-        {
-            building.Id,
-            building.FldId,
-            building.StreetCode,
-            building.BuildingName,
-            building.StreetName,
-            building.HouseNumber,
-            building.Neighborhood,
-            building.BldSivug,
-            building.ShikumStatus,
-            building.StatusSummary,
-            building.StatusSummaryUpdatedAt
-        };
-
-        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
-
-        _context.BuildingLogs.Add(new BuildingLog
-        {
-            BuildingId = building.Id,
-            Title = "עדכון מבנה",
-            Message = JsonSerializer.Serialize(changeSnapshot),
-            Category = "Edit",
-            Severity = "info",
-            CreatedByUserId = actorId,
-            CreatedAt = IsraelTime.NowUtc
-        });
-        await _context.SaveChangesAsync(cancellationToken);
-        await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Update", request, cancellationToken);
-        return NoContent();
+        return Equals(oldValue, newValue);
     }
 
-    [HttpPut("{id:int}/fields")]
-    [Authorize(Policy = "Editor")]
-    public async Task<ActionResult<BuildingDetailDto>> UpdateBuildingFields(
-        int id,
-        [FromBody] BuildingFieldsUpdateRequest request,
-        CancellationToken cancellationToken)
+    private static bool IsEmptyValue(object? value)
     {
-        if (request.Fields is null || request.Fields.Count == 0)
-        {
-            return BadRequest("No fields supplied.");
-        }
-
-        var building = await _context.Buildings
-            .Include(b => b.Street)
-            .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
-
-        if (building is null)
-        {
-            return NotFound();
-        }
-
-        var propertyByColumn = typeof(Building)
-            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
-            .Where(p => p.CanWrite)
-            .Select(p => new
-            {
-                Property = p,
-                Column = p.GetCustomAttribute<ColumnAttribute>()
-            })
-            .Where(x => x.Column is not null)
-            .ToDictionary(
-                x => string.IsNullOrWhiteSpace(x.Column!.Name) ? x.Property.Name : x.Column!.Name!,
-                x => x.Property,
-                StringComparer.OrdinalIgnoreCase);
-
-        bool streetIdProvided = false;
-        int? desiredStreetId = null;
-
-        foreach (var (columnName, rawValue) in request.Fields)
-        {
-            if (string.IsNullOrWhiteSpace(columnName))
-            {
-                continue;
-            }
-
-            if (string.Equals(columnName, "StreetName", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (string.Equals(columnName, "StreetId", StringComparison.OrdinalIgnoreCase))
-            {
-                streetIdProvided = true;
-                if (string.IsNullOrWhiteSpace(rawValue))
-                {
-                    desiredStreetId = null;
-                }
-                else if (int.TryParse(rawValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var sid))
-                {
-                    desiredStreetId = sid;
-                }
-                else
-                {
-                    return BadRequest("StreetId must be an integer.");
-                }
-
-                continue;
-            }
-
-            if (!propertyByColumn.TryGetValue(columnName, out var property))
-            {
-                continue;
-            }
-
-            var converted = ConvertFieldValue(rawValue, property);
-            if (converted is InvalidFieldValue invalid)
-            {
-                return BadRequest($"Invalid value for '{columnName}': {invalid.Message}");
-            }
-
-            property.SetValue(building, converted);
-        }
-
-        if (streetIdProvided)
-        {
-            if (!desiredStreetId.HasValue)
-            {
-                return BadRequest("StreetId is required.");
-            }
-
-            var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == desiredStreetId.Value, cancellationToken);
-            if (street is null)
-            {
-                return BadRequest($"Street with id {desiredStreetId.Value} not found.");
-            }
-
-            building.StreetCode = street.StreetId;
-            building.StreetName = street.Name;
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
-        _context.BuildingLogs.Add(new BuildingLog
-        {
-            BuildingId = building.Id,
-            Title = "עדכון שדות",
-            Message = JsonSerializer.Serialize(request.Fields),
-            Category = "Edit",
-            Severity = "info",
-            CreatedByUserId = actorId,
-            CreatedAt = IsraelTime.NowUtc
-        });
-        await _context.SaveChangesAsync(cancellationToken);
-        await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "UpdateFields", request, cancellationToken);
-
-        return await GetBuilding(id, cancellationToken);
+        return value is null || value is string text && string.IsNullOrWhiteSpace(text);
     }
-
-    private sealed record InvalidFieldValue(string Message);
 
     private static object? ConvertFieldValue(string? raw, PropertyInfo property)
     {

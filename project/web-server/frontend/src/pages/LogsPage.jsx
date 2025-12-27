@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
@@ -51,6 +51,19 @@ const baseFilters = {
   endDate: ''
 };
 
+const EXCEL_LABEL_OVERRIDES = {
+  'ID נכס לצורך מערכת זו בלבד': 'ID',
+  'תמצית מצב': 'תמונת מצב',
+  'תאריך עדכון תמצית מצב': 'תאריך עדכון סטטוס',
+  'ציון עמידה בסטנדרט': 'ציון',
+  'פרטי מחזיקים': 'פרטי מחזיק',
+  'האם הייתה צריכת מים ב־6 החודשים האחרונים': 'צריכת מים ב-6 החודשים האחרונים',
+  'האם הייתה צריכת חשמל ב־6 החודשים האחרונים': 'צריכת חשמל ב-6 החודשים האחרונים',
+  'אחוז המבנה שמוגדר ניזוק': 'אחוז המבנה שעומד ניזוק',
+  'קוארדינטות אורך': 'קוארדינטות',
+  'קוארדינטות רוחב': 'קוארדינטות'
+};
+
 const buildDefaultFilters = (overrides = {}) => ({
   ...baseFilters,
   startDate: todayIso(),
@@ -87,6 +100,7 @@ export default function LogsPage() {
   const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
   const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
   const [sivugOptions, setSivugOptions] = useState([]);
+  const [expandedLogId, setExpandedLogId] = useState(null);
   const statusIdToValue = useMemo(
     () =>
       statusOptions.reduce((acc, opt) => {
@@ -112,6 +126,17 @@ export default function LogsPage() {
     const match = sivugOptions.find((option) => String(option.value) === String(value));
     return match ? match.label : String(value);
   };
+  const getExcelAwareLabel = (fieldName) => {
+    if (!fieldName) return '';
+    const excelName = EXCEL_LABEL_OVERRIDES[fieldName];
+    if (!excelName || excelName === fieldName) return fieldName;
+    if (excelName === 'קוארדינטות') {
+      if (fieldName.includes('אורך')) return 'קוארדינטות (אורך)';
+      if (fieldName.includes('רוחב')) return 'קוארדינטות (רוחב)';
+      return excelName;
+    }
+    return `${excelName} (${fieldName})`;
+  };
   const formatDate = (value) => {
     if (!value) return '—';
     try {
@@ -119,6 +144,19 @@ export default function LogsPage() {
     } catch {
       return value;
     }
+  };
+
+  const tryParseJson = (value) => {
+    if (!value) return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleShowLog = (log) => {
+    setExpandedLogId((prev) => (prev === log.id ? null : log.id));
   };
 
   useEffect(() => {
@@ -340,6 +378,27 @@ export default function LogsPage() {
               )}
               {logs.map((log) => {
                 const snapshot = log.snapshot || {};
+                const changeEntries = Array.isArray(snapshot.changes) ? snapshot.changes : [];
+                const snapshotFields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
+                const fieldsByCategory = snapshotFields.reduce((acc, field) => {
+                  const category = field.category || 'כללי';
+                  if (!acc[category]) acc[category] = [];
+                  acc[category].push(field);
+                  return acc;
+                }, {});
+                const externalData = snapshot.externalData || snapshot.external || {};
+                const externalEntries = [
+                  { key: 'gis', label: 'GIS' },
+                  { key: 'water', label: 'מים' },
+                  { key: 'electricity', label: 'חשמל' },
+                  { key: 'tax', label: 'ארנונה' },
+                  { key: 'complaints106', label: 'מוקד 106' }
+                ]
+                  .map((entry) => ({
+                    ...entry,
+                    snapshot: externalData[entry.key]
+                  }))
+                  .filter((entry) => entry.snapshot);
                 const street = snapshot.streetName || log.buildingStreet || '—';
                 const houseNumber = snapshot.houseNumber || log.buildingHouseNumber || '—';
                 const nickname = snapshot.buildingName || log.buildingNickname || '—';
@@ -351,6 +410,17 @@ export default function LogsPage() {
                 const statusLabel = statusLabelMap[statusValue] || statusValue || '—';
                 const summary = snapshot.statusSummary || log.buildingStatusSummary || log.description || '—';
                 const timestamp = snapshot.statusSummaryUpdatedAt || log.createdAt;
+                const isExpanded = expandedLogId === log.id;
+                const fieldOrder = new Map(
+                  snapshotFields.map((field, index) => [(field.columnName || '').toLowerCase(), index])
+                );
+                const sortedChanges = [...changeEntries].sort((a, b) => {
+                  const aKey = String(a.columnName || '').toLowerCase();
+                  const bKey = String(b.columnName || '').toLowerCase();
+                  const aOrder = fieldOrder.has(aKey) ? fieldOrder.get(aKey) : Number.MAX_SAFE_INTEGER;
+                  const bOrder = fieldOrder.has(bKey) ? fieldOrder.get(bKey) : Number.MAX_SAFE_INTEGER;
+                  return aOrder - bOrder;
+                });
                 const row = {
                   street: displayOrDash(street),
                   houseNumber: displayOrDash(houseNumber),
@@ -361,22 +431,163 @@ export default function LogsPage() {
                   user: displayOrDash(log.username),
                   date: formatDate(timestamp),
                   actions: (
-                    <button
-                      type="button"
-                      className="danger"
-                      aria-label={`מחק לוג ${log.id}`}
-                      onClick={() => handleDeleteLog(log.id)}
-                    >
-                      מחק
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => handleShowLog(log)}
+                      >
+                        הצג
+                      </button>
+                      <button
+                        type="button"
+                        className="danger"
+                        aria-label={`מחק לוג ${log.id}`}
+                        onClick={() => handleDeleteLog(log.id)}
+                      >
+                        מחק
+                      </button>
+                    </>
                   )
                 };
                 return (
-                  <tr key={log.id}>
-                    {LOG_TABLE_COLUMNS.map((col) => (
-                      <td key={col.key}>{row[col.key]}</td>
-                    ))}
-                  </tr>
+                  <Fragment key={log.id}>
+                    <tr key={log.id}>
+                      {LOG_TABLE_COLUMNS.map((col) => (
+                        <td key={col.key}>{row[col.key]}</td>
+                      ))}
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={LOG_TABLE_COLUMNS.length}>
+                          <div className="details-card">
+                            <div className="details-section">
+                              <div className="table-wrapper">
+                                <table>
+                                  <thead>
+                                    <tr>
+                                      <th>ערכים שהשתנו</th>
+                                      <th>ישן</th>
+                                      <th>חדש</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sortedChanges.length > 0 ? (
+                                      sortedChanges.map((change, idx) => (
+                                        <tr key={`${change.columnName || 'change'}-${idx}`}>
+                                          <td>{getExcelAwareLabel(change.fieldName || change.columnName)}</td>
+                                          <td>{displayOrDash(change.oldValue)}</td>
+                                          <td>{displayOrDash(change.newValue)}</td>
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr>
+                                        <td colSpan="3" className="muted">
+                                          אין נתוני שינוי.
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                            {snapshotFields.length > 0 || externalEntries.length > 0 ? (
+                              <>
+                                <div>
+                                  <p className="eyebrow">פרטי מבנה</p>
+                                  <h3>
+                                    {street} {houseNumber}
+                                  </h3>
+                                </div>
+
+                                {Object.keys(fieldsByCategory).length > 0 ? (
+                                  Object.entries(fieldsByCategory).map(([category, fields]) => (
+                                    <div key={category} className="details-section">
+                                      <h4>{category}</h4>
+                                      <dl>
+                                        {fields.map((field) => {
+                                          const value = displayOrDash(field.value);
+                                          const titleParts = [];
+                                          if (field.selectTableName)
+                                            titleParts.push(`טבלת בחירה: ${field.selectTableName}`);
+                                          return (
+                                            <div key={`${field.columnName}-${field.fieldName}`}>
+                                              <dt title={titleParts.join(' | ')}>
+                                                {getExcelAwareLabel(field.fieldName)}
+                                              </dt>
+                                              <dd>{value}</dd>
+                                            </div>
+                                          );
+                                        })}
+                                      </dl>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="muted">אין שדות להצגה.</p>
+                                )}
+
+                                <div className="details-section">
+                                  <h4>נתונים ממערכות חיצוניות</h4>
+                                  {externalEntries.length === 0 && <p className="muted">אין נתונים.</p>}
+                                  {externalEntries.map((entry) => {
+                                    const payload = entry.snapshot?.payload;
+                                    const parsed = typeof payload === 'string' ? tryParseJson(payload) : null;
+                                    const status = parsed?.status || null;
+                                    const notes = parsed?.notes || null;
+                                    const updatedAt = parsed?.updatedAt || null;
+                                    return (
+                                      <div key={entry.key} className="external-card">
+                                        <div className="external-card__header">
+                                          <strong>{entry.label}</strong>
+                                          <span className="muted small">
+                                            {formatDate(entry.snapshot?.retrievedAt)}
+                                          </span>
+                                        </div>
+                                        <dl>
+                                          <div>
+                                            <dt>סטטוס</dt>
+                                            <dd>{displayOrDash(status)}</dd>
+                                          </div>
+                                          <div>
+                                            <dt>עודכן במקור</dt>
+                                            <dd>{displayOrDash(updatedAt)}</dd>
+                                          </div>
+                                          <div>
+                                            <dt>הערות</dt>
+                                            <dd>{displayOrDash(notes)}</dd>
+                                          </div>
+                                        </dl>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                <div className="details-section">
+                                  <h4>יומן פעולות (אחרונות)</h4>
+                                  {Array.isArray(snapshot.recentLogs) && snapshot.recentLogs.length > 0 ? (
+                                    <ul className="log-list">
+                                      {snapshot.recentLogs.map((entry) => (
+                                        <li key={entry.id || `${entry.actionType}-${entry.createdAt}`}>
+                                          <span>
+                                            {displayOrDash(entry.actionType)} — {displayOrDash(entry.username)}
+                                          </span>
+                                          <span className="muted">{formatDate(entry.createdAt)}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="muted">אין רישומים.</p>
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <p className="muted">אין נתונים להצגה.</p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
               {logs.length === 0 && !loading && (
