@@ -37,15 +37,12 @@ const normalizeStatusValue = (value, statusIdToValue = {}) => {
 
 const baseFilters = {
   buildingId: '',
-  userId: '',
   user: '',
-  actionType: '',
-  street: '',
   streetId: '',
   houseNumber: '',
   nickname: '',
   status: '',
-  area: '',
+  bldSivug: '',
   statusSummary: '',
   startDate: '',
   endDate: ''
@@ -278,7 +275,7 @@ export default function LogsPage() {
           <label>
             <span>{BUILDING_FIELD_LABELS.street}</span>
             <select name="streetId" value={filters.streetId || ''} onChange={handleChange}>
-              <option value="">{BUILDING_FIELD_PLACEHOLDERS.street}</option>
+              <option value="">בחר רחוב</option>
               {streets.map((street) => (
                 <option key={street.streetId} value={street.streetId}>
                   {street.name}
@@ -316,13 +313,15 @@ export default function LogsPage() {
             </select>
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.area}</span>
-            <input
-              name="area"
-              value={filters.area || ''}
-              onChange={handleChange}
-              placeholder={BUILDING_FIELD_PLACEHOLDERS.area}
-            />
+            <span>סיווג</span>
+            <select name="bldSivug" value={filters.bldSivug || ''} onChange={handleChange}>
+              <option value="">בחר סיווג</option>
+              {sivugOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="full-span">
             <span>{BUILDING_FIELD_LABELS.statusSummary}</span>
@@ -409,7 +408,7 @@ export default function LogsPage() {
                 );
                 const statusLabel = statusLabelMap[statusValue] || statusValue || '—';
                 const summary = snapshot.statusSummary || log.buildingStatusSummary || log.description || '—';
-                const timestamp = snapshot.statusSummaryUpdatedAt || log.createdAt;
+                const timestamp = log.createdAt;
                 const isExpanded = expandedLogId === log.id;
                 const fieldOrder = new Map(
                   snapshotFields.map((field, index) => [(field.columnName || '').toLowerCase(), index])
