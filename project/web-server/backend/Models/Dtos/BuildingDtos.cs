@@ -12,6 +12,7 @@ public record BuildingFilterParameters(
     string? HouseNumber = null,
     string? Name = null,
     BuildingStatus? Status = null,
+    int? BldSivug = null,
     string? Neighborhood = null,
     string? StatusSummary = null);
 

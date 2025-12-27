@@ -195,7 +195,7 @@ const api = {
     if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
-    if (filters.area) params.append('neighborhood', filters.area);
+    if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
@@ -291,6 +291,7 @@ const api = {
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
     if (filters.area) params.append('neighborhood', filters.area);
+    if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
     if (filters.startDate) params.append('from', filters.startDate);
     if (filters.endDate) params.append('to', filters.endDate);

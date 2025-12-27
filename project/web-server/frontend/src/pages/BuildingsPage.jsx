@@ -3,27 +3,23 @@ import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
-import {
-  BUILDING_FIELD_LABELS,
-  BUILDING_FIELD_PLACEHOLDERS,
-  LAST_BUILDING_KEY,
-  STATUS_SELECT_PLACEHOLDER
-} from '../constants.js';
+import { BUILDING_FIELD_PLACEHOLDERS, LAST_BUILDING_KEY } from '../constants.js';
 
 const initialFilters = {
   streetId: '',
   houseNumber: '',
   nickname: '',
   status: '',
-  area: '',
+  bldSivug: '',
   statusSummary: ''
 };
 const SORT_FIELDS = [
   { value: 'street', label: 'שם רחוב' },
   { value: 'houseNumber', label: 'מספר בית' },
-  { value: 'nickname', label: 'כינוי' },
-  { value: 'status', label: 'סטטוס' },
-  { value: 'area', label: 'אזור' }
+  { value: 'nickname', label: 'כינוי הבניין' },
+  { value: 'status', label: 'סטטוס שיקום' },
+  { value: 'bldSivug', label: 'סיווג' },
+  { value: 'statusSummary', label: 'תמונת מצב (תמצית מצב)' }
 ];
 
 const EXCEL_LABEL_OVERRIDES = {
@@ -98,6 +94,11 @@ export default function BuildingsPage() {
   };
 
   const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
+  const getSivugLabel = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    const match = sivugOptions.find((option) => String(option.value) === String(value));
+    return match ? match.label : String(value);
+  };
 
   useEffect(() => {
     const loadStatusOptions = async () => {
@@ -405,13 +406,19 @@ export default function BuildingsPage() {
       if (field === 'houseNumber') {
         result = (a.houseNumber || '').localeCompare(b.houseNumber || '', 'he');
       } else if (field === 'status') {
-        result = (a.status || '').localeCompare(b.status || '', 'he');
+        const aLabel = statusLabelMap[a.status] || a.status || '';
+        const bLabel = statusLabelMap[b.status] || b.status || '';
+        result = aLabel.localeCompare(bLabel, 'he');
       } else if (field === 'street') {
         result = (a.street || '').localeCompare(b.street || '', 'he');
       } else if (field === 'nickname') {
         result = (a.nickname || '').localeCompare(b.nickname || '', 'he');
-      } else if (field === 'area') {
-        result = (a.area || '').localeCompare(b.area || '', 'he');
+      } else if (field === 'bldSivug') {
+        const aLabel = getSivugLabel(a.bldSivug);
+        const bLabel = getSivugLabel(b.bldSivug);
+        result = aLabel.localeCompare(bLabel, 'he');
+      } else if (field === 'statusSummary') {
+        result = (a.statusSummary || '').localeCompare(b.statusSummary || '', 'he');
       }
       return direction === 'desc' ? -result : result;
     };
@@ -425,7 +432,7 @@ export default function BuildingsPage() {
       return 0;
     });
     return copy;
-  }, [buildings, sortCriteria]);
+  }, [buildings, sortCriteria, sivugOptions, statusLabelMap]);
 
   const tryParseJson = (value) => {
     if (!value) return null;
@@ -510,7 +517,7 @@ export default function BuildingsPage() {
       <section className="filters-card">
         <form className="filters-grid" onSubmit={handleSearch}>
           <label>
-            <span>{BUILDING_FIELD_LABELS.street}</span>
+            <span>שם רחוב</span>
             <select name="streetId" value={filters.streetId} onChange={handleFilterChange}>
               <option value="">בחר רחוב</option>
               {streets.map((street) => (
@@ -521,7 +528,7 @@ export default function BuildingsPage() {
             </select>
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.houseNumber}</span>
+            <span>מספר בית</span>
             <input
               type="text"
               name="houseNumber"
@@ -531,7 +538,7 @@ export default function BuildingsPage() {
             />
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.nickname}</span>
+            <span>כינוי הבניין</span>
             <input
               type="text"
               name="nickname"
@@ -541,9 +548,9 @@ export default function BuildingsPage() {
             />
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.status}</span>
+            <span>סטטוס שיקום</span>
             <select name="status" value={filters.status} onChange={handleFilterChange}>
-              <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
+              <option value="">בחר סטטוס שיקום</option>
               {statuses.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -552,17 +559,18 @@ export default function BuildingsPage() {
             </select>
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.area}</span>
-            <input
-              type="text"
-              name="area"
-              value={filters.area}
-              onChange={handleFilterChange}
-              placeholder={BUILDING_FIELD_PLACEHOLDERS.area}
-            />
+            <span>סיווג</span>
+            <select name="bldSivug" value={filters.bldSivug} onChange={handleFilterChange}>
+              <option value="">בחר סיווג</option>
+              {sivugOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="full-span">
-            <span>{BUILDING_FIELD_LABELS.statusSummary}</span>
+            <span>תמונת מצב (תמצית מצב)</span>
             <input
               type="text"
               name="statusSummary"
@@ -733,12 +741,7 @@ export default function BuildingsPage() {
                   const statusValue = building.status || 'Unknown';
                   const statusLabel = statusLabelMap[statusValue] || statusValue;
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
-                  const sivugLabel =
-                    building.bldSivug === null || building.bldSivug === undefined
-                      ? '—'
-                      : sivugOptions.find(
-                          (option) => String(option.value) === String(building.bldSivug)
-                        )?.label || String(building.bldSivug);
+                  const sivugLabel = getSivugLabel(building.bldSivug);
                   return (
                     <Fragment key={building.id}>
                       <tr
@@ -765,6 +768,14 @@ export default function BuildingsPage() {
                             className="ghost"
                             onClick={(event) => {
                               event.stopPropagation();
+                              if (
+                                selectedBuilding &&
+                                selectedBuilding.id === building.id &&
+                                selectedView === 'all'
+                              ) {
+                                setSelectedBuilding(null);
+                                return;
+                              }
                               loadBuildingDetails(building.id, 'all');
                             }}
                           >
