@@ -48,6 +48,7 @@ export default function BuildingsPage() {
   const [error, setError] = useState('');
   const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
   const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
+  const [sivugOptions, setSivugOptions] = useState([]);
   const [streets, setStreets] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [detailError, setDetailError] = useState('');
@@ -58,10 +59,8 @@ export default function BuildingsPage() {
     streetId: '',
     bldNum: '',
     bldName: '',
-    area: '',
     statusSummary: '',
     shikumStatusId: '',
-    complaints: '',
     category: ''
   });
   const [editFieldValues, setEditFieldValues] = useState({});
@@ -134,7 +133,17 @@ export default function BuildingsPage() {
       }
     };
 
+    const loadSivugOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_Sivug');
+        setSivugOptions(options);
+      } catch {
+        setSivugOptions([]);
+      }
+    };
+
     loadStatusOptions();
+    loadSivugOptions();
     loadStreets();
     loadBuildings(initialFilters);
   }, []);
@@ -259,9 +268,36 @@ export default function BuildingsPage() {
     event.preventDefault();
     setActionMessage('');
     try {
+      if (!createForm.streetId) {
+        throw new Error('יש לבחור רחוב מהרשימה');
+      }
+      if (!createForm.bldNum.trim()) {
+        throw new Error('יש להזין מספר בית');
+      }
+      if (!createForm.bldName.trim()) {
+        throw new Error('יש להזין כינוי הבניין');
+      }
+      if (!createForm.shikumStatusId) {
+        throw new Error('יש לבחור סטטוס שיקום');
+      }
+      if (!createForm.category) {
+        throw new Error('יש לבחור סיווג');
+      }
+      if (!createForm.statusSummary.trim()) {
+        throw new Error('יש להזין תמונת מצב');
+      }
       const statusOption = statusOptions.find(
         (option) => String(option.id) === createForm.shikumStatusId
       );
+      if (!statusOption) {
+        throw new Error('סטטוס השיקום שבחרת אינו חוקי');
+      }
+      const sivugOption = sivugOptions.find(
+        (option) => String(option.value) === createForm.category
+      );
+      if (!sivugOption) {
+        throw new Error('הסיווג שבחרת אינו חוקי');
+      }
       const streetOption = streets.find((street) => String(street.streetId) === createForm.streetId);
       if (!streetOption) {
         throw new Error('יש לבחור רחוב מהרשימה');
@@ -270,22 +306,19 @@ export default function BuildingsPage() {
         fldId: createForm.fldId,
         streetId: streetOption.streetId,
         houseNumber: createForm.bldNum,
-        nickname: createForm.bldName || streetOption.name,
-        area: createForm.area,
+        nickname: createForm.bldName,
         bldSivug: createForm.category,
-        status: statusOption ? statusOption.value : 'Unknown',
+        status: statusOption.value,
         statusSummary: createForm.statusSummary,
-        complaints: createForm.complaints || ''
+        complaints: ''
       });
       setCreateForm({
         fldId: '',
         streetId: '',
         bldNum: '',
         bldName: '',
-        area: '',
         statusSummary: '',
         shikumStatusId: '',
-        complaints: '',
         category: ''
       });
       setShowCreateForm(false);
@@ -583,22 +616,24 @@ export default function BuildingsPage() {
               />
             </label>
             <label>
-              כינוי
+              כינוי הבניין
               <input
                 name="bldName"
                 value={createForm.bldName}
                 onChange={handleCreateChange}
                 placeholder={BUILDING_FIELD_PLACEHOLDERS.nickname}
+                required
               />
             </label>
             <label>
-              סטטוס
+              סטטוס שיקום
               <select
                 name="shikumStatusId"
                 value={createForm.shikumStatusId}
                 onChange={handleCreateChange}
+                required
               >
-                <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
+                <option value="">בחר סטטוס שיקום</option>
                 {statusOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
@@ -607,21 +642,29 @@ export default function BuildingsPage() {
               </select>
             </label>
             <label>
-              אזור
-              <input
-                name="area"
-                value={createForm.area}
+              סיווג
+              <select
+                name="category"
+                value={createForm.category}
                 onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.area}
-              />
+                required
+              >
+                <option value="">בחר סיווג</option>
+                {sivugOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="full-span">
-              תקציר מצב
+              תמונת מצב (תמצית מצב)
               <textarea
                 name="statusSummary"
                 value={createForm.statusSummary}
                 onChange={handleCreateChange}
                 placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
+                required
               />
             </label>
             <div className="filters-actions">
@@ -677,10 +720,10 @@ export default function BuildingsPage() {
                 <tr>
                   <th>שם רחוב</th>
                   <th>מספר בית</th>
-                  <th>כינוי</th>
-                  <th>סטטוס</th>
-                  <th>אזור</th>
-                  <th>תקציר מצב</th>
+                  <th>כינוי הבניין</th>
+                  <th>סטטוס שיקום</th>
+                  <th>סיווג</th>
+                  <th>תמונת מצב (תמצית מצב)</th>
                   <th>פעולות</th>
                 </tr>
               </thead>
@@ -690,6 +733,12 @@ export default function BuildingsPage() {
                   const statusValue = building.status || 'Unknown';
                   const statusLabel = statusLabelMap[statusValue] || statusValue;
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
+                  const sivugLabel =
+                    building.bldSivug === null || building.bldSivug === undefined
+                      ? '—'
+                      : sivugOptions.find(
+                          (option) => String(option.value) === String(building.bldSivug)
+                        )?.label || String(building.bldSivug);
                   return (
                     <Fragment key={building.id}>
                       <tr
@@ -708,19 +757,9 @@ export default function BuildingsPage() {
                         <td>
                           <span className={`status status-${statusSlug}`}>{statusLabel}</span>
                         </td>
-                        <td>{building.area || '—'}</td>
+                        <td>{sivugLabel}</td>
                         <td>{building.statusSummary || '—'}</td>
                         <td>
-                          <button
-                            type="button"
-                            className="ghost"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              loadBuildingDetails(building.id, 'summary');
-                            }}
-                          >
-                            הצג
-                          </button>
                           <button
                             type="button"
                             className="ghost"
@@ -729,7 +768,7 @@ export default function BuildingsPage() {
                               loadBuildingDetails(building.id, 'all');
                             }}
                           >
-                            הצג הכל
+                            הצג
                           </button>
                           {canEdit && (
                             <button
