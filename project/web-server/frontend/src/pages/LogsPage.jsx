@@ -430,12 +430,15 @@ export default function LogsPage() {
                   summary: displayOrDash(summary),
                   user: displayOrDash(log.username),
                   date: formatDate(timestamp),
-                  actions: (
+                      actions: (
                     <>
                       <button
                         type="button"
                         className="ghost"
-                        onClick={() => handleShowLog(log)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleShowLog(log);
+                        }}
                       >
                         הצג
                       </button>
@@ -443,7 +446,10 @@ export default function LogsPage() {
                         type="button"
                         className="danger"
                         aria-label={`מחק לוג ${log.id}`}
-                        onClick={() => handleDeleteLog(log.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteLog(log.id);
+                        }}
                       >
                         מחק
                       </button>
@@ -452,7 +458,11 @@ export default function LogsPage() {
                 };
                 return (
                   <Fragment key={log.id}>
-                    <tr key={log.id}>
+                    <tr
+                      key={log.id}
+                      className={isExpanded ? 'active' : ''}
+                      onClick={() => handleShowLog(log)}
+                    >
                       {LOG_TABLE_COLUMNS.map((col) => (
                         <td key={col.key}>{row[col.key]}</td>
                       ))}
