@@ -35,17 +35,6 @@ const normalizeStatusValue = (value, statusIdToValue = {}) => {
   return 'Unknown';
 };
 
-const SORT_FIELDS = [
-  { value: 'street', label: 'שם רחוב' },
-  { value: 'houseNumber', label: 'מספר בית' },
-  { value: 'nickname', label: 'כינוי הבניין' },
-  { value: 'status', label: 'סטטוס שיקום' },
-  { value: 'bldSivug', label: 'סיווג' },
-  { value: 'summary', label: 'תמונת מצב (תמצית מצב)' },
-  { value: 'user', label: 'משתמש' },
-  { value: 'date', label: 'תאריך שינוי' }
-];
-
 const baseFilters = {
   buildingId: '',
   user: '',
@@ -109,10 +98,7 @@ export default function LogsPage() {
   const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
   const [sivugOptions, setSivugOptions] = useState([]);
   const [expandedLogId, setExpandedLogId] = useState(null);
-  const [sortCriteria, setSortCriteria] = useState([
-    { field: 'date', direction: 'desc' },
-    { field: 'street', direction: 'asc' }
-  ]);
+  const [sortConfig, setSortConfig] = useState({ field: 'date', direction: 'desc' });
   const statusIdToValue = useMemo(
     () =>
       statusOptions.reduce((acc, opt) => {
@@ -172,25 +158,23 @@ export default function LogsPage() {
     setExpandedLogId((prev) => (prev === log.id ? null : log.id));
   };
 
-  const handleSortFieldChange = (index, value) => {
-    setSortCriteria((prev) => {
-      const next = [...prev];
-      next.forEach((c, i) => {
-        if (i !== index && c.field === value) {
-          next[i] = { ...next[i], field: '' };
-        }
-      });
-      next[index] = { ...next[index], field: value };
-      return next;
+  const handleSortClick = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: field === 'date' ? 'desc' : 'asc' };
     });
   };
 
-  const handleSortDirectionChange = (index, value) => {
-    setSortCriteria((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], direction: value };
-      return next;
-    });
+  const getSortIndicator = (field) => {
+    if (sortConfig.field !== field) return '';
+    return sortConfig.direction === 'asc' ? '∧' : '∨';
+  };
+
+  const getAriaSort = (field) => {
+    if (sortConfig.field !== field) return 'none';
+    return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
   };
 
   useEffect(() => {
@@ -300,8 +284,17 @@ export default function LogsPage() {
 
   const sortedLogs = useMemo(() => {
     if (!logs || logs.length === 0) return [];
-    const criteria = sortCriteria.filter((c) => c.field);
-    if (criteria.length === 0) return logs;
+    if (!sortConfig.field) return logs;
+
+    const compareValues = (aValue, bValue, { numeric = false } = {}) => {
+      const aMissing = aValue === null || aValue === undefined || aValue === '';
+      const bMissing = bValue === null || bValue === undefined || bValue === '';
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (numeric) return aValue - bValue;
+      return String(aValue).localeCompare(String(bValue), 'he');
+    };
 
     const getSortValue = (log, field) => {
       const snapshot = log.snapshot || {};
@@ -316,7 +309,7 @@ export default function LogsPage() {
       const statusLabel = statusLabelMap[statusValue] || statusValue || '';
       const summary = snapshot.statusSummary || log.buildingStatusSummary || log.description || '';
       const user = log.username || '';
-      const dateValue = log.createdAt ? new Date(log.createdAt).getTime() : 0;
+      const dateValue = log.createdAt ? new Date(log.createdAt).getTime() : null;
 
       switch (field) {
         case 'street':
@@ -340,28 +333,26 @@ export default function LogsPage() {
       }
     };
 
-    const compare = (a, b, field, direction) => {
-      const aValue = getSortValue(a, field);
-      const bValue = getSortValue(b, field);
-      let result = 0;
-      if (field === 'date') {
-        result = (aValue || 0) - (bValue || 0);
-      } else {
-        result = String(aValue || '').localeCompare(String(bValue || ''), 'he');
-      }
-      return direction === 'desc' ? -result : result;
-    };
-
     const copy = [...logs];
     copy.sort((a, b) => {
-      for (const c of criteria) {
-        const cmp = compare(a, b, c.field, c.direction);
-        if (cmp !== 0) return cmp;
+      const aValue = getSortValue(a, sortConfig.field);
+      const bValue = getSortValue(b, sortConfig.field);
+      const cmp = compareValues(aValue, bValue, { numeric: sortConfig.field === 'date' });
+      if (cmp !== 0) return sortConfig.direction === 'desc' ? -cmp : cmp;
+      if (sortConfig.field !== 'date') {
+        const dateCmp = compareValues(getSortValue(a, 'date'), getSortValue(b, 'date'), {
+          numeric: true
+        });
+        if (dateCmp !== 0) return -dateCmp;
+      }
+      if (sortConfig.field !== 'street') {
+        const streetCmp = compareValues(getSortValue(a, 'street'), getSortValue(b, 'street'));
+        if (streetCmp !== 0) return streetCmp;
       }
       return 0;
     });
     return copy;
-  }, [logs, sortCriteria, statusIdToValue, statusLabelMap, sivugOptions]);
+  }, [logs, sortConfig, statusIdToValue, statusLabelMap, sivugOptions]);
 
   return (
     <main className="app logs-app">
@@ -460,44 +451,29 @@ export default function LogsPage() {
       </section>
 
       <section className="panel">
-        <h3>מיון</h3>
-        <div className="form-grid">
-          {sortCriteria.map((crit, idx) => (
-            <div key={idx}>
-              <label>
-                {`עדיפות ${idx + 1}`}
-                <select value={crit.field} onChange={(e) => handleSortFieldChange(idx, e.target.value)}>
-                  <option value="">ללא</option>
-                  {SORT_FIELDS.map((field) => (
-                    <option key={field.value} value={field.value}>
-                      {field.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                סדר
-                <select
-                  value={crit.direction}
-                  onChange={(e) => handleSortDirectionChange(idx, e.target.value)}
-                >
-                  <option value="asc">עולה</option>
-                  <option value="desc">יורד</option>
-                </select>
-              </label>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
         <div className="table-wrapper">
           <table>
             <thead>
               <tr>
-                {LOG_TABLE_COLUMNS.map((col) => (
-                  <th key={col.key}>{col.label}</th>
-                ))}
+                {LOG_TABLE_COLUMNS.map((col) => {
+                  if (col.key === 'actions') {
+                    return <th key={col.key}>{col.label}</th>;
+                  }
+                  return (
+                    <th key={col.key} aria-sort={getAriaSort(col.key)}>
+                      <button
+                        type="button"
+                        className="sort-button"
+                        onClick={() => handleSortClick(col.key)}
+                      >
+                        {col.label}
+                        <span className="sort-indicator" aria-hidden="true">
+                          {getSortIndicator(col.key)}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>

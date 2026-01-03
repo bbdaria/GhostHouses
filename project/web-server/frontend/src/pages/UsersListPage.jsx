@@ -15,14 +15,6 @@ const todayIsoIsrael = () =>
     .format(new Date())
     .replace(/\//g, '-');
 
-const SORT_FIELDS = [
-  { value: 'username', label: 'שם משתמש' },
-  { value: 'email', label: 'דוא"ל' },
-  { value: 'role', label: 'תפקיד' },
-  { value: 'twoFactorEnabled', label: 'OTP' },
-  { value: 'createdAt', label: 'תאריך יצירה' }
-];
-
 export default function UsersListPage() {
   const { id: selectedParamId } = useParams();
   const [filters, setFilters] = useState({
@@ -52,10 +44,7 @@ export default function UsersListPage() {
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
   const [passwordMessage, setPasswordMessage] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [sortCriteria, setSortCriteria] = useState([
-    { field: 'username', direction: 'asc' },
-    { field: 'role', direction: 'asc' }
-  ]);
+  const [sortConfig, setSortConfig] = useState({ field: 'username', direction: 'asc' });
   useDocumentTitle('ניהול משתמשים - מוקד המבנים העירוני');
 
   useEffect(() => {
@@ -226,66 +215,72 @@ export default function UsersListPage() {
     }
   };
 
-  const handleSortFieldChange = (index, value) => {
-    setSortCriteria((prev) => {
-      const next = [...prev];
-      next.forEach((c, i) => {
-        if (i !== index && c.field === value) {
-          next[i] = { ...next[i], field: '' };
-        }
-      });
-      next[index] = { ...next[index], field: value };
-      return next;
+  const handleSortClick = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: 'asc' };
     });
   };
 
-  const handleSortDirectionChange = (index, value) => {
-    setSortCriteria((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], direction: value };
-      return next;
-    });
+  const getSortIndicator = (field) => {
+    if (sortConfig.field !== field) return '';
+    return sortConfig.direction === 'asc' ? '∧' : '∨';
+  };
+
+  const getAriaSort = (field) => {
+    if (sortConfig.field !== field) return 'none';
+    return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
   };
 
   const sortedUsers = useMemo(() => {
     if (!users || users.length === 0) return [];
-    const criteria = sortCriteria.filter((c) => c.field);
-    if (criteria.length === 0) return users;
+    if (!sortConfig.field) return users;
 
-    const compare = (a, b, field, direction) => {
-      let result = 0;
+    const compareValues = (aValue, bValue, { numeric = false } = {}) => {
+      const aMissing = aValue === null || aValue === undefined || aValue === '';
+      const bMissing = bValue === null || bValue === undefined || bValue === '';
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (numeric) return aValue - bValue;
+      return String(aValue).localeCompare(String(bValue), 'he');
+    };
 
-      if (field === 'createdAt') {
-        const ad = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bd = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        result = ad - bd;
-      } else if (field === 'twoFactorEnabled') {
-        const av = a.twoFactorEnabled ? 1 : 0;
-        const bv = b.twoFactorEnabled ? 1 : 0;
-        result = av - bv;
-      } else if (field === 'role') {
-        const av = ROLE_LABELS[a.role] || a.role || '';
-        const bv = ROLE_LABELS[b.role] || b.role || '';
-        result = av.localeCompare(bv, 'he');
-      } else {
-        const av = (a[field] || '').toString();
-        const bv = (b[field] || '').toString();
-        result = av.localeCompare(bv, 'he');
+    const getSortValue = (user, field) => {
+      switch (field) {
+        case 'createdAt':
+          return user.createdAt ? new Date(user.createdAt).getTime() : null;
+        case 'twoFactorEnabled':
+          return user.twoFactorEnabled ? 1 : 0;
+        case 'role':
+          return ROLE_LABELS[user.role] || user.role || '';
+        default:
+          return user[field] || '';
       }
-
-      return direction === 'desc' ? -result : result;
     };
 
     const copy = [...users];
     copy.sort((a, b) => {
-      for (const c of criteria) {
-        const cmp = compare(a, b, c.field, c.direction);
-        if (cmp !== 0) return cmp;
+      const aValue = getSortValue(a, sortConfig.field);
+      const bValue = getSortValue(b, sortConfig.field);
+      const cmp = compareValues(aValue, bValue, {
+        numeric: sortConfig.field === 'createdAt' || sortConfig.field === 'twoFactorEnabled'
+      });
+      if (cmp !== 0) return sortConfig.direction === 'desc' ? -cmp : cmp;
+      if (sortConfig.field !== 'username') {
+        const nameCmp = compareValues(getSortValue(a, 'username'), getSortValue(b, 'username'));
+        if (nameCmp !== 0) return nameCmp;
+      }
+      if (sortConfig.field !== 'role') {
+        const roleCmp = compareValues(getSortValue(a, 'role'), getSortValue(b, 'role'));
+        if (roleCmp !== 0) return roleCmp;
       }
       return 0;
     });
     return copy;
-  }, [users, sortCriteria]);
+  }, [users, sortConfig]);
 
   return (
     <main className="app users-app">
@@ -390,48 +385,54 @@ export default function UsersListPage() {
           <div className="panel-header">
             <h2>משתמשים ({users.length})</h2>
           </div>
-          <section className="panel">
-            <h3>מיון</h3>
-            <div className="form-grid">
-              {sortCriteria.map((crit, idx) => (
-                <div key={idx}>
-                  <label>
-                    {`עדיפות ${idx + 1}`}
-                    <select
-                      value={crit.field}
-                      onChange={(e) => handleSortFieldChange(idx, e.target.value)}
-                    >
-                      <option value="">ללא</option>
-                      {SORT_FIELDS.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    סדר
-                    <select
-                      value={crit.direction}
-                      onChange={(e) => handleSortDirectionChange(idx, e.target.value)}
-                    >
-                      <option value="asc">עולה</option>
-                      <option value="desc">יורד</option>
-                    </select>
-                  </label>
-                </div>
-              ))}
-            </div>
-          </section>
           <div className="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th>שם משתמש</th>
-                  <th>דוא"ל</th>
-                  <th>תפקיד</th>
-                  <th>OTP</th>
-                  <th>תאריך יצירה</th>
+                  <th aria-sort={getAriaSort('username')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('username')}>
+                      שם משתמש
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('username')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('email')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('email')}>
+                      דוא"ל
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('email')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('role')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('role')}>
+                      תפקיד
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('role')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('twoFactorEnabled')}>
+                    <button
+                      type="button"
+                      className="sort-button"
+                      onClick={() => handleSortClick('twoFactorEnabled')}
+                    >
+                      OTP
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('twoFactorEnabled')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('createdAt')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('createdAt')}>
+                      תאריך יצירה
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('createdAt')}
+                      </span>
+                    </button>
+                  </th>
                   <th>פעולות</th>
                 </tr>
               </thead>
