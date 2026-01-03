@@ -187,9 +187,9 @@ public class Building
     public string? SubQuarter { get; set; }
 
     [Column(TypeName = "text")]
-    [Display(Name = "א\"ס")]
-    [FieldSpec(Category = "פרטים מזהים", FieldName = "א\"ס")]
-    // Category: פרטים מזהים | Field Name: א"ס | Select Table Name: — | Event Log: No
+    [Display(Name = "אזור סטטיסטי")]
+    [FieldSpec(Category = "פרטים מזהים", FieldName = "אזור סטטיסטי")]
+    // Category: פרטים מזהים | Field Name: אזור סטטיסטי | Select Table Name: — | Event Log: No
     public string? StatisticalArea { get; set; }
 
     [Column(TypeName = "integer")]

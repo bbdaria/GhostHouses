@@ -14,7 +14,11 @@ public record BuildingFilterParameters(
     BuildingStatus? Status = null,
     int? BldSivug = null,
     string? Neighborhood = null,
-    string? StatusSummary = null);
+    string? StatusSummary = null,
+    int? SugBaalut = null,
+    string? Quarter = null,
+    string? SubQuarter = null,
+    string? StatisticalArea = null);
 
 public record BuildingSummaryDto(
     int Id,
@@ -26,7 +30,11 @@ public record BuildingSummaryDto(
     string Neighborhood,
     BuildingStatus ShikumStatus,
     int? BldSivug,
-    string StatusSummary);
+    string StatusSummary,
+    int? SugBaalut,
+    string? Quarter,
+    string? SubQuarter,
+    string? StatisticalArea);
 
 public record BuildingDetailDto(
     BuildingSummaryDto Summary,

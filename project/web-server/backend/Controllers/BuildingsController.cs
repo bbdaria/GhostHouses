@@ -79,6 +79,26 @@ public class BuildingsController : ApiControllerBase
             query = query.Where(b => EF.Functions.ILike(b.StatusSummary, $"%{filter.StatusSummary}%"));
         }
 
+        if (filter.SugBaalut.HasValue)
+        {
+            query = query.Where(b => b.SugBaalut == filter.SugBaalut.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Quarter))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.Quarter, $"%{filter.Quarter}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.SubQuarter))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.SubQuarter, $"%{filter.SubQuarter}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StatisticalArea))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.StatisticalArea, $"%{filter.StatisticalArea}%"));
+        }
+
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(b => b.StreetName)
@@ -95,7 +115,11 @@ public class BuildingsController : ApiControllerBase
                 b.Neighborhood,
                 b.ShikumStatus,
                 b.BldSivug,
-                b.StatusSummary))
+                b.StatusSummary,
+                b.SugBaalut,
+                b.Quarter,
+                b.SubQuarter,
+                b.StatisticalArea))
             .ToListAsync(cancellationToken);
 
         return Ok(new PaginatedResult<BuildingSummaryDto>(items, total, filter.Page, filter.PageSize));
@@ -141,7 +165,21 @@ public class BuildingsController : ApiControllerBase
         var fields = BuildFieldsSnapshot(building);
 
         var detail = new BuildingDetailDto(
-            new BuildingSummaryDto(building.Id, building.FldId, building.StreetCode, building.BuildingName, building.Street?.Name ?? building.StreetName, building.HouseNumber, building.Neighborhood, building.ShikumStatus, building.BldSivug, building.StatusSummary),
+            new BuildingSummaryDto(
+                building.Id,
+                building.FldId,
+                building.StreetCode,
+                building.BuildingName,
+                building.Street?.Name ?? building.StreetName,
+                building.HouseNumber,
+                building.Neighborhood,
+                building.ShikumStatus,
+                building.BldSivug,
+                building.StatusSummary,
+                building.SugBaalut,
+                building.Quarter,
+                building.SubQuarter,
+                building.StatisticalArea),
             building.StatusSummary,
             IsraelTime.Convert(building.StatusSummaryUpdatedAt),
             building.Complaints,
@@ -199,6 +237,26 @@ public class BuildingsController : ApiControllerBase
         if (!string.IsNullOrWhiteSpace(filter.StatusSummary))
         {
             query = query.Where(b => EF.Functions.ILike(b.StatusSummary, $"%{filter.StatusSummary}%"));
+        }
+
+        if (filter.SugBaalut.HasValue)
+        {
+            query = query.Where(b => b.SugBaalut == filter.SugBaalut.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Quarter))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.Quarter, $"%{filter.Quarter}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.SubQuarter))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.SubQuarter, $"%{filter.SubQuarter}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StatisticalArea))
+        {
+            query = query.Where(b => EF.Functions.ILike(b.StatisticalArea, $"%{filter.StatisticalArea}%"));
         }
 
         var buildings = await query
@@ -351,7 +409,11 @@ public class BuildingsController : ApiControllerBase
             building.Neighborhood,
             building.ShikumStatus,
             building.BldSivug,
-            building.StatusSummary));
+            building.StatusSummary,
+            building.SugBaalut,
+            building.Quarter,
+            building.SubQuarter,
+            building.StatisticalArea));
     }
 
     [HttpPut("{id:int}")]
