@@ -4,25 +4,14 @@ import api from '../api/client.js';
 import { ROLE_LABELS } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
-const todayIsoIsrael = () =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-    .format(new Date())
-    .replace(/\//g, '-');
-
 export default function UsersListPage() {
   const { id: selectedParamId } = useParams();
   const [filters, setFilters] = useState({
     username: '',
     email: '',
     role: '',
-    startDate: todayIsoIsrael(),
-    endDate: todayIsoIsrael()
+    startDate: '',
+    endDate: ''
   });
   const [users, setUsers] = useState([]);
   const [error, setError] = useState('');
@@ -173,8 +162,8 @@ export default function UsersListPage() {
       username: '',
       email: '',
       role: '',
-      startDate: todayIsoIsrael(),
-      endDate: todayIsoIsrael()
+      startDate: '',
+      endDate: ''
     });
     loadUsers();
   };
