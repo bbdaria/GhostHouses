@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
@@ -113,6 +113,15 @@ export default function BuildingsPage() {
     }
   };
 
+  const loadStreets = useCallback(async () => {
+    try {
+      const data = await api.fetchStreets();
+      setStreets(data || []);
+    } catch {
+      setStreets([]);
+    }
+  }, []);
+
   const expandUpdatedRange = (filterValues) => {
     const next = { ...filterValues };
     if (filterValues.updatedFrom) {
@@ -172,18 +181,6 @@ export default function BuildingsPage() {
       }
     };
 
-    const loadStreets = async () => {
-      try {
-        const data = await api.fetchStreets();
-        const hasNoStreet = data.some((street) => street.name === NO_STREET_OPTION.name);
-        const hasNoStreetId = data.some((street) => String(street.streetId) === String(NO_STREET_OPTION.streetId));
-        const withNoStreet = hasNoStreet || hasNoStreetId ? data : [NO_STREET_OPTION, ...data];
-        setStreets(withNoStreet);
-      } catch {
-        setStreets([NO_STREET_OPTION]);
-      }
-    };
-
     const loadSivugOptions = async () => {
       try {
         const options = await api.fetchSelectTable('Tbl_Sivug');
@@ -207,7 +204,13 @@ export default function BuildingsPage() {
     loadOwnershipOptions();
     loadStreets();
     loadBuildings(initialFilters);
-  }, []);
+  }, [loadStreets]);
+
+  useEffect(() => {
+    if (showCreateForm) {
+      loadStreets();
+    }
+  }, [loadStreets, showCreateForm]);
 
   useEffect(() => {
     if (!selectedBuilding) {
@@ -808,7 +811,13 @@ export default function BuildingsPage() {
           <form className="form-grid" onSubmit={handleCreateBuilding}>
             <label>
               שם רחוב
-              <select name="streetId" value={createForm.streetId} onChange={handleCreateChange} required>
+              <select
+                name="streetId"
+                value={createForm.streetId}
+                onChange={handleCreateChange}
+                onFocus={loadStreets}
+                required
+              >
                 <option value="">בחר רחוב</option>
                 {streets.map((street) => (
                   <option key={street.streetId} value={street.streetId}>

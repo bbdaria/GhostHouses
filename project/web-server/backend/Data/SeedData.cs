@@ -8,6 +8,9 @@ namespace WebServer.Data;
 
 public static class SeedData
 {
+    private const int NoStreetId = -1;
+    private const string NoStreetName = "ללא שם רחוב";
+
     public static async Task InitializeAsync(IServiceProvider services, CancellationToken cancellationToken = default)
     {
         using var scope = services.CreateScope();
@@ -67,6 +70,8 @@ public static class SeedData
             Console.WriteLine("[SeedData] Streets already present, skipping street seed.");
         }
 
+        await EnsureNoStreetAsync(context, cancellationToken);
+
         if (!await context.Buildings.AnyAsync(cancellationToken))
         {
             Console.WriteLine("[SeedData] Seeding buildings from Excel...");
@@ -76,5 +81,21 @@ public static class SeedData
         {
             Console.WriteLine("[SeedData] Buildings already present, skipping building seed.");
         }
+    }
+
+    private static async Task EnsureNoStreetAsync(AppDbContext context, CancellationToken cancellationToken)
+    {
+        if (await context.Streets.AnyAsync(s => s.StreetId == NoStreetId, cancellationToken))
+        {
+            return;
+        }
+
+        context.Streets.Add(new Street
+        {
+            StreetId = NoStreetId,
+            Name = NoStreetName
+        });
+        await context.SaveChangesAsync(cancellationToken);
+        Console.WriteLine("[SeedData] Added 'ללא שם רחוב' to streets list.");
     }
 }
