@@ -802,22 +802,6 @@ export default function BuildingsPage() {
               />
             </label>
             <label>
-              סטטוס שיקום
-              <select
-                name="shikumStatusId"
-                value={createForm.shikumStatusId}
-                onChange={handleCreateChange}
-                required
-              >
-                <option value="">בחר סטטוס שיקום</option>
-                {statusOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
               סיווג
               <select
                 name="category"
@@ -828,6 +812,22 @@ export default function BuildingsPage() {
                 <option value="">בחר סיווג</option>
                 {sivugOptions.map((option) => (
                   <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              סטטוס שיקום
+              <select
+                name="shikumStatusId"
+                value={createForm.shikumStatusId}
+                onChange={handleCreateChange}
+                required
+              >
+                <option value="">בחר סטטוס שיקום</option>
+                {statusOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
                     {option.label}
                   </option>
                 ))}
