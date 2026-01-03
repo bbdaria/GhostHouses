@@ -77,6 +77,16 @@ export default function BuildingsPage() {
   const [selectedView, setSelectedView] = useState('all');
   const [sortConfig, setSortConfig] = useState({ field: 'street', direction: 'asc' });
 
+  const rehabSivugValue = useMemo(() => {
+    const match = sivugOptions.find((option) => option.label === 'ריק ובהליך שיקום');
+    return match ? String(match.value) : '3';
+  }, [sivugOptions]);
+
+  const isRehabStatusRequired = useMemo(() => {
+    if (!createForm.category) return false;
+    return String(createForm.category) === rehabSivugValue;
+  }, [createForm.category, rehabSivugValue]);
+
   const canEdit = useMemo(
     () => user && (user.role === 'Editor' || user.role === 'Admin'),
     [user]
@@ -122,6 +132,16 @@ export default function BuildingsPage() {
     if (value === null || value === undefined || value === '') return '—';
     const match = ownershipOptions.find((option) => String(option.value) === String(value));
     return match ? match.label : String(value);
+  };
+  const formatStatusFieldValue = (field) => {
+    if (!field || field.fieldName !== 'סטטוס שיקום') {
+      return displayOrDash(field?.value);
+    }
+    const value = field.value;
+    if (!value || value === '0' || value === 'Unknown' || value === 'לא ידוע') {
+      return '—';
+    }
+    return value;
   };
   const isRequiredEditColumn = (columnName) => REQUIRED_EDIT_COLUMNS.has(columnName);
 
@@ -318,7 +338,13 @@ export default function BuildingsPage() {
 
   const handleCreateChange = (event) => {
     const { name, value } = event.target;
-    setCreateForm((form) => ({ ...form, [name]: value }));
+    setCreateForm((form) => {
+      const next = { ...form, [name]: value };
+      if (name === 'category' && String(value) !== rehabSivugValue) {
+        next.shikumStatusId = '';
+      }
+      return next;
+    });
   };
 
   const handleCreateBuilding = async (event) => {
@@ -334,7 +360,7 @@ export default function BuildingsPage() {
       if (!createForm.bldName.trim()) {
         throw new Error('יש להזין כינוי הבניין');
       }
-      if (!createForm.shikumStatusId) {
+      if (isRehabStatusRequired && !createForm.shikumStatusId) {
         throw new Error('יש לבחור סטטוס שיקום');
       }
       if (!createForm.category) {
@@ -343,11 +369,14 @@ export default function BuildingsPage() {
       if (!createForm.statusSummary.trim()) {
         throw new Error('יש להזין תמונת מצב');
       }
-      const statusOption = statusOptions.find(
-        (option) => String(option.id) === createForm.shikumStatusId
-      );
-      if (!statusOption) {
-        throw new Error('סטטוס השיקום שבחרת אינו חוקי');
+      let statusOption = null;
+      if (isRehabStatusRequired) {
+        statusOption = statusOptions.find(
+          (option) => String(option.id) === createForm.shikumStatusId
+        );
+        if (!statusOption) {
+          throw new Error('סטטוס השיקום שבחרת אינו חוקי');
+        }
       }
       const sivugOption = sivugOptions.find(
         (option) => String(option.value) === createForm.category
@@ -365,7 +394,7 @@ export default function BuildingsPage() {
         houseNumber: createForm.bldNum,
         nickname: createForm.bldName,
         bldSivug: createForm.category,
-        status: statusOption.value,
+        status: statusOption ? statusOption.value : undefined,
         statusSummary: createForm.statusSummary,
         complaints: ''
       });
@@ -823,7 +852,8 @@ export default function BuildingsPage() {
                 name="shikumStatusId"
                 value={createForm.shikumStatusId}
                 onChange={handleCreateChange}
-                required
+                required={isRehabStatusRequired}
+                disabled={!isRehabStatusRequired}
               >
                 <option value="">בחר סטטוס שיקום</option>
                 {statusOptions.map((option) => (
@@ -964,6 +994,7 @@ export default function BuildingsPage() {
                 {sortedBuildings.map((building) => {
                   const isActive = selectedBuilding && building.id === selectedBuilding.id;
                   const statusValue = building.status || 'Unknown';
+                  const statusMissing = statusValue === 'Unknown';
                   const statusLabel = statusLabelMap[statusValue] || statusValue;
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
                   const sivugLabel = getSivugLabel(building.bldSivug);
@@ -985,7 +1016,11 @@ export default function BuildingsPage() {
                         <td>{building.nickname || '—'}</td>
                         <td>{sivugLabel}</td>
                         <td>
-                          <span className={`status status-${statusSlug}`}>{statusLabel}</span>
+                          {statusMissing ? (
+                            '—'
+                          ) : (
+                            <span className={`status status-${statusSlug}`}>{statusLabel}</span>
+                          )}
                         </td>
                         <td>{ownershipLabel}</td>
                         <td>{building.quarter || '—'}</td>
@@ -1169,7 +1204,7 @@ export default function BuildingsPage() {
                                       <h4>{category}</h4>
                                       <dl>
                                         {sortFieldsForDisplay(fields).map((field) => {
-                                          const value = displayOrDash(field.value);
+                                          const value = formatStatusFieldValue(field);
                                           const titleParts = [];
                                           if (field.selectTableName)
                                             titleParts.push(`טבלת בחירה: ${field.selectTableName}`);
