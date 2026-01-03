@@ -543,6 +543,24 @@ export default function BuildingsPage() {
     }, {});
   }, [selectedBuilding]);
 
+  const sortFieldsForDisplay = (fields) => {
+    if (!Array.isArray(fields)) return [];
+    const fieldPriority = (name) => {
+      if (name === 'סיווג') return 0;
+      if (name === 'סטטוס שיקום') return 1;
+      return 2;
+    };
+    return fields
+      .map((field, index) => ({ field, index }))
+      .sort((a, b) => {
+        const aPriority = fieldPriority(a.field.fieldName);
+        const bPriority = fieldPriority(b.field.fieldName);
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.index - b.index;
+      })
+      .map((entry) => entry.field);
+  };
+
   const getExcelAwareLabel = (fieldName) => {
     if (!fieldName) return '';
     const excelName = EXCEL_LABEL_OVERRIDES[fieldName];
@@ -622,10 +640,10 @@ export default function BuildingsPage() {
             />
           </label>
           <label>
-            <span>סטטוס שיקום</span>
-            <select name="status" value={filters.status} onChange={handleFilterChange}>
-              <option value="">בחר סטטוס שיקום</option>
-              {statuses.map((option) => (
+            <span>סיווג</span>
+            <select name="bldSivug" value={filters.bldSivug} onChange={handleFilterChange}>
+              <option value="">בחר סיווג</option>
+              {sivugOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -633,10 +651,10 @@ export default function BuildingsPage() {
             </select>
           </label>
           <label>
-            <span>סיווג</span>
-            <select name="bldSivug" value={filters.bldSivug} onChange={handleFilterChange}>
-              <option value="">בחר סיווג</option>
-              {sivugOptions.map((option) => (
+            <span>סטטוס שיקום</span>
+            <select name="status" value={filters.status} onChange={handleFilterChange}>
+              <option value="">בחר סטטוס שיקום</option>
+              {statuses.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -868,8 +886,8 @@ export default function BuildingsPage() {
                   <th>שם רחוב</th>
                   <th>מספר בית</th>
                   <th>כינוי הבניין</th>
-                  <th>סטטוס שיקום</th>
                   <th>סיווג</th>
+                  <th>סטטוס שיקום</th>
                   <th>סוג הבעלות</th>
                   <th>רובע</th>
                   <th>תת רובע</th>
@@ -902,10 +920,10 @@ export default function BuildingsPage() {
                         <td>{building.street}</td>
                         <td>{building.houseNumber}</td>
                         <td>{building.nickname || '—'}</td>
+                        <td>{sivugLabel}</td>
                         <td>
                           <span className={`status status-${statusSlug}`}>{statusLabel}</span>
                         </td>
-                        <td>{sivugLabel}</td>
                         <td>{ownershipLabel}</td>
                         <td>{building.quarter || '—'}</td>
                         <td>{building.subQuarter || '—'}</td>
@@ -975,7 +993,7 @@ export default function BuildingsPage() {
                                   <div key={category} className="details-section">
                                     <h4>{category}</h4>
                                     <div className="form-grid">
-                                        {fields.map((field) => {
+                                        {sortFieldsForDisplay(fields).map((field) => {
                                           const columnName = field.columnName;
                                           const fieldName = field.fieldName;
                                           if (!columnName) return null;
@@ -1087,7 +1105,7 @@ export default function BuildingsPage() {
                                     <div key={category} className="details-section">
                                       <h4>{category}</h4>
                                       <dl>
-                                        {fields.map((field) => {
+                                        {sortFieldsForDisplay(fields).map((field) => {
                                           const value = displayOrDash(field.value);
                                           const titleParts = [];
                                           if (field.selectTableName)
