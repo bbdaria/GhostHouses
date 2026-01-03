@@ -145,15 +145,6 @@ export default function LogsPage() {
     }
   };
 
-  const tryParseJson = (value) => {
-    if (!value) return null;
-    try {
-      return JSON.parse(value);
-    } catch {
-      return null;
-    }
-  };
-
   const handleShowLog = (log) => {
     setExpandedLogId((prev) => (prev === log.id ? null : log.id));
   };
@@ -488,25 +479,6 @@ export default function LogsPage() {
                 const snapshot = log.snapshot || {};
                 const changeEntries = Array.isArray(snapshot.changes) ? snapshot.changes : [];
                 const snapshotFields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
-                const fieldsByCategory = snapshotFields.reduce((acc, field) => {
-                  const category = field.category || 'כללי';
-                  if (!acc[category]) acc[category] = [];
-                  acc[category].push(field);
-                  return acc;
-                }, {});
-                const externalData = snapshot.externalData || snapshot.external || {};
-                const externalEntries = [
-                  { key: 'gis', label: 'GIS' },
-                  { key: 'water', label: 'מים' },
-                  { key: 'electricity', label: 'חשמל' },
-                  { key: 'tax', label: 'ארנונה' },
-                  { key: 'complaints106', label: 'מוקד 106' }
-                ]
-                  .map((entry) => ({
-                    ...entry,
-                    snapshot: externalData[entry.key]
-                  }))
-                  .filter((entry) => entry.snapshot);
                 const street = snapshot.streetName || log.buildingStreet || '—';
                 const houseNumber = snapshot.houseNumber || log.buildingHouseNumber || '—';
                 const nickname = snapshot.buildingName || log.buildingNickname || '—';
@@ -609,98 +581,6 @@ export default function LogsPage() {
                                 </table>
                               </div>
                             </div>
-                            {snapshotFields.length > 0 || externalEntries.length > 0 ? (
-                              <>
-                                <div>
-                                  <p className="eyebrow">פרטי מבנה</p>
-                                  <h3>
-                                    {street} {houseNumber}
-                                  </h3>
-                                </div>
-
-                                {Object.keys(fieldsByCategory).length > 0 ? (
-                                  Object.entries(fieldsByCategory).map(([category, fields]) => (
-                                    <div key={category} className="details-section">
-                                      <h4>{category}</h4>
-                                      <dl>
-                                        {fields.map((field) => {
-                                          const value = displayOrDash(field.value);
-                                          const titleParts = [];
-                                          if (field.selectTableName)
-                                            titleParts.push(`טבלת בחירה: ${field.selectTableName}`);
-                                          return (
-                                            <div key={`${field.columnName}-${field.fieldName}`}>
-                                              <dt title={titleParts.join(' | ')}>
-                                                {getExcelAwareLabel(field.fieldName)}
-                                              </dt>
-                                              <dd>{value}</dd>
-                                            </div>
-                                          );
-                                        })}
-                                      </dl>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="muted">אין שדות להצגה.</p>
-                                )}
-
-                                <div className="details-section">
-                                  <h4>נתונים ממערכות חיצוניות</h4>
-                                  {externalEntries.length === 0 && <p className="muted">אין נתונים.</p>}
-                                  {externalEntries.map((entry) => {
-                                    const payload = entry.snapshot?.payload;
-                                    const parsed = typeof payload === 'string' ? tryParseJson(payload) : null;
-                                    const status = parsed?.status || null;
-                                    const notes = parsed?.notes || null;
-                                    const updatedAt = parsed?.updatedAt || null;
-                                    return (
-                                      <div key={entry.key} className="external-card">
-                                        <div className="external-card__header">
-                                          <strong>{entry.label}</strong>
-                                          <span className="muted small">
-                                            {formatDate(entry.snapshot?.retrievedAt)}
-                                          </span>
-                                        </div>
-                                        <dl>
-                                          <div>
-                                            <dt>סטטוס</dt>
-                                            <dd>{displayOrDash(status)}</dd>
-                                          </div>
-                                          <div>
-                                            <dt>עודכן במקור</dt>
-                                            <dd>{displayOrDash(updatedAt)}</dd>
-                                          </div>
-                                          <div>
-                                            <dt>הערות</dt>
-                                            <dd>{displayOrDash(notes)}</dd>
-                                          </div>
-                                        </dl>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                <div className="details-section">
-                                  <h4>יומן פעולות (אחרונות)</h4>
-                                  {Array.isArray(snapshot.recentLogs) && snapshot.recentLogs.length > 0 ? (
-                                    <ul className="log-list">
-                                      {snapshot.recentLogs.map((entry) => (
-                                        <li key={entry.id || `${entry.actionType}-${entry.createdAt}`}>
-                                          <span>
-                                            {displayOrDash(entry.actionType)} — {displayOrDash(entry.username)}
-                                          </span>
-                                          <span className="muted">{formatDate(entry.createdAt)}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  ) : (
-                                    <p className="muted">אין רישומים.</p>
-                                  )}
-                                </div>
-                              </>
-                            ) : (
-                              <p className="muted">אין נתונים להצגה.</p>
-                            )}
                           </div>
                         </td>
                       </tr>
