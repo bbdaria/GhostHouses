@@ -634,6 +634,7 @@ export default function BuildingsPage() {
     if (!fieldName) return '';
     const excelName = EXCEL_LABEL_OVERRIDES[fieldName];
     if (!excelName || excelName === fieldName) return fieldName;
+    if (excelName === 'ID') return excelName;
     if (excelName === 'תאריך שינוי') return excelName;
     if (excelName === 'קוארדינטות') {
       if (fieldName.includes('אורך')) return 'קוארדינטות (אורך)';
