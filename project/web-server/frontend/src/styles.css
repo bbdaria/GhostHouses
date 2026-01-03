@@ -200,6 +200,10 @@ pre {
   justify-content: flex-end;
 }
 
+.filters-actions.align-right {
+  justify-content: flex-start;
+}
+
 button.primary {
   background: #2563eb;
   color: #fff;
