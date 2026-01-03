@@ -15,6 +15,8 @@ const initialFilters = {
   quarter: '',
   subQuarter: '',
   statisticalArea: '',
+  updatedFrom: '',
+  updatedTo: '',
   statusSummary: ''
 };
 const SORT_FIELDS = [
@@ -40,7 +42,7 @@ const REQUIRED_EDIT_COLUMNS = new Set(
 const EXCEL_LABEL_OVERRIDES = {
   'ID נכס לצורך מערכת זו בלבד': 'ID',
   'תמצית מצב': 'תמונת מצב',
-  'תאריך עדכון תמצית מצב': 'תאריך עדכון סטטוס',
+  'תאריך עדכון תמצית מצב': 'תאריך שינוי',
   'ציון עמידה בסטנדרט': 'ציון',
   'פרטי מחזיקים': 'פרטי מחזיק',
   'האם הייתה צריכת מים ב־6 החודשים האחרונים': 'צריכת מים ב-6 החודשים האחרונים',
@@ -64,7 +66,6 @@ export default function BuildingsPage() {
   const [streets, setStreets] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [detailError, setDetailError] = useState('');
-  const [detailTab, setDetailTab] = useState('summary');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
@@ -81,7 +82,7 @@ export default function BuildingsPage() {
   const [selectTablesByName, setSelectTablesByName] = useState({});
   const [selectTablesLoading, setSelectTablesLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
-  const [selectedView, setSelectedView] = useState('summary');
+  const [selectedView, setSelectedView] = useState('all');
   const [sortCriteria, setSortCriteria] = useState([
     { field: 'street', direction: 'asc' },
     { field: 'houseNumber', direction: 'asc' }
@@ -109,6 +110,17 @@ export default function BuildingsPage() {
     } catch {
       return value;
     }
+  };
+
+  const expandUpdatedRange = (filterValues) => {
+    const next = { ...filterValues };
+    if (filterValues.updatedFrom) {
+      next.updatedFrom = new Date(`${filterValues.updatedFrom}T00:00:00`).toISOString();
+    }
+    if (filterValues.updatedTo) {
+      next.updatedTo = new Date(`${filterValues.updatedTo}T23:59:59.999`).toISOString();
+    }
+    return next;
   };
 
   const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
@@ -251,7 +263,7 @@ export default function BuildingsPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.fetchBuildings(appliedFilters);
+      const data = await api.fetchBuildings(expandUpdatedRange(appliedFilters));
       setBuildings(data);
       if (selectedBuilding) {
         const stillExists = data.find((b) => b.id === selectedBuilding.id);
@@ -266,12 +278,11 @@ export default function BuildingsPage() {
     }
   };
 
-  const loadBuildingDetails = async (id, view = 'summary') => {
+  const loadBuildingDetails = async (id, view = 'all') => {
     setDetailError('');
     try {
       const building = await api.fetchBuilding(id);
       setSelectedBuilding(building);
-      setDetailTab(view);
       setSelectedView(view);
       sessionStorage.setItem(LAST_BUILDING_KEY, String(id));
     } catch (err) {
@@ -299,7 +310,7 @@ export default function BuildingsPage() {
     setExportError('');
     setExporting(true);
     try {
-      const blob = await api.exportBuildings(filters);
+      const blob = await api.exportBuildings(expandUpdatedRange(filters));
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       const dateStamp = new Date().toISOString().slice(0, 10);
@@ -434,7 +445,6 @@ export default function BuildingsPage() {
   const statuses = useMemo(() => statusOptions, [statusOptions]);
 
   const handleTabChange = (tab) => {
-    setDetailTab(tab);
     setSelectedView(tab);
   };
 
@@ -537,6 +547,7 @@ export default function BuildingsPage() {
     if (!fieldName) return '';
     const excelName = EXCEL_LABEL_OVERRIDES[fieldName];
     if (!excelName || excelName === fieldName) return fieldName;
+    if (excelName === 'תאריך שינוי') return excelName;
     if (excelName === 'קוארדינטות') {
       if (fieldName.includes('אורך')) return 'קוארדינטות (אורך)';
       if (fieldName.includes('רוחב')) return 'קוארדינטות (רוחב)';
@@ -671,6 +682,24 @@ export default function BuildingsPage() {
               value={filters.statisticalArea}
               onChange={handleFilterChange}
               placeholder={BUILDING_FIELD_PLACEHOLDERS.statisticalArea}
+            />
+          </label>
+          <label>
+            <span>תאריך שינוי - החל מ</span>
+            <input
+              type="date"
+              name="updatedFrom"
+              value={filters.updatedFrom}
+              onChange={handleFilterChange}
+            />
+          </label>
+          <label>
+            <span>תאריך שינוי - עד</span>
+            <input
+              type="date"
+              name="updatedTo"
+              value={filters.updatedTo}
+              onChange={handleFilterChange}
             />
           </label>
           <label className="full-span">
@@ -845,6 +874,7 @@ export default function BuildingsPage() {
                   <th>רובע</th>
                   <th>תת רובע</th>
                   <th>אזור סטטיסטי</th>
+                  <th>תאריך שינוי</th>
                   <th>תמונת מצב (תמצית מצב)</th>
                   <th>פעולות</th>
                 </tr>
@@ -866,7 +896,7 @@ export default function BuildingsPage() {
                             setSelectedBuilding(null);
                             return;
                           }
-                          loadBuildingDetails(building.id, 'summary');
+                          loadBuildingDetails(building.id, 'all');
                         }}
                       >
                         <td>{building.street}</td>
@@ -880,6 +910,7 @@ export default function BuildingsPage() {
                         <td>{building.quarter || '—'}</td>
                         <td>{building.subQuarter || '—'}</td>
                         <td>{building.statisticalArea || '—'}</td>
+                        <td>{formatLogDate(building.updatedAt)}</td>
                         <td>{building.statusSummary || '—'}</td>
                         <td>
                           <button
@@ -936,7 +967,7 @@ export default function BuildingsPage() {
                       </tr>
                       {isActive && selectedBuilding && (
                         <tr>
-                          <td colSpan="11">
+                          <td colSpan="12">
                             {selectedView === 'edit' && canEdit && (
                               <form onSubmit={handleUpdateBuildingFields} className="details-card">
                                 {selectTablesLoading && <p className="muted">טוען טבלאות בחירה…</p>}
@@ -1042,37 +1073,6 @@ export default function BuildingsPage() {
                                 </div>
                               </form>
                             )}
-                            {selectedView === 'summary' && (
-                              <div className="details-card">
-                                <div>
-                                  <p className="eyebrow">כתובת</p>
-                                  <h3>
-                                    {selectedBuilding.street} {selectedBuilding.houseNumber}
-                                  </h3>
-                                  {selectedBuilding.nickname && (
-                                    <p className="nickname">“{selectedBuilding.nickname}”</p>
-                                  )}
-                                </div>
-                                <dl>
-                                  <div>
-                                    <dt>סטטוס</dt>
-                                    <dd>{statusLabelMap[selectedBuilding.status || 'Unknown']}</dd>
-                                  </div>
-                                  <div>
-                                    <dt>אזור</dt>
-                                    <dd>{selectedBuilding.area || 'לא צוין'}</dd>
-                                  </div>
-                                  <div>
-                                    <dt>עודכן לאחרונה</dt>
-                                    <dd>{formatLogDate(selectedBuilding.updatedAt)}</dd>
-                                  </div>
-                                  <div>
-                                    <dt>תקציר מצב</dt>
-                                    <dd>{selectedBuilding.statusSummary || '—'}</dd>
-                                  </div>
-                                </dl>
-                              </div>
-                            )}
                             {selectedView === 'all' && (
                               <div className="details-card">
                                 <div>
@@ -1169,7 +1169,7 @@ export default function BuildingsPage() {
                 })}
                 {buildings.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="11" className="muted">
+                    <td colSpan="12" className="muted">
                       אין מבנים שעונים על הסינון.
                     </td>
                   </tr>
