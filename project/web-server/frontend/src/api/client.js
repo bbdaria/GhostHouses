@@ -158,7 +158,11 @@ const mapLog = (log) => ({
   buildingNeighborhood: log.buildingNeighborhood,
   buildingBldSivug: log.buildingBldSivug,
   buildingStatus: log.buildingStatus,
-  buildingStatusSummary: log.buildingStatusSummary
+  buildingStatusSummary: log.buildingStatusSummary,
+  buildingSugBaalut: log.buildingSugBaalut,
+  buildingQuarter: log.buildingQuarter,
+  buildingSubQuarter: log.buildingSubQuarter,
+  buildingStatisticalArea: log.buildingStatisticalArea
 });
 
 const mapBuildingDetail = (data) => ({
@@ -363,7 +367,13 @@ const api = {
     if (filters.status) params.append('status', filters.status);
     if (filters.area) params.append('neighborhood', filters.area);
     if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+    if (filters.sugBaalut) params.append('sugBaalut', filters.sugBaalut);
+    if (filters.quarter) params.append('quarter', filters.quarter);
+    if (filters.subQuarter) params.append('subQuarter', filters.subQuarter);
+    if (filters.statisticalArea) params.append('statisticalArea', filters.statisticalArea);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
+    if (filters.updatedFrom) params.append('from', filters.updatedFrom);
+    if (filters.updatedTo) params.append('to', filters.updatedTo);
     if (filters.startDate) params.append('from', filters.startDate);
     if (filters.endDate) params.append('to', filters.endDate);
     const data = await request(`/logs${params.toString() ? `?${params}` : ''}`);

@@ -10,16 +10,6 @@ import {
   STATUS_SELECT_PLACEHOLDER
 } from '../constants.js';
 
-const todayIso = () =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-    .format(new Date())
-    .replace(/\//g, '-');
-
 const normalizeStatusValue = (value, statusIdToValue = {}) => {
   if (value === null || value === undefined) return 'Unknown';
   if (typeof value === 'number') {
@@ -37,15 +27,19 @@ const normalizeStatusValue = (value, statusIdToValue = {}) => {
 
 const baseFilters = {
   buildingId: '',
-  user: '',
   streetId: '',
   houseNumber: '',
   nickname: '',
-  status: '',
   bldSivug: '',
+  status: '',
+  sugBaalut: '',
+  quarter: '',
+  subQuarter: '',
+  statisticalArea: '',
+  updatedFrom: '',
+  updatedTo: '',
   statusSummary: '',
-  startDate: '',
-  endDate: ''
+  user: ''
 };
 
 const EXCEL_LABEL_OVERRIDES = {
@@ -63,24 +57,22 @@ const EXCEL_LABEL_OVERRIDES = {
 
 const buildDefaultFilters = (overrides = {}) => ({
   ...baseFilters,
-  startDate: todayIso(),
-  endDate: todayIso(),
   ...overrides
 });
 
 const expandDateRange = (filters) => {
   const next = { ...filters };
-  if (filters.startDate && filters.endDate && filters.startDate === filters.endDate) {
-    const start = new Date(`${filters.startDate}T00:00:00`).toISOString();
-    const end = new Date(`${filters.endDate}T23:59:59.999`).toISOString();
-    next.startDate = start;
-    next.endDate = end;
+  if (filters.updatedFrom && filters.updatedTo && filters.updatedFrom === filters.updatedTo) {
+    const start = new Date(`${filters.updatedFrom}T00:00:00`).toISOString();
+    const end = new Date(`${filters.updatedTo}T23:59:59.999`).toISOString();
+    next.updatedFrom = start;
+    next.updatedTo = end;
   } else {
-    if (filters.startDate) {
-      next.startDate = new Date(`${filters.startDate}T00:00:00`).toISOString();
+    if (filters.updatedFrom) {
+      next.updatedFrom = new Date(`${filters.updatedFrom}T00:00:00`).toISOString();
     }
-    if (filters.endDate) {
-      next.endDate = new Date(`${filters.endDate}T23:59:59.999`).toISOString();
+    if (filters.updatedTo) {
+      next.updatedTo = new Date(`${filters.updatedTo}T23:59:59.999`).toISOString();
     }
   }
   return next;
@@ -97,8 +89,17 @@ export default function LogsPage() {
   const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
   const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
   const [sivugOptions, setSivugOptions] = useState([]);
+  const [ownershipOptions, setOwnershipOptions] = useState([]);
   const [expandedLogId, setExpandedLogId] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ field: 'date', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ field: 'updatedAt', direction: 'desc' });
+  const rehabSivugValue = useMemo(() => {
+    const match = sivugOptions.find((option) => option.label === 'ריק ובהליך שיקום');
+    return match ? String(match.value) : '3';
+  }, [sivugOptions]);
+  const isFilterRehabStatusRequired = useMemo(() => {
+    if (!filters.bldSivug && filters.bldSivug !== 0) return false;
+    return String(filters.bldSivug) === rehabSivugValue;
+  }, [filters.bldSivug, rehabSivugValue]);
   const statusIdToValue = useMemo(
     () =>
       statusOptions.reduce((acc, opt) => {
@@ -118,10 +119,28 @@ export default function LogsPage() {
     []
   );
   useDocumentTitle('יומן פעילויות - מוקד המבנים העירוני');
-  const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
+  const displayOrDash = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (value === 'Unknown' || value === 'לא ידוע') return '—';
+    return value;
+  };
+  const getSnapshotFieldValue = (fields, columnName) => {
+    if (!Array.isArray(fields)) return null;
+    const match = fields.find(
+      (field) =>
+        field.columnName &&
+        field.columnName.toLowerCase() === columnName.toLowerCase()
+    );
+    return match?.value ?? null;
+  };
   const getSivugLabel = (value) => {
     if (value === null || value === undefined || value === '') return '—';
     const match = sivugOptions.find((option) => String(option.value) === String(value));
+    return match ? match.label : String(value);
+  };
+  const getOwnershipLabel = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    const match = ownershipOptions.find((option) => String(option.value) === String(value));
     return match ? match.label : String(value);
   };
   const getExcelAwareLabel = (fieldName) => {
@@ -154,7 +173,7 @@ export default function LogsPage() {
       if (prev.field === field) {
         return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       }
-      return { field, direction: field === 'date' ? 'desc' : 'asc' };
+      return { field, direction: field === 'updatedAt' ? 'desc' : 'asc' };
     });
   };
 
@@ -210,8 +229,18 @@ export default function LogsPage() {
       }
     };
 
+    const loadOwnershipOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_SugBaalut');
+        setOwnershipOptions(options);
+      } catch {
+        setOwnershipOptions([]);
+      }
+    };
+
     loadStatusOptions();
     loadSivugOptions();
+    loadOwnershipOptions();
     loadStreets();
     loadLogs(buildDefaultFilters({ buildingId: initialBuildingId }));
   }, []);
@@ -250,7 +279,13 @@ export default function LogsPage() {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setFilters((prev) => ({ ...prev, [name]: value }));
+    setFilters((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === 'bldSivug' && String(value) !== rehabSivugValue) {
+        next.status = '';
+      }
+      return next;
+    });
   };
 
   const handleSubmit = (event) => {
@@ -289,18 +324,39 @@ export default function LogsPage() {
 
     const getSortValue = (log, field) => {
       const snapshot = log.snapshot || {};
-      const street = snapshot.streetName || log.buildingStreet || '';
-      const houseNumber = snapshot.houseNumber || log.buildingHouseNumber || '';
-      const nickname = snapshot.buildingName || log.buildingNickname || '';
-      const sivugValue = snapshot.bldSivug ?? log.buildingBldSivug;
+      const snapshotFields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
+      const street =
+        snapshot.streetName || getSnapshotFieldValue(snapshotFields, 'StreetName') || '';
+      const houseNumber =
+        snapshot.houseNumber || getSnapshotFieldValue(snapshotFields, 'BldNum') || '';
+      const nickname =
+        snapshot.buildingName || getSnapshotFieldValue(snapshotFields, 'BldName') || '';
+      const sivugValue = snapshot.bldSivug ?? null;
+      const sivugLabel =
+        getSnapshotFieldValue(snapshotFields, 'BldSivug') || getSivugLabel(sivugValue);
+      const statusFromSnapshot = getSnapshotFieldValue(snapshotFields, 'ShikumStatus');
       const statusValue = normalizeStatusValue(
-        snapshot.shikumStatus || log.buildingStatus || 'Unknown',
+        snapshot.shikumStatus || 'Unknown',
         statusIdToValue
       );
-      const statusLabel = statusLabelMap[statusValue] || statusValue || '';
-      const summary = snapshot.statusSummary || log.buildingStatusSummary || log.description || '';
+      const statusMissing =
+        !statusValue || statusValue === 'Unknown' || statusValue === 'לא ידוע';
+      const statusLabel =
+        statusFromSnapshot || (statusMissing ? '' : statusLabelMap[statusValue] || statusValue || '');
+      const statusSummary =
+        getSnapshotFieldValue(snapshotFields, 'StatusSummary') || snapshot.statusSummary || '';
+      const sugBaalutValue = snapshot.sugBaalut ?? null;
+      const sugBaalutLabel =
+        getSnapshotFieldValue(snapshotFields, 'SugBaalut') || getOwnershipLabel(sugBaalutValue);
+      const quarterValue = snapshot.quarter || getSnapshotFieldValue(snapshotFields, 'Quarter') || '';
+      const subQuarterValue =
+        snapshot.subQuarter || getSnapshotFieldValue(snapshotFields, 'SubQuarter') || '';
+      const statisticalAreaValue =
+        snapshot.statisticalArea ||
+        getSnapshotFieldValue(snapshotFields, 'StatisticalArea') ||
+        '';
       const user = log.username || '';
-      const dateValue = log.createdAt ? new Date(log.createdAt).getTime() : null;
+      const updatedAtValue = log.createdAt ? new Date(log.createdAt).getTime() : null;
 
       switch (field) {
         case 'street':
@@ -309,16 +365,24 @@ export default function LogsPage() {
           return houseNumber;
         case 'nickname':
           return nickname;
+        case 'bldSivug':
+          return sivugLabel;
         case 'status':
           return statusLabel;
-        case 'bldSivug':
-          return getSivugLabel(sivugValue);
-        case 'summary':
-          return summary;
+        case 'sugBaalut':
+          return sugBaalutLabel;
+        case 'quarter':
+          return quarterValue || '';
+        case 'subQuarter':
+          return subQuarterValue || '';
+        case 'statisticalArea':
+          return statisticalAreaValue || '';
+        case 'updatedAt':
+          return updatedAtValue;
+        case 'statusSummary':
+          return statusSummary;
         case 'user':
           return user;
-        case 'date':
-          return dateValue;
         default:
           return '';
       }
@@ -328,10 +392,10 @@ export default function LogsPage() {
     copy.sort((a, b) => {
       const aValue = getSortValue(a, sortConfig.field);
       const bValue = getSortValue(b, sortConfig.field);
-      const cmp = compareValues(aValue, bValue, { numeric: sortConfig.field === 'date' });
+      const cmp = compareValues(aValue, bValue, { numeric: sortConfig.field === 'updatedAt' });
       if (cmp !== 0) return sortConfig.direction === 'desc' ? -cmp : cmp;
-      if (sortConfig.field !== 'date') {
-        const dateCmp = compareValues(getSortValue(a, 'date'), getSortValue(b, 'date'), {
+      if (sortConfig.field !== 'updatedAt') {
+        const dateCmp = compareValues(getSortValue(a, 'updatedAt'), getSortValue(b, 'updatedAt'), {
           numeric: true
         });
         if (dateCmp !== 0) return -dateCmp;
@@ -343,7 +407,7 @@ export default function LogsPage() {
       return 0;
     });
     return copy;
-  }, [logs, sortConfig, statusIdToValue, statusLabelMap, sivugOptions]);
+  }, [logs, sortConfig, statusIdToValue, statusLabelMap, sivugOptions, ownershipOptions]);
 
   return (
     <main className="app logs-app">
@@ -386,17 +450,6 @@ export default function LogsPage() {
             />
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.status}</span>
-            <select name="status" value={filters.status || ''} onChange={handleChange}>
-              <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
-              {statuses.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
             <span>סיווג</span>
             <select name="bldSivug" value={filters.bldSivug || ''} onChange={handleChange}>
               <option value="">בחר סיווג</option>
@@ -406,6 +459,81 @@ export default function LogsPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            <span>{BUILDING_FIELD_LABELS.status}</span>
+            <select
+              name="status"
+              value={filters.status || ''}
+              onChange={handleChange}
+              disabled={!isFilterRehabStatusRequired}
+            >
+              <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
+              {statuses.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>סוג הבעלות</span>
+            <select name="sugBaalut" value={filters.sugBaalut} onChange={handleChange}>
+              <option value="">בחר סוג הבעלות</option>
+              {ownershipOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>רובע</span>
+            <input
+              type="text"
+              name="quarter"
+              value={filters.quarter}
+              onChange={handleChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.quarter}
+            />
+          </label>
+          <label>
+            <span>תת רובע</span>
+            <input
+              type="text"
+              name="subQuarter"
+              value={filters.subQuarter}
+              onChange={handleChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.subQuarter}
+            />
+          </label>
+          <label>
+            <span>אזור סטטיסטי</span>
+            <input
+              type="text"
+              name="statisticalArea"
+              value={filters.statisticalArea}
+              onChange={handleChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.statisticalArea}
+            />
+          </label>
+          <label>
+            <span>תאריך שינוי - החל מ</span>
+            <input
+              type="date"
+              name="updatedFrom"
+              value={filters.updatedFrom}
+              onChange={handleChange}
+            />
+          </label>
+          <label>
+            <span>תאריך שינוי - עד</span>
+            <input
+              type="date"
+              name="updatedTo"
+              value={filters.updatedTo}
+              onChange={handleChange}
+            />
           </label>
           <label className="full-span">
             <span>{BUILDING_FIELD_LABELS.statusSummary}</span>
@@ -419,14 +547,6 @@ export default function LogsPage() {
           <label>
             <span>משתמש</span>
             <input name="user" value={filters.user} onChange={handleChange} placeholder="שם משתמש" />
-          </label>
-          <label>
-            <span>תאריך התחלה</span>
-            <input type="date" name="startDate" value={filters.startDate} onChange={handleChange} />
-          </label>
-          <label>
-            <span>תאריך סיום</span>
-            <input type="date" name="endDate" value={filters.endDate} onChange={handleChange} />
           </label>
           <div className="filters-actions">
             <button type="submit" className="primary">
@@ -479,16 +599,43 @@ export default function LogsPage() {
                 const snapshot = log.snapshot || {};
                 const changeEntries = Array.isArray(snapshot.changes) ? snapshot.changes : [];
                 const snapshotFields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
-                const street = snapshot.streetName || log.buildingStreet || '—';
-                const houseNumber = snapshot.houseNumber || log.buildingHouseNumber || '—';
-                const nickname = snapshot.buildingName || log.buildingNickname || '—';
-                const sivugValue = snapshot.bldSivug ?? log.buildingBldSivug;
+                const street =
+                  snapshot.streetName ||
+                  getSnapshotFieldValue(snapshotFields, 'StreetName') ||
+                  '—';
+                const houseNumber =
+                  snapshot.houseNumber ||
+                  getSnapshotFieldValue(snapshotFields, 'BldNum') ||
+                  '—';
+                const nickname =
+                  snapshot.buildingName ||
+                  getSnapshotFieldValue(snapshotFields, 'BldName') ||
+                  '—';
+                const sivugValue = snapshot.bldSivug ?? null;
+                const sivugLabel =
+                  getSnapshotFieldValue(snapshotFields, 'BldSivug') || getSivugLabel(sivugValue);
                 const statusValue = normalizeStatusValue(
-                  snapshot.shikumStatus || log.buildingStatus || 'Unknown',
+                  snapshot.shikumStatus || 'Unknown',
                   statusIdToValue
                 );
-                const statusLabel = statusLabelMap[statusValue] || statusValue || '—';
-                const summary = snapshot.statusSummary ?? log.buildingStatusSummary ?? '';
+                const statusMissing =
+                  !statusValue || statusValue === 'Unknown' || statusValue === 'לא ידוע';
+                const statusLabel =
+                  getSnapshotFieldValue(snapshotFields, 'ShikumStatus') ||
+                  (statusMissing ? '—' : statusLabelMap[statusValue] || statusValue || '—');
+                const statusSummary =
+                  getSnapshotFieldValue(snapshotFields, 'StatusSummary') ||
+                  snapshot.statusSummary ||
+                  '';
+                const sugBaalutValue =
+                  getSnapshotFieldValue(snapshotFields, 'SugBaalut') ?? snapshot.sugBaalut;
+                const quarterValue =
+                  getSnapshotFieldValue(snapshotFields, 'Quarter') ?? snapshot.quarter;
+                const subQuarterValue =
+                  getSnapshotFieldValue(snapshotFields, 'SubQuarter') ?? snapshot.subQuarter;
+                const statisticalAreaValue =
+                  getSnapshotFieldValue(snapshotFields, 'StatisticalArea') ??
+                  snapshot.statisticalArea;
                 const timestamp = log.createdAt;
                 const isExpanded = expandedLogId === log.id;
                 const fieldOrder = new Map(
@@ -505,12 +652,16 @@ export default function LogsPage() {
                   street: displayOrDash(street),
                   houseNumber: displayOrDash(houseNumber),
                   nickname: displayOrDash(nickname),
-                  status: statusLabel,
-                  bldSivug: getSivugLabel(sivugValue),
-                  summary: displayOrDash(summary),
+                  bldSivug: sivugLabel,
+                  status: displayOrDash(statusLabel),
+                  sugBaalut: getOwnershipLabel(sugBaalutValue),
+                  quarter: displayOrDash(quarterValue),
+                  subQuarter: displayOrDash(subQuarterValue),
+                  statisticalArea: displayOrDash(statisticalAreaValue),
+                  updatedAt: formatDate(timestamp),
+                  statusSummary: displayOrDash(statusSummary),
                   user: displayOrDash(log.username),
-                  date: formatDate(timestamp),
-                      actions: (
+                  actions: (
                     <>
                       <button
                         type="button"

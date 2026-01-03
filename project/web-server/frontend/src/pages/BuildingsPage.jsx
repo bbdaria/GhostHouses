@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
@@ -47,6 +48,7 @@ const EXCEL_LABEL_OVERRIDES = {
 };
 
 export default function BuildingsPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   useDocumentTitle('מאגר מבנים - מוקד המבנים העירוני');
   const [filters, setFilters] = useState(initialFilters);
@@ -1133,6 +1135,16 @@ export default function BuildingsPage() {
                               עריכה
                             </button>
                           )}
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/logs?buildingId=${building.id}`);
+                            }}
+                          >
+                            יומן
+                          </button>
                           {canEdit && (
                             <button
                               type="button"
@@ -1163,6 +1175,15 @@ export default function BuildingsPage() {
                                           if (!columnName) return null;
                                           const required = isRequiredEditColumn(columnName);
                                           if (columnName.toLowerCase() === 'streetid') {
+                                            return (
+                                              <label key={columnName}>
+                                                {getExcelAwareLabel(fieldName)}
+                                                <input type="text" value={editFieldValues[columnName] ?? ''} disabled />
+                                              </label>
+                                            );
+                                          }
+
+                                          if (columnName.toLowerCase() === 'fidid') {
                                             return (
                                               <label key={columnName}>
                                                 {getExcelAwareLabel(fieldName)}

@@ -26,10 +26,14 @@ export const LOG_TABLE_COLUMNS = [
   { key: 'street', label: 'שם רחוב' },
   { key: 'houseNumber', label: 'מספר בית' },
   { key: 'nickname', label: 'כינוי הבניין' },
-  { key: 'status', label: 'סטטוס שיקום' },
   { key: 'bldSivug', label: 'סיווג' },
-  { key: 'summary', label: 'תמונת מצב (תמצית מצב)' },
+  { key: 'status', label: 'סטטוס שיקום' },
+  { key: 'sugBaalut', label: 'סוג הבעלות' },
+  { key: 'quarter', label: 'רובע' },
+  { key: 'subQuarter', label: 'תת רובע' },
+  { key: 'statisticalArea', label: 'אזור סטטיסטי' },
+  { key: 'updatedAt', label: 'תאריך שינוי' },
+  { key: 'statusSummary', label: 'תמונת מצב (תמצית מצב)' },
   { key: 'user', label: 'משתמש' },
-  { key: 'date', label: 'תאריך שינוי' },
   { key: 'actions', label: 'פעולות' }
 ];

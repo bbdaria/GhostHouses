@@ -44,7 +44,17 @@ public class LogsController : ApiControllerBase
 
         if (!string.IsNullOrWhiteSpace(filter.User))
         {
-            query = query.Where(l => l.CreatedByUser != null && EF.Functions.ILike(l.CreatedByUser.Username, $"%{filter.User}%"));
+            if (string.Equals(filter.User.Trim(), "אתחול מערכת", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(l =>
+                    l.CreatedByUser == null ||
+                    l.Category == "Seed" ||
+                    l.Title == "אתחול מערכת");
+            }
+            else
+            {
+                query = query.Where(l => l.CreatedByUser != null && EF.Functions.ILike(l.CreatedByUser.Username, $"%{filter.User}%"));
+            }
         }
 
         if (filter.From.HasValue)
@@ -60,11 +70,6 @@ public class LogsController : ApiControllerBase
         if (!string.IsNullOrWhiteSpace(filter.Street))
         {
             query = query.Where(l => EF.Functions.ILike(l.Building.StreetName, $"%{filter.Street}%"));
-        }
-
-        if (filter.StreetId.HasValue)
-        {
-            query = query.Where(l => l.Building.StreetCode == filter.StreetId.Value);
         }
 
         if (filter.StreetId.HasValue)
@@ -90,6 +95,26 @@ public class LogsController : ApiControllerBase
         if (filter.BldSivug.HasValue)
         {
             query = query.Where(l => l.Building.BldSivug == filter.BldSivug.Value);
+        }
+
+        if (filter.SugBaalut.HasValue)
+        {
+            query = query.Where(l => l.Building.SugBaalut == filter.SugBaalut.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Quarter))
+        {
+            query = query.Where(l => EF.Functions.ILike(l.Building.Quarter, $"%{filter.Quarter}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.SubQuarter))
+        {
+            query = query.Where(l => EF.Functions.ILike(l.Building.SubQuarter, $"%{filter.SubQuarter}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StatisticalArea))
+        {
+            query = query.Where(l => EF.Functions.ILike(l.Building.StatisticalArea, $"%{filter.StatisticalArea}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Neighborhood))
@@ -122,7 +147,11 @@ public class LogsController : ApiControllerBase
                 l.Building.Neighborhood,
                 l.Building.BldSivug,
                 l.Building.ShikumStatus,
-                l.Building.StatusSummary))
+                l.Building.StatusSummary,
+                l.Building.SugBaalut,
+                l.Building.Quarter,
+                l.Building.SubQuarter,
+                l.Building.StatisticalArea))
             .ToListAsync(cancellationToken);
 
         return Ok(new PaginatedResult<BuildingLogDto>(items, total, filter.Page, filter.PageSize));
@@ -152,7 +181,11 @@ public class LogsController : ApiControllerBase
                 l.Building.Neighborhood,
                 l.Building.BldSivug,
                 l.Building.ShikumStatus,
-                l.Building.StatusSummary))
+                l.Building.StatusSummary,
+                l.Building.SugBaalut,
+                l.Building.Quarter,
+                l.Building.SubQuarter,
+                l.Building.StatisticalArea))
             .ToListAsync(cancellationToken);
 
         return Ok(logs);
@@ -209,7 +242,11 @@ public class LogsController : ApiControllerBase
             building.Neighborhood,
             building.BldSivug,
             building.ShikumStatus,
-            building.StatusSummary);
+            building.StatusSummary,
+            building.SugBaalut,
+            building.Quarter,
+            building.SubQuarter,
+            building.StatisticalArea);
         return CreatedAtAction(nameof(GetBuildingLogs), new { buildingId }, dto);
     }
 

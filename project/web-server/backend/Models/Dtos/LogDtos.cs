@@ -18,7 +18,13 @@ public record LogFilterParameters(
     BuildingStatus? Status = null,
     int? BldSivug = null,
     string? Neighborhood = null,
-    string? StatusSummary = null) : BuildingFilterParameters(
+    string? StatusSummary = null,
+    int? SugBaalut = null,
+    string? Quarter = null,
+    string? SubQuarter = null,
+    string? StatisticalArea = null,
+    DateTime? UpdatedFrom = null,
+    DateTime? UpdatedTo = null) : BuildingFilterParameters(
         Page,
         PageSize,
         Street,
@@ -28,7 +34,13 @@ public record LogFilterParameters(
         Status,
         BldSivug,
         Neighborhood,
-        StatusSummary);
+        StatusSummary,
+        SugBaalut,
+        Quarter,
+        SubQuarter,
+        StatisticalArea,
+        UpdatedFrom,
+        UpdatedTo);
 
 public record BuildingLogDto(
     int Id,
@@ -45,7 +57,11 @@ public record BuildingLogDto(
     string? BuildingNeighborhood,
     int? BuildingBldSivug,
     BuildingStatus? BuildingStatus,
-    string? BuildingStatusSummary);
+    string? BuildingStatusSummary,
+    int? BuildingSugBaalut,
+    string? BuildingQuarter,
+    string? BuildingSubQuarter,
+    string? BuildingStatisticalArea);
 
 public class BuildingLogRequest
 {
