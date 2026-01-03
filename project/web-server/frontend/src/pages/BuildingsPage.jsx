@@ -94,6 +94,11 @@ export default function BuildingsPage() {
     return String(editFieldValues.BldSivug) === rehabSivugValue;
   }, [editFieldValues.BldSivug, rehabSivugValue]);
 
+  const isFilterRehabStatusRequired = useMemo(() => {
+    if (!filters.bldSivug && filters.bldSivug !== 0) return false;
+    return String(filters.bldSivug) === rehabSivugValue;
+  }, [filters.bldSivug, rehabSivugValue]);
+
   const canEdit = useMemo(
     () => user && (user.role === 'Editor' || user.role === 'Admin'),
     [user]
@@ -316,7 +321,13 @@ export default function BuildingsPage() {
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
-    setFilters((prev) => ({ ...prev, [name]: value }));
+    setFilters((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === 'bldSivug' && String(value) !== rehabSivugValue) {
+        next.status = '';
+      }
+      return next;
+    });
   };
 
   const handleSearch = (event) => {
@@ -736,7 +747,12 @@ export default function BuildingsPage() {
           </label>
           <label>
             <span>סטטוס שיקום</span>
-            <select name="status" value={filters.status} onChange={handleFilterChange}>
+            <select
+              name="status"
+              value={filters.status}
+              onChange={handleFilterChange}
+              disabled={!isFilterRehabStatusRequired}
+            >
               <option value="">בחר סטטוס שיקום</option>
               {statuses.map((option) => (
                 <option key={option.value} value={option.value}>
