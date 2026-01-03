@@ -11,6 +11,10 @@ const initialFilters = {
   nickname: '',
   status: '',
   bldSivug: '',
+  sugBaalut: '',
+  quarter: '',
+  subQuarter: '',
+  statisticalArea: '',
   statusSummary: ''
 };
 const SORT_FIELDS = [
@@ -56,6 +60,7 @@ export default function BuildingsPage() {
   const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
   const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
   const [sivugOptions, setSivugOptions] = useState([]);
+  const [ownershipOptions, setOwnershipOptions] = useState([]);
   const [streets, setStreets] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [detailError, setDetailError] = useState('');
@@ -112,6 +117,11 @@ export default function BuildingsPage() {
     const match = sivugOptions.find((option) => String(option.value) === String(value));
     return match ? match.label : String(value);
   };
+  const getOwnershipLabel = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    const match = ownershipOptions.find((option) => String(option.value) === String(value));
+    return match ? match.label : String(value);
+  };
   const isRequiredEditColumn = (columnName) => REQUIRED_EDIT_COLUMNS.has(columnName);
 
   useEffect(() => {
@@ -157,8 +167,18 @@ export default function BuildingsPage() {
       }
     };
 
+    const loadOwnershipOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_SugBaalut');
+        setOwnershipOptions(options);
+      } catch {
+        setOwnershipOptions([]);
+      }
+    };
+
     loadStatusOptions();
     loadSivugOptions();
+    loadOwnershipOptions();
     loadStreets();
     loadBuildings(initialFilters);
   }, []);
@@ -612,6 +632,47 @@ export default function BuildingsPage() {
               ))}
             </select>
           </label>
+          <label>
+            <span>סוג הבעלות</span>
+            <select name="sugBaalut" value={filters.sugBaalut} onChange={handleFilterChange}>
+              <option value="">בחר סוג הבעלות</option>
+              {ownershipOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>רובע</span>
+            <input
+              type="text"
+              name="quarter"
+              value={filters.quarter}
+              onChange={handleFilterChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.quarter}
+            />
+          </label>
+          <label>
+            <span>תת רובע</span>
+            <input
+              type="text"
+              name="subQuarter"
+              value={filters.subQuarter}
+              onChange={handleFilterChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.subQuarter}
+            />
+          </label>
+          <label>
+            <span>אזור סטטיסטי</span>
+            <input
+              type="text"
+              name="statisticalArea"
+              value={filters.statisticalArea}
+              onChange={handleFilterChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.statisticalArea}
+            />
+          </label>
           <label className="full-span">
             <span>תמונת מצב (תמצית מצב)</span>
             <input
@@ -780,6 +841,10 @@ export default function BuildingsPage() {
                   <th>כינוי הבניין</th>
                   <th>סטטוס שיקום</th>
                   <th>סיווג</th>
+                  <th>סוג הבעלות</th>
+                  <th>רובע</th>
+                  <th>תת רובע</th>
+                  <th>אזור סטטיסטי</th>
                   <th>תמונת מצב (תמצית מצב)</th>
                   <th>פעולות</th>
                 </tr>
@@ -791,6 +856,7 @@ export default function BuildingsPage() {
                   const statusLabel = statusLabelMap[statusValue] || statusValue;
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
                   const sivugLabel = getSivugLabel(building.bldSivug);
+                  const ownershipLabel = getOwnershipLabel(building.sugBaalut);
                   return (
                     <Fragment key={building.id}>
                       <tr
@@ -810,6 +876,10 @@ export default function BuildingsPage() {
                           <span className={`status status-${statusSlug}`}>{statusLabel}</span>
                         </td>
                         <td>{sivugLabel}</td>
+                        <td>{ownershipLabel}</td>
+                        <td>{building.quarter || '—'}</td>
+                        <td>{building.subQuarter || '—'}</td>
+                        <td>{building.statisticalArea || '—'}</td>
                         <td>{building.statusSummary || '—'}</td>
                         <td>
                           <button
@@ -866,7 +936,7 @@ export default function BuildingsPage() {
                       </tr>
                       {isActive && selectedBuilding && (
                         <tr>
-                          <td colSpan="7">
+                          <td colSpan="11">
                             {selectedView === 'edit' && canEdit && (
                               <form onSubmit={handleUpdateBuildingFields} className="details-card">
                                 {selectTablesLoading && <p className="muted">טוען טבלאות בחירה…</p>}
@@ -1099,7 +1169,7 @@ export default function BuildingsPage() {
                 })}
                 {buildings.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="7" className="muted">
+                    <td colSpan="11" className="muted">
                       אין מבנים שעונים על הסינון.
                     </td>
                   </tr>

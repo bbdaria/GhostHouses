@@ -16,7 +16,10 @@ export const BUILDING_FIELD_PLACEHOLDERS = {
   houseNumber: 'לדוגמה: 12א',
   nickname: 'לדוגמה: הטחנה',
   area: 'לדוגמה: אזור תעשייה',
-  statusSummary: 'לדוגמה: ממתין לסקר'
+  statusSummary: 'לדוגמה: ממתין לסקר',
+  quarter: 'לדוגמה: 4',
+  subQuarter: 'לדוגמה: 4א',
+  statisticalArea: 'לדוגמה: 1234'
 };
 
 export const LOG_TABLE_COLUMNS = [

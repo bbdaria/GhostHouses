@@ -126,6 +126,10 @@ const mapBuildingSummary = (item) => ({
   bldSivug: item.bldSivug,
   status: item.shikumStatus,
   area: item.neighborhood,
+  sugBaalut: item.sugBaalut,
+  quarter: item.quarter,
+  subQuarter: item.subQuarter,
+  statisticalArea: item.statisticalArea,
   statusSummary: item.statusSummary || '',
   updatedAt: item.statusSummaryUpdatedAt
 });
@@ -167,6 +171,10 @@ const mapBuildingDetail = (data) => ({
   bldSivug: data.summary.bldSivug,
   status: data.summary.shikumStatus,
   area: data.summary.neighborhood,
+  sugBaalut: data.summary.sugBaalut,
+  quarter: data.summary.quarter,
+  subQuarter: data.summary.subQuarter,
+  statisticalArea: data.summary.statisticalArea,
   statusSummary: data.statusSummary,
   updatedAt: data.statusSummaryUpdatedAt,
   complaints: data.complaints,
@@ -233,6 +241,10 @@ const api = {
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
     if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+    if (filters.sugBaalut) params.append('sugBaalut', filters.sugBaalut);
+    if (filters.quarter) params.append('quarter', filters.quarter);
+    if (filters.subQuarter) params.append('subQuarter', filters.subQuarter);
+    if (filters.statisticalArea) params.append('statisticalArea', filters.statisticalArea);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
@@ -246,6 +258,10 @@ const api = {
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
     if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+    if (filters.sugBaalut) params.append('sugBaalut', filters.sugBaalut);
+    if (filters.quarter) params.append('quarter', filters.quarter);
+    if (filters.subQuarter) params.append('subQuarter', filters.subQuarter);
+    if (filters.statisticalArea) params.append('statisticalArea', filters.statisticalArea);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
     const query = params.toString();
