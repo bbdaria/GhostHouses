@@ -245,6 +245,8 @@ const api = {
     if (filters.quarter) params.append('quarter', filters.quarter);
     if (filters.subQuarter) params.append('subQuarter', filters.subQuarter);
     if (filters.statisticalArea) params.append('statisticalArea', filters.statisticalArea);
+    if (filters.updatedFrom) params.append('updatedFrom', filters.updatedFrom);
+    if (filters.updatedTo) params.append('updatedTo', filters.updatedTo);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
@@ -262,6 +264,8 @@ const api = {
     if (filters.quarter) params.append('quarter', filters.quarter);
     if (filters.subQuarter) params.append('subQuarter', filters.subQuarter);
     if (filters.statisticalArea) params.append('statisticalArea', filters.statisticalArea);
+    if (filters.updatedFrom) params.append('updatedFrom', filters.updatedFrom);
+    if (filters.updatedTo) params.append('updatedTo', filters.updatedTo);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
     const query = params.toString();

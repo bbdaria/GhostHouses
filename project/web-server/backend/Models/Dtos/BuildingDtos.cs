@@ -18,7 +18,9 @@ public record BuildingFilterParameters(
     int? SugBaalut = null,
     string? Quarter = null,
     string? SubQuarter = null,
-    string? StatisticalArea = null);
+    string? StatisticalArea = null,
+    DateTime? UpdatedFrom = null,
+    DateTime? UpdatedTo = null);
 
 public record BuildingSummaryDto(
     int Id,
@@ -31,6 +33,7 @@ public record BuildingSummaryDto(
     BuildingStatus ShikumStatus,
     int? BldSivug,
     string StatusSummary,
+    DateTime? StatusSummaryUpdatedAt,
     int? SugBaalut,
     string? Quarter,
     string? SubQuarter,

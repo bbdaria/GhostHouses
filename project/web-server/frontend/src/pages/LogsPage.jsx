@@ -62,7 +62,7 @@ const baseFilters = {
 const EXCEL_LABEL_OVERRIDES = {
   'ID נכס לצורך מערכת זו בלבד': 'ID',
   'תמצית מצב': 'תמונת מצב',
-  'תאריך עדכון תמצית מצב': 'תאריך עדכון סטטוס',
+  'תאריך עדכון תמצית מצב': 'תאריך שינוי',
   'ציון עמידה בסטנדרט': 'ציון',
   'פרטי מחזיקים': 'פרטי מחזיק',
   'האם הייתה צריכת מים ב־6 החודשים האחרונים': 'צריכת מים ב-6 החודשים האחרונים',
@@ -142,6 +142,7 @@ export default function LogsPage() {
     if (!fieldName) return '';
     const excelName = EXCEL_LABEL_OVERRIDES[fieldName];
     if (!excelName || excelName === fieldName) return fieldName;
+    if (excelName === 'תאריך שינוי') return excelName;
     if (excelName === 'קוארדינטות') {
       if (fieldName.includes('אורך')) return 'קוארדינטות (אורך)';
       if (fieldName.includes('רוחב')) return 'קוארדינטות (רוחב)';

@@ -99,6 +99,28 @@ public class BuildingsController : ApiControllerBase
             query = query.Where(b => EF.Functions.ILike(b.StatisticalArea, $"%{filter.StatisticalArea}%"));
         }
 
+        if (filter.UpdatedFrom.HasValue)
+        {
+            var from = filter.UpdatedFrom.Value;
+            if (from.TimeOfDay == TimeSpan.Zero)
+            {
+                from = from.Date;
+            }
+
+            query = query.Where(b => b.StatusSummaryUpdatedAt.HasValue && b.StatusSummaryUpdatedAt.Value >= from);
+        }
+
+        if (filter.UpdatedTo.HasValue)
+        {
+            var to = filter.UpdatedTo.Value;
+            if (to.TimeOfDay == TimeSpan.Zero)
+            {
+                to = to.Date.AddDays(1).AddTicks(-1);
+            }
+
+            query = query.Where(b => b.StatusSummaryUpdatedAt.HasValue && b.StatusSummaryUpdatedAt.Value <= to);
+        }
+
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(b => b.StreetName)
@@ -116,6 +138,7 @@ public class BuildingsController : ApiControllerBase
                 b.ShikumStatus,
                 b.BldSivug,
                 b.StatusSummary,
+                IsraelTime.Convert(b.StatusSummaryUpdatedAt),
                 b.SugBaalut,
                 b.Quarter,
                 b.SubQuarter,
@@ -176,6 +199,7 @@ public class BuildingsController : ApiControllerBase
                 building.ShikumStatus,
                 building.BldSivug,
                 building.StatusSummary,
+                IsraelTime.Convert(building.StatusSummaryUpdatedAt),
                 building.SugBaalut,
                 building.Quarter,
                 building.SubQuarter,
@@ -257,6 +281,28 @@ public class BuildingsController : ApiControllerBase
         if (!string.IsNullOrWhiteSpace(filter.StatisticalArea))
         {
             query = query.Where(b => EF.Functions.ILike(b.StatisticalArea, $"%{filter.StatisticalArea}%"));
+        }
+
+        if (filter.UpdatedFrom.HasValue)
+        {
+            var from = filter.UpdatedFrom.Value;
+            if (from.TimeOfDay == TimeSpan.Zero)
+            {
+                from = from.Date;
+            }
+
+            query = query.Where(b => b.StatusSummaryUpdatedAt.HasValue && b.StatusSummaryUpdatedAt.Value >= from);
+        }
+
+        if (filter.UpdatedTo.HasValue)
+        {
+            var to = filter.UpdatedTo.Value;
+            if (to.TimeOfDay == TimeSpan.Zero)
+            {
+                to = to.Date.AddDays(1).AddTicks(-1);
+            }
+
+            query = query.Where(b => b.StatusSummaryUpdatedAt.HasValue && b.StatusSummaryUpdatedAt.Value <= to);
         }
 
         var buildings = await query
@@ -347,6 +393,7 @@ public class BuildingsController : ApiControllerBase
             BldSivug = request.BldSivug,
             ShikumStatus = request.ShikumStatus ?? BuildingStatus.Unknown,
             StatusSummary = request.StatusSummary ?? string.Empty,
+            StatusSummaryUpdatedAt = DateTime.UtcNow,
             Complaints = request.Complaints ?? string.Empty,
             PhotoUrls = request.Photos is null ? string.Empty : string.Join(',', request.Photos)
         };
@@ -410,6 +457,7 @@ public class BuildingsController : ApiControllerBase
             building.ShikumStatus,
             building.BldSivug,
             building.StatusSummary,
+            IsraelTime.Convert(building.StatusSummaryUpdatedAt),
             building.SugBaalut,
             building.Quarter,
             building.SubQuarter,
@@ -614,6 +662,13 @@ public class BuildingsController : ApiControllerBase
 
             building.StreetCode = street.StreetId;
             building.StreetName = street.Name;
+        }
+
+        var hasChanges = changes.Count > 0 ||
+            !string.Equals(originalStreetName, building.StreetName, StringComparison.Ordinal);
+        if (hasChanges)
+        {
+            building.StatusSummaryUpdatedAt = DateTime.UtcNow;
         }
 
         await _context.SaveChangesAsync(cancellationToken);
