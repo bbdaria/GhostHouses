@@ -89,6 +89,11 @@ export default function BuildingsPage() {
     return String(createForm.category) === rehabSivugValue;
   }, [createForm.category, rehabSivugValue]);
 
+  const isEditRehabStatusRequired = useMemo(() => {
+    if (!editFieldValues.BldSivug && editFieldValues.BldSivug !== 0) return false;
+    return String(editFieldValues.BldSivug) === rehabSivugValue;
+  }, [editFieldValues.BldSivug, rehabSivugValue]);
+
   const canEdit = useMemo(
     () => user && (user.role === 'Editor' || user.role === 'Admin'),
     [user]
@@ -426,7 +431,13 @@ export default function BuildingsPage() {
   };
 
   const handleEditFieldChange = (columnName, value) => {
-    setEditFieldValues((prev) => ({ ...prev, [columnName]: value }));
+    setEditFieldValues((prev) => {
+      const next = { ...prev, [columnName]: value };
+      if (columnName === 'BldSivug' && String(value) !== rehabSivugValue) {
+        next.ShikumStatus = '';
+      }
+      return next;
+    });
   };
 
   const handleUpdateBuildingFields = async (event) => {
@@ -435,7 +446,10 @@ export default function BuildingsPage() {
     setActionMessage('');
     const isMissing = (value) =>
       value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
-    const missingField = REQUIRED_EDIT_FIELDS.find((field) => isMissing(editFieldValues[field.key]));
+    const missingField = REQUIRED_EDIT_FIELDS.find((field) => {
+      if (field.key === 'ShikumStatus' && !isEditRehabStatusRequired) return false;
+      return isMissing(editFieldValues[field.key]);
+    });
     if (missingField) {
       setActionMessage(`חובה למלא ${missingField.label}.`);
       return;
@@ -1167,6 +1181,8 @@ export default function BuildingsPage() {
                                             ? selectTablesByName[selectTableName]
                                             : [];
                                         const currentValue = editFieldValues[columnName] ?? '';
+                                        const isRehabStatusField =
+                                          columnName.toLowerCase() === 'shikumstatus';
 
                                         if (selectTableName && selectOptions.length > 0) {
                                           return (
@@ -1175,7 +1191,11 @@ export default function BuildingsPage() {
                                               <select
                                                 value={currentValue}
                                                 onChange={(e) => handleEditFieldChange(columnName, e.target.value)}
-                                                required={required}
+                                                required={
+                                                  required &&
+                                                  (!isRehabStatusField || isEditRehabStatusRequired)
+                                                }
+                                                disabled={isRehabStatusField && !isEditRehabStatusRequired}
                                               >
                                                 <option value="">—</option>
                                                 {selectOptions.map((opt) => (
