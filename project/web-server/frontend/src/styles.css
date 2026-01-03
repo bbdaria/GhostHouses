@@ -372,6 +372,24 @@ th {
   letter-spacing: 0.05em;
 }
 
+th .sort-button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+th .sort-indicator {
+  font-size: 0.85em;
+  line-height: 1;
+}
+
 tbody tr {
   cursor: pointer;
   transition: background 0.2s ease;

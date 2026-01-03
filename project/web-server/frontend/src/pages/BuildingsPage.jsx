@@ -19,14 +19,6 @@ const initialFilters = {
   updatedTo: '',
   statusSummary: ''
 };
-const SORT_FIELDS = [
-  { value: 'street', label: 'שם רחוב' },
-  { value: 'houseNumber', label: 'מספר בית' },
-  { value: 'nickname', label: 'כינוי הבניין' },
-  { value: 'status', label: 'סטטוס שיקום' },
-  { value: 'bldSivug', label: 'סיווג' },
-  { value: 'statusSummary', label: 'תמונת מצב (תמצית מצב)' }
-];
 const REQUIRED_EDIT_FIELDS = [
   { key: 'StreetId', label: 'שם רחוב' },
   { key: 'BldNum', label: 'מספר בית' },
@@ -83,10 +75,7 @@ export default function BuildingsPage() {
   const [selectTablesLoading, setSelectTablesLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [selectedView, setSelectedView] = useState('all');
-  const [sortCriteria, setSortCriteria] = useState([
-    { field: 'street', direction: 'asc' },
-    { field: 'houseNumber', direction: 'asc' }
-  ]);
+  const [sortConfig, setSortConfig] = useState({ field: 'street', direction: 'asc' });
 
   const canEdit = useMemo(
     () => user && (user.role === 'Editor' || user.role === 'Admin'),
@@ -448,64 +437,86 @@ export default function BuildingsPage() {
     setSelectedView(tab);
   };
 
-  const handleSortFieldChange = (index, value) => {
-    setSortCriteria((prev) => {
-      const next = [...prev];
-      next.forEach((c, i) => {
-        if (i !== index && c.field === value) {
-          next[i] = { ...next[i], field: '' };
-        }
-      });
-      next[index] = { ...next[index], field: value };
-      return next;
+  const handleSortClick = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: 'asc' };
     });
   };
 
-  const handleSortDirectionChange = (index, value) => {
-    setSortCriteria((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], direction: value };
-      return next;
-    });
+  const getSortIndicator = (field) => {
+    if (sortConfig.field !== field) return '';
+    return sortConfig.direction === 'asc' ? '∧' : '∨';
+  };
+
+  const getAriaSort = (field) => {
+    if (sortConfig.field !== field) return 'none';
+    return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
   };
 
   const sortedBuildings = useMemo(() => {
     if (!buildings || buildings.length === 0) return [];
-    const criteria = sortCriteria.filter((c) => c.field);
-    if (criteria.length === 0) return buildings;
+    if (!sortConfig.field) return buildings;
 
-    const compare = (a, b, field, direction) => {
-      let result = 0;
-      if (field === 'houseNumber') {
-        result = (a.houseNumber || '').localeCompare(b.houseNumber || '', 'he');
-      } else if (field === 'status') {
-        const aLabel = statusLabelMap[a.status] || a.status || '';
-        const bLabel = statusLabelMap[b.status] || b.status || '';
-        result = aLabel.localeCompare(bLabel, 'he');
-      } else if (field === 'street') {
-        result = (a.street || '').localeCompare(b.street || '', 'he');
-      } else if (field === 'nickname') {
-        result = (a.nickname || '').localeCompare(b.nickname || '', 'he');
-      } else if (field === 'bldSivug') {
-        const aLabel = getSivugLabel(a.bldSivug);
-        const bLabel = getSivugLabel(b.bldSivug);
-        result = aLabel.localeCompare(bLabel, 'he');
-      } else if (field === 'statusSummary') {
-        result = (a.statusSummary || '').localeCompare(b.statusSummary || '', 'he');
+    const compareValues = (aValue, bValue, { numeric = false } = {}) => {
+      const aMissing = aValue === null || aValue === undefined || aValue === '';
+      const bMissing = bValue === null || bValue === undefined || bValue === '';
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (numeric) return aValue - bValue;
+      return String(aValue).localeCompare(String(bValue), 'he');
+    };
+
+    const getSortValue = (building) => {
+      switch (sortConfig.field) {
+        case 'street':
+          return building.street;
+        case 'houseNumber':
+          return building.houseNumber;
+        case 'nickname':
+          return building.nickname;
+        case 'status':
+          return statusLabelMap[building.status] || building.status || '';
+        case 'bldSivug':
+          return getSivugLabel(building.bldSivug);
+        case 'sugBaalut':
+          return getOwnershipLabel(building.sugBaalut);
+        case 'quarter':
+          return building.quarter;
+        case 'subQuarter':
+          return building.subQuarter;
+        case 'statisticalArea':
+          return building.statisticalArea;
+        case 'updatedAt':
+          return building.updatedAt ? new Date(building.updatedAt).getTime() : null;
+        case 'statusSummary':
+          return building.statusSummary;
+        default:
+          return '';
       }
-      return direction === 'desc' ? -result : result;
     };
 
     const copy = [...buildings];
     copy.sort((a, b) => {
-      for (const c of criteria) {
-        const cmp = compare(a, b, c.field, c.direction);
-        if (cmp !== 0) return cmp;
+      const aValue = getSortValue(a);
+      const bValue = getSortValue(b);
+      const cmp = compareValues(aValue, bValue, { numeric: sortConfig.field === 'updatedAt' });
+      if (cmp !== 0) return sortConfig.direction === 'desc' ? -cmp : cmp;
+      if (sortConfig.field !== 'street') {
+        const streetCmp = compareValues(a.street, b.street);
+        if (streetCmp !== 0) return streetCmp;
+      }
+      if (sortConfig.field !== 'houseNumber') {
+        const houseCmp = compareValues(a.houseNumber, b.houseNumber);
+        if (houseCmp !== 0) return houseCmp;
       }
       return 0;
     });
     return copy;
-  }, [buildings, sortCriteria, sivugOptions, statusLabelMap]);
+  }, [buildings, sortConfig, sivugOptions, statusLabelMap, ownershipOptions]);
 
   const tryParseJson = (value) => {
     if (!value) return null;
@@ -846,54 +857,106 @@ export default function BuildingsPage() {
           <div className="panel-header">
             <h2>תוצאות ({buildings.length})</h2>
           </div>
-          <section className="panel">
-            <h3>מיון</h3>
-            <div className="form-grid">
-              {sortCriteria.map((crit, idx) => (
-                <div key={idx}>
-                  <label>
-                    {`עדיפות ${idx + 1}`}
-                    <select
-                      value={crit.field}
-                      onChange={(e) => handleSortFieldChange(idx, e.target.value)}
-                    >
-                      <option value="">ללא</option>
-                      {SORT_FIELDS.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    סדר
-                    <select
-                      value={crit.direction}
-                      onChange={(e) => handleSortDirectionChange(idx, e.target.value)}
-                    >
-                      <option value="asc">עולה</option>
-                      <option value="desc">יורד</option>
-                    </select>
-                  </label>
-                </div>
-              ))}
-            </div>
-          </section>
           <div className="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th>שם רחוב</th>
-                  <th>מספר בית</th>
-                  <th>כינוי הבניין</th>
-                  <th>סיווג</th>
-                  <th>סטטוס שיקום</th>
-                  <th>סוג הבעלות</th>
-                  <th>רובע</th>
-                  <th>תת רובע</th>
-                  <th>אזור סטטיסטי</th>
-                  <th>תאריך שינוי</th>
-                  <th>תמונת מצב (תמצית מצב)</th>
+                  <th aria-sort={getAriaSort('street')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('street')}>
+                      שם רחוב
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('street')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('houseNumber')}>
+                    <button
+                      type="button"
+                      className="sort-button"
+                      onClick={() => handleSortClick('houseNumber')}
+                    >
+                      מספר בית
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('houseNumber')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('nickname')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('nickname')}>
+                      כינוי הבניין
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('nickname')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('bldSivug')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('bldSivug')}>
+                      סיווג
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('bldSivug')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('status')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('status')}>
+                      סטטוס שיקום
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('status')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('sugBaalut')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('sugBaalut')}>
+                      סוג הבעלות
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('sugBaalut')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('quarter')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('quarter')}>
+                      רובע
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('quarter')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('subQuarter')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('subQuarter')}>
+                      תת רובע
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('subQuarter')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('statisticalArea')}>
+                    <button
+                      type="button"
+                      className="sort-button"
+                      onClick={() => handleSortClick('statisticalArea')}
+                    >
+                      אזור סטטיסטי
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('statisticalArea')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('updatedAt')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('updatedAt')}>
+                      תאריך שינוי
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('updatedAt')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('statusSummary')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('statusSummary')}>
+                      תמונת מצב (תמצית מצב)
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('statusSummary')}
+                      </span>
+                    </button>
+                  </th>
                   <th>פעולות</th>
                 </tr>
               </thead>
