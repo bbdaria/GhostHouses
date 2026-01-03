@@ -593,6 +593,25 @@ export default function BuildingsPage() {
     }, {});
   }, [selectedBuilding]);
 
+  const orderedFieldGroups = useMemo(() => {
+    const entries = Object.entries(fieldsByCategory);
+    if (entries.length === 0) return [];
+    const priority = (category) => {
+      if (category === 'מידע כללי') return 0;
+      if (category === 'פרטים מזהים') return 1;
+      return 2;
+    };
+    return entries
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => {
+        const aPriority = priority(a.entry[0]);
+        const bPriority = priority(b.entry[0]);
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.index - b.index;
+      })
+      .map((item) => item.entry);
+  }, [fieldsByCategory]);
+
   const sortFieldsForDisplay = (fields) => {
     if (!Array.isArray(fields)) return [];
     const fieldPriority = (name) => {
@@ -1103,7 +1122,7 @@ export default function BuildingsPage() {
                             {selectedView === 'edit' && canEdit && (
                               <form onSubmit={handleUpdateBuildingFields} className="details-card">
                                 {selectTablesLoading && <p className="muted">טוען טבלאות בחירה…</p>}
-                                {Object.entries(fieldsByCategory).map(([category, fields]) => (
+                                {orderedFieldGroups.map(([category, fields]) => (
                                   <div key={category} className="details-section">
                                     <h4>{category}</h4>
                                     <div className="form-grid">
@@ -1214,8 +1233,8 @@ export default function BuildingsPage() {
                                   </h3>
                                 </div>
 
-                                {Object.keys(fieldsByCategory).length > 0 ? (
-                                  Object.entries(fieldsByCategory).map(([category, fields]) => (
+                                {orderedFieldGroups.length > 0 ? (
+                                  orderedFieldGroups.map(([category, fields]) => (
                                     <div key={category} className="details-section">
                                       <h4>{category}</h4>
                                       <dl>
