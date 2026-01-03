@@ -195,7 +195,11 @@ public class BuildingsController : ApiControllerBase
                 building.Neighborhood,
                 building.BldSivug,
                 building.ShikumStatus,
-                building.StatusSummary))
+                building.StatusSummary,
+                building.SugBaalut,
+                building.Quarter,
+                building.SubQuarter,
+                building.StatisticalArea))
             .ToList();
 
         var fields = BuildFieldsSnapshot(building);
