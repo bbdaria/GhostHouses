@@ -11,6 +11,7 @@ namespace WebServer.Controllers;
 [ApiController]
 public class StreetsController : ControllerBase
 {
+    private const int NoStreetId = -1;
     private readonly AppDbContext _context;
 
     public StreetsController(AppDbContext context)
@@ -30,7 +31,8 @@ public class StreetsController : ControllerBase
         }
 
         var items = await query
-            .OrderBy(s => s.Name)
+            .OrderBy(s => s.StreetId == NoStreetId ? 0 : 1)
+            .ThenBy(s => s.Name)
             .Select(s => new StreetDto(s.StreetId, s.Name))
             .ToListAsync(cancellationToken);
 

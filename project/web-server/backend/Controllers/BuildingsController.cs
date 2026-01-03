@@ -51,7 +51,10 @@ public class BuildingsController : ApiControllerBase
         {
             if (filter.StreetId.Value == NoStreetId)
             {
-                query = query.Where(b => b.StreetCode == null || b.StreetName == NoStreetName);
+                query = query.Where(b =>
+                    b.StreetCode == NoStreetId ||
+                    b.StreetCode == null ||
+                    b.StreetName == NoStreetName);
             }
             else
             {
@@ -242,7 +245,10 @@ public class BuildingsController : ApiControllerBase
         {
             if (filter.StreetId.Value == NoStreetId)
             {
-                query = query.Where(b => b.StreetCode == null || b.StreetName == NoStreetName);
+                query = query.Where(b =>
+                    b.StreetCode == NoStreetId ||
+                    b.StreetCode == null ||
+                    b.StreetName == NoStreetName);
             }
             else
             {
@@ -417,7 +423,7 @@ public class BuildingsController : ApiControllerBase
 
         if (request.StreetId == NoStreetId)
         {
-            building.StreetCode = null;
+            building.StreetCode = NoStreetId;
             building.StreetName = NoStreetName;
         }
         else
@@ -528,7 +534,7 @@ public class BuildingsController : ApiControllerBase
 
         if (request.StreetId == NoStreetId)
         {
-            building.StreetCode = null;
+            building.StreetCode = NoStreetId;
             building.StreetName = NoStreetName;
         }
         else
@@ -693,7 +699,7 @@ public class BuildingsController : ApiControllerBase
 
             if (desiredStreetId.Value == NoStreetId)
             {
-                building.StreetCode = null;
+                building.StreetCode = NoStreetId;
                 building.StreetName = NoStreetName;
             }
             else
