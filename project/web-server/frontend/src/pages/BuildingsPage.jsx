@@ -730,25 +730,25 @@ export default function BuildingsPage() {
               placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
             />
           </label>
-          <div className="filters-actions">
+          <div className="filters-actions full-span align-right">
             <button type="submit" className="primary">
               חיפוש
             </button>
             <button type="button" onClick={handleReset} className="ghost">
               איפוס
             </button>
+            {canEdit && (
+              <button type="button" className="ghost" onClick={() => setShowCreateForm((prev) => !prev)}>
+                {showCreateForm ? 'סגור טופס הוספה' : 'הוסף מבנה'}
+              </button>
+            )}
+            {isAdmin && (
+              <button type="button" className="ghost" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'מייצא...' : 'יצוא לאקסל'}
+              </button>
+            )}
           </div>
         </form>
-        {canEdit && (
-          <button className="ghost" onClick={() => setShowCreateForm((prev) => !prev)}>
-            {showCreateForm ? 'סגור טופס הוספה' : 'הוסף מבנה'}
-          </button>
-        )}
-        {isAdmin && (
-          <button className="ghost" type="button" onClick={handleExport} disabled={exporting}>
-            {exporting ? 'מייצא...' : 'יצוא לאקסל'}
-          </button>
-        )}
         {loading && <p className="muted">טוען מבנים…</p>}
         {error && <p className="error">שגיאה בטעינת מבנים: {error}</p>}
         {actionMessage && <p className="success">{actionMessage}</p>}
