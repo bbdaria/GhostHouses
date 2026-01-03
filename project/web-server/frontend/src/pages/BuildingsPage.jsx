@@ -19,6 +19,8 @@ const initialFilters = {
   updatedTo: '',
   statusSummary: ''
 };
+
+const NO_STREET_OPTION = { streetId: -1, name: 'ללא שם רחוב' };
 const REQUIRED_EDIT_FIELDS = [
   { key: 'StreetId', label: 'שם רחוב' },
   { key: 'BldNum', label: 'מספר בית' },
@@ -173,9 +175,12 @@ export default function BuildingsPage() {
     const loadStreets = async () => {
       try {
         const data = await api.fetchStreets();
-        setStreets(data);
+        const hasNoStreet = data.some((street) => street.name === NO_STREET_OPTION.name);
+        const hasNoStreetId = data.some((street) => String(street.streetId) === String(NO_STREET_OPTION.streetId));
+        const withNoStreet = hasNoStreet || hasNoStreetId ? data : [NO_STREET_OPTION, ...data];
+        setStreets(withNoStreet);
       } catch {
-        setStreets([]);
+        setStreets([NO_STREET_OPTION]);
       }
     };
 
@@ -225,6 +230,8 @@ export default function BuildingsPage() {
 
     if (selectedBuilding.streetId !== null && selectedBuilding.streetId !== undefined) {
       nextValues.StreetId = String(selectedBuilding.streetId);
+    } else if (selectedBuilding.street === NO_STREET_OPTION.name) {
+      nextValues.StreetId = String(NO_STREET_OPTION.streetId);
     }
 
     setEditFieldValues(nextValues);
