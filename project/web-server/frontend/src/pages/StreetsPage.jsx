@@ -6,10 +6,6 @@ import { ROLE_LABELS } from '../i18n.js';
 
 const initialFilters = { search: '' };
 const initialForm = { streetId: '', name: '' };
-const SORT_FIELDS = [
-  { value: 'streetId', label: 'מזהה רחוב' },
-  { value: 'name', label: 'שם רחוב' }
-];
 
 export default function StreetsPage() {
   const { user } = useAuth();
@@ -28,10 +24,7 @@ export default function StreetsPage() {
   const [createForm, setCreateForm] = useState(initialForm);
   const [editForm, setEditForm] = useState(initialForm);
   const [selectedStreetId, setSelectedStreetId] = useState('');
-  const [sortCriteria, setSortCriteria] = useState([
-    { field: 'name', direction: 'asc' },
-    { field: 'streetId', direction: 'asc' }
-  ]);
+  const [sortConfig, setSortConfig] = useState({ field: 'name', direction: 'asc' });
 
   useEffect(() => {
     loadStreets(filters);
@@ -101,55 +94,62 @@ export default function StreetsPage() {
     }
   };
 
-  const handleSortFieldChange = (index, value) => {
-    setSortCriteria((prev) => {
-      const next = [...prev];
-      // If this value is already selected in another priority, clear it there.
-      next.forEach((c, i) => {
-        if (i !== index && c.field === value) {
-          next[i] = { ...next[i], field: '' };
-        }
-      });
-      next[index] = { ...next[index], field: value };
-      return next;
+  const handleSortClick = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: 'asc' };
     });
   };
 
-  const handleSortDirectionChange = (index, value) => {
-    setSortCriteria((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], direction: value };
-      return next;
-    });
+  const getSortIndicator = (field) => {
+    if (sortConfig.field !== field) return '';
+    return sortConfig.direction === 'asc' ? '∧' : '∨';
+  };
+
+  const getAriaSort = (field) => {
+    if (sortConfig.field !== field) return 'none';
+    return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
   };
 
   const sortedStreets = useMemo(() => {
     if (!streets || streets.length === 0) return [];
-    const criteria = sortCriteria.filter((c) => c.field);
-    if (criteria.length === 0) return streets;
+    if (!sortConfig.field) return streets;
 
-    const compare = (a, b, field, direction) => {
-      let result = 0;
-      if (field === 'streetId') {
-        result = Number(a.streetId) - Number(b.streetId);
-      } else {
-        const av = (a[field] || '').toString();
-        const bv = (b[field] || '').toString();
-        result = av.localeCompare(bv, 'he');
-      }
-      return direction === 'desc' ? -result : result;
+    const compareValues = (aValue, bValue, { numeric = false } = {}) => {
+      const aMissing = aValue === null || aValue === undefined || aValue === '';
+      const bMissing = bValue === null || bValue === undefined || bValue === '';
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (numeric) return aValue - bValue;
+      return String(aValue).localeCompare(String(bValue), 'he');
+    };
+
+    const getSortValue = (street) => {
+      if (sortConfig.field === 'streetId') return street.streetId;
+      return street.name;
     };
 
     const copy = [...streets];
     copy.sort((a, b) => {
-      for (const c of criteria) {
-        const cmp = compare(a, b, c.field, c.direction);
-        if (cmp !== 0) return cmp;
+      const aValue = getSortValue(a);
+      const bValue = getSortValue(b);
+      const cmp = compareValues(aValue, bValue, { numeric: sortConfig.field === 'streetId' });
+      if (cmp !== 0) return sortConfig.direction === 'desc' ? -cmp : cmp;
+      if (sortConfig.field !== 'name') {
+        const nameCmp = compareValues(a.name, b.name);
+        if (nameCmp !== 0) return nameCmp;
+      }
+      if (sortConfig.field !== 'streetId') {
+        const idCmp = compareValues(a.streetId, b.streetId, { numeric: true });
+        if (idCmp !== 0) return idCmp;
       }
       return 0;
     });
     return copy;
-  }, [streets, sortCriteria]);
+  }, [streets, sortConfig]);
 
   const handleSelectStreet = (street) => {
     setSelectedStreetId(String(street.streetId));
@@ -262,45 +262,26 @@ export default function StreetsPage() {
           <div className="panel-header">
             <h2>רחובות ({streets.length})</h2>
           </div>
-          <section className="panel">
-            <h3>מיון</h3>
-            <div className="form-grid">
-              {sortCriteria.map((crit, idx) => (
-                <div key={idx}>
-                  <label>
-                    {`עדיפות ${idx + 1}`}
-                    <select
-                      value={crit.field}
-                      onChange={(e) => handleSortFieldChange(idx, e.target.value)}
-                    >
-                      <option value="">ללא</option>
-                      {SORT_FIELDS.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    סדר
-                    <select
-                      value={crit.direction}
-                      onChange={(e) => handleSortDirectionChange(idx, e.target.value)}
-                    >
-                      <option value="asc">עולה</option>
-                      <option value="desc">יורד</option>
-                    </select>
-                  </label>
-                </div>
-              ))}
-            </div>
-          </section>
           <div className="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th>מזהה רחוב</th>
-                  <th>שם רחוב</th>
+                  <th aria-sort={getAriaSort('streetId')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('streetId')}>
+                      מזהה רחוב
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('streetId')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('name')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('name')}>
+                      שם רחוב
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('name')}
+                      </span>
+                    </button>
+                  </th>
                   <th>פעולות</th>
                 </tr>
               </thead>

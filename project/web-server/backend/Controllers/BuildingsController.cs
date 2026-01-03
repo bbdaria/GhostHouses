@@ -18,6 +18,9 @@ namespace WebServer.Controllers;
 [Route("api/[controller]")]
 public class BuildingsController : ApiControllerBase
 {
+    private const int NoStreetId = -1;
+    private const string NoStreetName = "ללא שם רחוב";
+
     private readonly AppDbContext _context;
     private readonly IExternalDataService _externalDataService;
     private readonly IAuditService _auditService;
@@ -46,7 +49,14 @@ public class BuildingsController : ApiControllerBase
 
         if (filter.StreetId.HasValue)
         {
-            query = query.Where(b => b.StreetCode == filter.StreetId.Value);
+            if (filter.StreetId.Value == NoStreetId)
+            {
+                query = query.Where(b => b.StreetCode == null || b.StreetName == NoStreetName);
+            }
+            else
+            {
+                query = query.Where(b => b.StreetCode == filter.StreetId.Value);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
@@ -230,7 +240,14 @@ public class BuildingsController : ApiControllerBase
 
         if (filter.StreetId.HasValue)
         {
-            query = query.Where(b => b.StreetCode == filter.StreetId.Value);
+            if (filter.StreetId.Value == NoStreetId)
+            {
+                query = query.Where(b => b.StreetCode == null || b.StreetName == NoStreetName);
+            }
+            else
+            {
+                query = query.Where(b => b.StreetCode == filter.StreetId.Value);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
@@ -398,14 +415,24 @@ public class BuildingsController : ApiControllerBase
             PhotoUrls = request.Photos is null ? string.Empty : string.Join(',', request.Photos)
         };
 
-        var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == request.StreetId, cancellationToken);
-        if (street == null)
+        if (request.StreetId == NoStreetId)
         {
-            return BadRequest($"Street with id {request.StreetId} not found.");
+            building.StreetCode = null;
+            building.StreetName = NoStreetName;
         }
+        else
+        {
+            var street = await _context.Streets.FirstOrDefaultAsync(
+                s => s.StreetId == request.StreetId,
+                cancellationToken);
+            if (street == null)
+            {
+                return BadRequest($"Street with id {request.StreetId} not found.");
+            }
 
-        building.StreetCode = street.StreetId;
-        building.StreetName = street.Name;
+            building.StreetCode = street.StreetId;
+            building.StreetName = street.Name;
+        }
 
         _context.Buildings.Add(building);
         await _context.SaveChangesAsync(cancellationToken);
@@ -499,14 +526,24 @@ public class BuildingsController : ApiControllerBase
         building.PhotoUrls = request.Photos is null ? building.PhotoUrls : string.Join(',', request.Photos);
         building.StatusSummaryUpdatedAt = DateTime.UtcNow;
 
-        var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == request.StreetId, cancellationToken);
-        if (street == null)
+        if (request.StreetId == NoStreetId)
         {
-            return BadRequest($"Street with id {request.StreetId} not found.");
+            building.StreetCode = null;
+            building.StreetName = NoStreetName;
         }
+        else
+        {
+            var street = await _context.Streets.FirstOrDefaultAsync(
+                s => s.StreetId == request.StreetId,
+                cancellationToken);
+            if (street == null)
+            {
+                return BadRequest($"Street with id {request.StreetId} not found.");
+            }
 
-        building.StreetCode = street.StreetId;
-        building.StreetName = street.Name;
+            building.StreetCode = street.StreetId;
+            building.StreetName = street.Name;
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -654,14 +691,24 @@ public class BuildingsController : ApiControllerBase
                 return BadRequest("StreetId is required.");
             }
 
-            var street = await _context.Streets.FirstOrDefaultAsync(s => s.StreetId == desiredStreetId.Value, cancellationToken);
-            if (street is null)
+            if (desiredStreetId.Value == NoStreetId)
             {
-                return BadRequest($"Street with id {desiredStreetId.Value} not found.");
+                building.StreetCode = null;
+                building.StreetName = NoStreetName;
             }
+            else
+            {
+                var street = await _context.Streets.FirstOrDefaultAsync(
+                    s => s.StreetId == desiredStreetId.Value,
+                    cancellationToken);
+                if (street is null)
+                {
+                    return BadRequest($"Street with id {desiredStreetId.Value} not found.");
+                }
 
-            building.StreetCode = street.StreetId;
-            building.StreetName = street.Name;
+                building.StreetCode = street.StreetId;
+                building.StreetName = street.Name;
+            }
         }
 
         var hasChanges = changes.Count > 0 ||
