@@ -59,6 +59,27 @@ public class LogsController : ApiControllerBase
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(filter.LogType))
+        {
+            var logType = filter.LogType.Trim().ToLowerInvariant();
+            if (logType == "deleted")
+            {
+                query = query.Where(x =>
+                    x.Log.Category == "מחיקה" ||
+                    x.Log.Title == "מחיקת מבנה");
+            }
+            else if (logType == "created")
+            {
+                query = query.Where(x =>
+                    x.Log.Category == "Create" ||
+                    x.Log.Category == "Seed" ||
+                    x.Log.Category == "יצירה" ||
+                    x.Log.Title == "יצירת מבנה" ||
+                    x.Log.Title == "אתחול מערכת" ||
+                    x.Log.Title == "שחזור מבנה");
+            }
+        }
+
         if (filter.From.HasValue)
         {
             query = query.Where(x => x.Log.CreatedAt >= filter.From.Value);
