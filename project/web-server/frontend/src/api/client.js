@@ -363,6 +363,7 @@ const api = {
     if (filters.buildingId) params.append('buildingId', filters.buildingId);
     if (filters.userId) params.append('userId', filters.userId);
     if (filters.user) params.append('user', filters.user);
+    if (filters.logType) params.append('logType', filters.logType);
     if (filters.street) params.append('street', filters.street);
     if (filters.streetId) params.append('streetId', filters.streetId);
     if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);

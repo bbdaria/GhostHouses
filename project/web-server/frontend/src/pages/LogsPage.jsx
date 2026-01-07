@@ -39,6 +39,7 @@ const baseFilters = {
   updatedFrom: '',
   updatedTo: '',
   statusSummary: '',
+  logType: '',
   user: ''
 };
 
@@ -561,6 +562,14 @@ export default function LogsPage() {
           <label>
             <span>משתמש</span>
             <input name="user" value={filters.user} onChange={handleChange} placeholder="שם משתמש" />
+          </label>
+          <label>
+            <span>סוג לוג</span>
+            <select name="logType" value={filters.logType} onChange={handleChange}>
+              <option value="">הכל</option>
+              <option value="deleted">נמחקו</option>
+              <option value="created">נוצרו</option>
+            </select>
           </label>
           <div className="filters-actions">
             <button type="submit" className="primary">
