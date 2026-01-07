@@ -466,6 +466,37 @@ tbody tr.active {
   font-size: 0.95rem;
 }
 
+.details-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  background: rgba(148, 163, 184, 0.08);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.details-section__header.is-open {
+  margin-bottom: 0.5rem;
+}
+
+.details-section__header h4 {
+  margin: 0;
+}
+
+.details-section__indicator {
+  color: #9aa4b2;
+  font-size: 0.85rem;
+}
+
+.details-section__header:hover,
+.details-section__header:focus-visible {
+  background: rgba(148, 163, 184, 0.16);
+}
+
 .details-section p {
   margin: 0;
 }
