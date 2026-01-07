@@ -9,6 +9,7 @@ public record LogFilterParameters(
     int? BuildingId = null,
     Guid? UserId = null,
     string? User = null,
+    string? LogType = null,
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
     string? Street = null,
