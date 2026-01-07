@@ -473,17 +473,9 @@ namespace WebServer.Migrations
 
             modelBuilder.Entity("WebServer.Models.BuildingLog", b =>
                 {
-                    b.HasOne("WebServer.Models.Building", "Building")
-                        .WithMany("Logs")
-                        .HasForeignKey("BuildingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("WebServer.Models.Users.AppUser", "CreatedByUser")
                         .WithMany("Logs")
                         .HasForeignKey("CreatedByUserId");
-
-                    b.Navigation("Building");
 
                     b.Navigation("CreatedByUser");
                 });
@@ -502,8 +494,6 @@ namespace WebServer.Migrations
             modelBuilder.Entity("WebServer.Models.Building", b =>
                 {
                     b.Navigation("ExternalSnapshots");
-
-                    b.Navigation("Logs");
                 });
 
             modelBuilder.Entity("WebServer.Models.Street", b =>
