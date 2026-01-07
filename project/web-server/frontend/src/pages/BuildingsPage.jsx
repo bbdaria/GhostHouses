@@ -27,8 +27,7 @@ const REQUIRED_EDIT_FIELDS = [
   { key: 'BldNum', label: 'מספר בית' },
   { key: 'BldName', label: 'כינוי הבניין' },
   { key: 'ShikumStatus', label: 'סטטוס שיקום' },
-  { key: 'BldSivug', label: 'סיווג' },
-  { key: 'StatusSummary', label: 'תמונת מצב (תמצית מצב)' }
+  { key: 'BldSivug', label: 'סיווג' }
 ];
 const REQUIRED_EDIT_COLUMNS = new Set(
   REQUIRED_EDIT_FIELDS.filter((field) => field.key !== 'StreetId').map((field) => field.key)
@@ -397,9 +396,6 @@ export default function BuildingsPage() {
       }
       if (!createForm.category) {
         throw new Error('יש לבחור סיווג');
-      }
-      if (!createForm.statusSummary.trim()) {
-        throw new Error('יש להזין תמונת מצב');
       }
       let statusOption = null;
       if (isRehabStatusRequired) {
@@ -1002,7 +998,6 @@ export default function BuildingsPage() {
                 value={createForm.statusSummary}
                 onChange={handleCreateChange}
                 placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
-                required
               />
             </label>
             <div className="filters-actions">
