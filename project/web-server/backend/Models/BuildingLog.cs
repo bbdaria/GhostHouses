@@ -7,7 +7,6 @@ public class BuildingLog
 {
     public int Id { get; set; }
     public int BuildingId { get; set; }
-    public Building Building { get; set; } = null!;
     public Guid? CreatedByUserId { get; set; }
     public AppUser? CreatedByUser { get; set; }
     public string Title { get; set; } = string.Empty;
