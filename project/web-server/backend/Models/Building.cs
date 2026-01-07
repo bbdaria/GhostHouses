@@ -579,6 +579,5 @@ public class Building
     [Column(TypeName = "text")]
     public string PhotoUrls { get; set; } = string.Empty;
 
-    public ICollection<BuildingLog> Logs { get; set; } = new List<BuildingLog>();
     public ICollection<ExternalSystemSnapshot> ExternalSnapshots { get; set; } = new List<ExternalSystemSnapshot>();
 }

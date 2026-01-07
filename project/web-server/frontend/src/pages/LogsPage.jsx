@@ -92,6 +92,7 @@ export default function LogsPage() {
   const [ownershipOptions, setOwnershipOptions] = useState([]);
   const [expandedLogId, setExpandedLogId] = useState(null);
   const [sortConfig, setSortConfig] = useState({ field: 'updatedAt', direction: 'desc' });
+  const [restoringLogId, setRestoringLogId] = useState(null);
   const rehabSivugValue = useMemo(() => {
     const match = sivugOptions.find((option) => option.label === 'ריק ובהליך שיקום');
     return match ? String(match.value) : '3';
@@ -299,6 +300,19 @@ export default function LogsPage() {
       await loadLogs(filters);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleRestoreBuilding = async (log) => {
+    setError('');
+    setRestoringLogId(log.id);
+    try {
+      await api.restoreBuildingFromLog(log.id);
+      await loadLogs(filters);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRestoringLogId(null);
     }
   };
 
@@ -661,7 +675,22 @@ export default function LogsPage() {
                   updatedAt: formatDate(timestamp),
                   statusSummary: displayOrDash(statusSummary),
                   user: displayOrDash(log.username),
-                  actions: <span className="muted">—</span>
+                  actions:
+                    log.actionType === 'מחיקה' ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={restoringLogId === log.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleRestoreBuilding(log);
+                        }}
+                      >
+                        הבניין נמחק – שחזור
+                      </button>
+                    ) : (
+                      <span className="muted">—</span>
+                    )
                 };
                 return (
                   <Fragment key={log.id}>

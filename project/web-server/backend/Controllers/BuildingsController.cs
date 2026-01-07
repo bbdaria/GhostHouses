@@ -99,17 +99,17 @@ public class BuildingsController : ApiControllerBase
 
         if (!string.IsNullOrWhiteSpace(filter.Quarter))
         {
-            query = query.Where(b => EF.Functions.ILike(b.Quarter, $"%{filter.Quarter}%"));
+            query = query.Where(b => EF.Functions.ILike(b.Quarter ?? string.Empty, $"%{filter.Quarter}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.SubQuarter))
         {
-            query = query.Where(b => EF.Functions.ILike(b.SubQuarter, $"%{filter.SubQuarter}%"));
+            query = query.Where(b => EF.Functions.ILike(b.SubQuarter ?? string.Empty, $"%{filter.SubQuarter}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.StatisticalArea))
         {
-            query = query.Where(b => EF.Functions.ILike(b.StatisticalArea, $"%{filter.StatisticalArea}%"));
+            query = query.Where(b => EF.Functions.ILike(b.StatisticalArea ?? string.Empty, $"%{filter.StatisticalArea}%"));
         }
 
         if (filter.UpdatedFrom.HasValue)
@@ -167,8 +167,6 @@ public class BuildingsController : ApiControllerBase
     {
         var building = await _context.Buildings
             .Include(b => b.Street)
-            .Include(b => b.Logs.OrderByDescending(l => l.CreatedAt))
-            .ThenInclude(l => l.CreatedByUser)
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
 
         if (building is null)
@@ -177,7 +175,9 @@ public class BuildingsController : ApiControllerBase
         }
 
         var externalData = await _externalDataService.GetBuildingDataAsync(id, cancellationToken);
-        var logs = building.Logs
+        var logs = await _context.BuildingLogs
+            .Where(l => l.BuildingId == id)
+            .Include(l => l.CreatedByUser)
             .OrderByDescending(l => l.CreatedAt)
             .Take(10)
             .Select(l => new BuildingLogDto(
@@ -188,7 +188,7 @@ public class BuildingsController : ApiControllerBase
                 l.Category,
                 l.Severity,
                 IsraelTime.Convert(l.CreatedAt),
-                l.CreatedByUser?.Username,
+                l.CreatedByUser != null ? l.CreatedByUser.Username : null,
                 building.StreetName,
                 building.HouseNumber,
                 building.BuildingName,
@@ -200,7 +200,7 @@ public class BuildingsController : ApiControllerBase
                 building.Quarter,
                 building.SubQuarter,
                 building.StatisticalArea))
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         var fields = BuildFieldsSnapshot(building);
 
@@ -297,17 +297,17 @@ public class BuildingsController : ApiControllerBase
 
         if (!string.IsNullOrWhiteSpace(filter.Quarter))
         {
-            query = query.Where(b => EF.Functions.ILike(b.Quarter, $"%{filter.Quarter}%"));
+            query = query.Where(b => EF.Functions.ILike(b.Quarter ?? string.Empty, $"%{filter.Quarter}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.SubQuarter))
         {
-            query = query.Where(b => EF.Functions.ILike(b.SubQuarter, $"%{filter.SubQuarter}%"));
+            query = query.Where(b => EF.Functions.ILike(b.SubQuarter ?? string.Empty, $"%{filter.SubQuarter}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.StatisticalArea))
         {
-            query = query.Where(b => EF.Functions.ILike(b.StatisticalArea, $"%{filter.StatisticalArea}%"));
+            query = query.Where(b => EF.Functions.ILike(b.StatisticalArea ?? string.Empty, $"%{filter.StatisticalArea}%"));
         }
 
         if (filter.UpdatedFrom.HasValue)
@@ -785,7 +785,7 @@ public class BuildingsController : ApiControllerBase
             .Where(p => p.CanRead)
             .Where(p =>
             {
-                if (p.Name is nameof(Building.Logs) or nameof(Building.ExternalSnapshots) or nameof(Building.Street))
+                if (p.Name is nameof(Building.ExternalSnapshots) or nameof(Building.Street))
                 {
                     return false;
                 }
@@ -1296,10 +1296,308 @@ public class BuildingsController : ApiControllerBase
             return Conflict("Building has critical logs and cannot be deleted.");
         }
 
+        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
+        var fieldsSnapshot = BuildFieldsSnapshot(building);
+        var externalData = await _externalDataService.GetBuildingDataAsync(id, cancellationToken);
+        var deleteSnapshot = new
+        {
+            building.Id,
+            building.FldId,
+            building.StreetCode,
+            building.BuildingName,
+            building.StreetName,
+            building.HouseNumber,
+            building.Neighborhood,
+            building.BldSivug,
+            building.ShikumStatus,
+            building.StatusSummary,
+            building.StatusSummaryUpdatedAt,
+            Changes = BuildDeleteChanges(fieldsSnapshot),
+            Fields = fieldsSnapshot,
+            ExternalData = externalData
+        };
+
+        _context.BuildingLogs.Add(new BuildingLog
+        {
+            BuildingId = building.Id,
+            Title = "מחיקת מבנה",
+            Message = JsonSerializer.Serialize(deleteSnapshot),
+            Category = "מחיקה",
+            Severity = "warning",
+            CreatedByUserId = actorId,
+            CreatedAt = IsraelTime.NowUtc
+        });
+
         _context.Buildings.Remove(building);
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(Building), id.ToString(), "Delete", new { request.Reason }, cancellationToken);
 
         return NoContent();
     }
+
+    [HttpPost("restore/{logId:int}")]
+    [Authorize(Policy = "Editor")]
+    public async Task<ActionResult<BuildingSummaryDto>> RestoreBuilding(int logId, CancellationToken cancellationToken)
+    {
+        var log = await _context.BuildingLogs
+            .FirstOrDefaultAsync(l => l.Id == logId, cancellationToken);
+
+        if (log is null)
+        {
+            return NotFound();
+        }
+
+        if (!IsDeleteLog(log))
+        {
+            return BadRequest("Log entry is not a delete record.");
+        }
+
+        var snapshot = DeserializeSnapshot(log.Message);
+        if (snapshot is null)
+        {
+            return BadRequest("Missing snapshot for restore.");
+        }
+
+        var buildingId = snapshot.Id != 0 ? snapshot.Id : log.BuildingId;
+        var exists = await _context.Buildings.AnyAsync(b => b.Id == buildingId, cancellationToken);
+        if (exists)
+        {
+            return Conflict("Building already exists.");
+        }
+
+        var building = new Building
+        {
+            Id = buildingId,
+            FldId = snapshot.FldId,
+            BuildingName = snapshot.BuildingName ?? string.Empty,
+            StreetName = snapshot.StreetName ?? string.Empty,
+            HouseNumber = snapshot.HouseNumber ?? string.Empty,
+            Neighborhood = snapshot.Neighborhood ?? string.Empty,
+            BldSivug = snapshot.BldSivug,
+            ShikumStatus = snapshot.ShikumStatus ?? BuildingStatus.Unknown,
+            StatusSummary = snapshot.StatusSummary ?? string.Empty,
+            StatusSummaryUpdatedAt = snapshot.StatusSummaryUpdatedAt
+        };
+
+        var streetId = snapshot.StreetCode;
+        if (!streetId.HasValue && snapshot.Fields is not null)
+        {
+            var streetField = snapshot.Fields.FirstOrDefault(field =>
+                string.Equals(field.ColumnName, "StreetId", StringComparison.OrdinalIgnoreCase));
+            if (streetField?.RawValue is not null)
+            {
+                streetId = streetField.RawValue;
+            }
+            else if (!string.IsNullOrWhiteSpace(streetField?.Value) &&
+                     int.TryParse(streetField.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+            {
+                streetId = parsed;
+            }
+        }
+
+        if (!streetId.HasValue)
+        {
+            return BadRequest("StreetId is required to restore building.");
+        }
+
+        if (streetId.Value == NoStreetId)
+        {
+            building.StreetCode = NoStreetId;
+            building.StreetName = NoStreetName;
+        }
+        else
+        {
+            var street = await _context.Streets.FirstOrDefaultAsync(
+                s => s.StreetId == streetId.Value,
+                cancellationToken);
+            if (street is null)
+            {
+                return BadRequest($"Street with id {streetId.Value} not found.");
+            }
+
+            building.StreetCode = street.StreetId;
+            building.StreetName = street.Name;
+        }
+
+        var propertyByColumn = typeof(Building)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.CanWrite)
+            .Select(p => new
+            {
+                Property = p,
+                Column = p.GetCustomAttribute<ColumnAttribute>()
+            })
+            .Where(x => x.Column is not null)
+            .ToDictionary(
+                x => string.IsNullOrWhiteSpace(x.Column!.Name) ? x.Property.Name : x.Column!.Name!,
+                x => x.Property,
+                StringComparer.OrdinalIgnoreCase);
+
+        if (snapshot.Fields is not null)
+        {
+            foreach (var field in snapshot.Fields)
+            {
+                if (string.IsNullOrWhiteSpace(field.ColumnName))
+                {
+                    continue;
+                }
+
+                if (string.Equals(field.ColumnName, "StreetName", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(field.ColumnName, "StreetId", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!propertyByColumn.TryGetValue(field.ColumnName, out var property))
+                {
+                    continue;
+                }
+
+                var raw = field.RawValue?.ToString(CultureInfo.InvariantCulture) ?? field.Value;
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    continue;
+                }
+
+                var converted = ConvertFieldValue(raw, property);
+                if (converted is InvalidFieldValue invalid)
+                {
+                    return BadRequest($"Invalid value for '{field.ColumnName}': {invalid.Message}");
+                }
+
+                property.SetValue(building, converted);
+            }
+        }
+
+        _context.Buildings.Add(building);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        Guid? actorId = await ResolveActorIdAsync(cancellationToken);
+        var restoredFields = BuildFieldsSnapshot(building);
+        BuildingExternalDataDto externalData;
+        try
+        {
+            externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
+        }
+        catch
+        {
+            externalData = new BuildingExternalDataDto(
+                new ExternalSystemSnapshotDto("GIS", "{}", IsraelTime.NowUtc),
+                new ExternalSystemSnapshotDto("Water", "{}", IsraelTime.NowUtc),
+                new ExternalSystemSnapshotDto("Electricity", "{}", IsraelTime.NowUtc),
+                new ExternalSystemSnapshotDto("Tax", "{}", IsraelTime.NowUtc),
+                new ExternalSystemSnapshotDto("CRM106", "{}", IsraelTime.NowUtc));
+        }
+
+        var restoreSnapshot = new
+        {
+            building.Id,
+            building.FldId,
+            building.StreetCode,
+            building.BuildingName,
+            building.StreetName,
+            building.HouseNumber,
+            building.Neighborhood,
+            building.BldSivug,
+            building.ShikumStatus,
+            building.StatusSummary,
+            building.StatusSummaryUpdatedAt,
+            Changes = BuildCreateChanges(building),
+            Fields = restoredFields,
+            ExternalData = externalData
+        };
+
+        _context.BuildingLogs.Add(new BuildingLog
+        {
+            BuildingId = building.Id,
+            Title = "שחזור מבנה",
+            Message = JsonSerializer.Serialize(restoreSnapshot),
+            Category = "יצירה",
+            Severity = "info",
+            CreatedByUserId = actorId,
+            CreatedAt = IsraelTime.NowUtc
+        });
+        await _context.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "SELECT setval(pg_get_serial_sequence('\"Buildings\"','\"Id\"'), GREATEST((SELECT MAX(\"Id\") FROM \"Buildings\"), 1))",
+                cancellationToken);
+        }
+        catch
+        {
+            // best-effort sequence update
+        }
+
+        await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Restore", null, cancellationToken);
+
+        return new BuildingSummaryDto(
+            building.Id,
+            building.FldId,
+            building.StreetCode,
+            building.BuildingName,
+            building.StreetName,
+            building.HouseNumber,
+            building.Neighborhood,
+            building.ShikumStatus,
+            building.BldSivug,
+            building.StatusSummary,
+            IsraelTime.Convert(building.StatusSummaryUpdatedAt),
+            building.SugBaalut,
+            building.Quarter,
+            building.SubQuarter,
+            building.StatisticalArea);
+    }
+
+    private static bool IsDeleteLog(BuildingLog log)
+    {
+        return string.Equals(log.Category, "מחיקה", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(log.Title, "מחיקת מבנה", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static BuildingSnapshot? DeserializeSnapshot(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<BuildingSnapshot>(
+                message,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<FieldChange> BuildDeleteChanges(IReadOnlyList<BuildingFieldDto> fields)
+    {
+        return fields
+            .Where(field => !string.IsNullOrWhiteSpace(field.ColumnName))
+            .Select(field => new FieldChange(
+                field.ColumnName,
+                field.FieldName,
+                string.IsNullOrWhiteSpace(field.Value) ? null : field.Value,
+                "-"))
+            .ToList();
+    }
+
+    private sealed record BuildingSnapshot(
+        int Id,
+        int? FldId,
+        int? StreetCode,
+        string? BuildingName,
+        string? StreetName,
+        string? HouseNumber,
+        string? Neighborhood,
+        int? BldSivug,
+        BuildingStatus? ShikumStatus,
+        string? StatusSummary,
+        DateTime? StatusSummaryUpdatedAt,
+        List<BuildingFieldDto>? Fields);
 }
