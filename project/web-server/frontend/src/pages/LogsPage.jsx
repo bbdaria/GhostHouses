@@ -665,16 +665,6 @@ export default function LogsPage() {
                     <>
                       <button
                         type="button"
-                        className="ghost"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleShowLog(log);
-                        }}
-                      >
-                        הצג
-                      </button>
-                      <button
-                        type="button"
                         className="danger"
                         aria-label={`מחק לוג ${log.id}`}
                         onClick={(event) => {
