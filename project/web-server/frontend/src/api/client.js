@@ -355,6 +355,9 @@ const api = {
   async deleteBuildingLog(logId) {
     return request(`/logs/${logId}`, { method: 'DELETE' });
   },
+  async restoreBuildingFromLog(logId) {
+    return request(`/buildings/restore/${logId}`, { method: 'POST' });
+  },
   async fetchLogs(filters = {}) {
     const params = new URLSearchParams();
     if (filters.buildingId) params.append('buildingId', filters.buildingId);

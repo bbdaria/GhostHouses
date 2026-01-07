@@ -46,6 +46,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<BuildingLog>()
             .HasQueryFilter(log => !log.IsDeleted);
 
+        modelBuilder.Entity<BuildingLog>()
+            .HasIndex(log => log.BuildingId);
+
         modelBuilder.Entity<Street>()
             .HasKey(s => s.StreetId);
 
