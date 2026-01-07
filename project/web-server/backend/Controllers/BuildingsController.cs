@@ -338,14 +338,8 @@ public class BuildingsController : ApiControllerBase
             .ToListAsync(cancellationToken);
 
         var fieldDefinitions = BuildFieldsSnapshot(buildings.FirstOrDefault() ?? new Building());
-        var groupedFields = fieldDefinitions
-            .GroupBy(field => field.Category)
-            .Select(group => new
-            {
-                Category = group.Key,
-                Fields = group.ToList()
-            })
-            .ToList();
+        var groupedFields = OrderFieldGroupsForExport(fieldDefinitions);
+        var orderedFields = groupedFields.SelectMany(group => group.Fields).ToList();
 
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Buildings");
@@ -386,9 +380,9 @@ public class BuildingsController : ApiControllerBase
                     StringComparer.OrdinalIgnoreCase);
 
             var row = i + 3;
-            for (var col = 0; col < fieldDefinitions.Count; col++)
+            for (var col = 0; col < orderedFields.Count; col++)
             {
-                var columnName = fieldDefinitions[col].ColumnName;
+                var columnName = orderedFields[col].ColumnName;
                 valuesByColumn.TryGetValue(columnName, out var value);
                 worksheet.Cell(row, col + 1).Value = value ?? string.Empty;
             }
@@ -881,7 +875,7 @@ public class BuildingsController : ApiControllerBase
         {
             ["ID נכס לצורך מערכת זו בלבד"] = "ID",
             ["תמצית מצב"] = "תמונת מצב",
-            ["תאריך עדכון תמצית מצב"] = "תאריך עדכון סטטוס",
+            ["תאריך עדכון תמצית מצב"] = "תאריך שינוי",
             ["ציון עמידה בסטנדרט"] = "ציון",
             ["פרטי מחזיקים"] = "פרטי מחזיק",
             ["האם הייתה צריכת מים ב־6 החודשים האחרונים"] = "צריכת מים ב-6 החודשים האחרונים",
@@ -911,7 +905,59 @@ public class BuildingsController : ApiControllerBase
             return excelName;
         }
 
+        if (excelName == "ID" || excelName == "תאריך שינוי")
+        {
+            return excelName;
+        }
+
         return $"{excelName} ({fieldName})";
+    }
+
+    private sealed record OrderedFieldGroup(string Category, List<BuildingFieldDto> Fields);
+
+    private static IReadOnlyList<OrderedFieldGroup> OrderFieldGroupsForExport(IReadOnlyList<BuildingFieldDto> fields)
+    {
+        if (fields.Count == 0)
+        {
+            return Array.Empty<OrderedFieldGroup>();
+        }
+
+        var indexed = fields
+            .Select((field, index) => new { field, index })
+            .ToList();
+
+        return indexed
+            .GroupBy(entry => string.IsNullOrWhiteSpace(entry.field.Category) ? "כללי" : entry.field.Category)
+            .Select(group => new
+            {
+                Category = group.Key,
+                Index = group.Min(entry => entry.index),
+                Fields = group.ToList()
+            })
+            .OrderBy(group => GetCategoryPriority(group.Category))
+            .ThenBy(group => group.Index)
+            .Select(group => new OrderedFieldGroup(
+                group.Category,
+                group.Fields
+                    .OrderBy(entry => GetFieldPriority(entry.field.FieldName))
+                    .ThenBy(entry => entry.index)
+                    .Select(entry => entry.field)
+                    .ToList()))
+            .ToList();
+    }
+
+    private static int GetCategoryPriority(string category)
+    {
+        if (category == "מידע כללי") return 0;
+        if (category == "פרטים מזהים") return 1;
+        return 2;
+    }
+
+    private static int GetFieldPriority(string? fieldName)
+    {
+        if (fieldName == "סיווג") return 0;
+        if (fieldName == "סטטוס שיקום") return 1;
+        return 2;
     }
 
     private static IReadOnlyList<FieldChange> BuildCreateChanges(Building building)
