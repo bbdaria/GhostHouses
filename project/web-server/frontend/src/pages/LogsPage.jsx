@@ -661,21 +661,7 @@ export default function LogsPage() {
                   updatedAt: formatDate(timestamp),
                   statusSummary: displayOrDash(statusSummary),
                   user: displayOrDash(log.username),
-                  actions: (
-                    <>
-                      <button
-                        type="button"
-                        className="danger"
-                        aria-label={`מחק לוג ${log.id}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleDeleteLog(log.id);
-                        }}
-                      >
-                        מחק
-                      </button>
-                    </>
-                  )
+                  actions: <span className="muted">—</span>
                 };
                 return (
                   <Fragment key={log.id}>
