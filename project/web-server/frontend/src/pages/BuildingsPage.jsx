@@ -1097,24 +1097,6 @@ export default function BuildingsPage() {
                         <td>{formatLogDate(building.updatedAt)}</td>
                         <td>{building.statusSummary || '—'}</td>
                         <td>
-                          <button
-                            type="button"
-                            className="ghost"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (
-                                selectedBuilding &&
-                                selectedBuilding.id === building.id &&
-                                selectedView === 'all'
-                              ) {
-                                setSelectedBuilding(null);
-                                return;
-                              }
-                              loadBuildingDetails(building.id, 'all');
-                            }}
-                          >
-                            הצג
-                          </button>
                           {canEdit && (
                             <button
                               type="button"
