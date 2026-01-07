@@ -1,29 +1,14 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
-import { STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
+import { STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import {
   BUILDING_FIELD_LABELS,
   BUILDING_FIELD_PLACEHOLDERS,
   LOG_TABLE_COLUMNS,
   STATUS_SELECT_PLACEHOLDER
 } from '../constants.js';
-
-const normalizeStatusValue = (value, statusIdToValue = {}) => {
-  if (value === null || value === undefined) return 'Unknown';
-  if (typeof value === 'number') {
-    return statusIdToValue[value] || STATUS_VALUE_BY_ID[value] || 'Unknown';
-  }
-  if (typeof value === 'string') {
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric) && (statusIdToValue[numeric] || STATUS_VALUE_BY_ID[numeric])) {
-      return statusIdToValue[numeric] || STATUS_VALUE_BY_ID[numeric];
-    }
-    return value;
-  }
-  return 'Unknown';
-};
 
 const baseFilters = {
   buildingId: '',
@@ -88,10 +73,8 @@ export default function LogsPage() {
   const [error, setError] = useState('');
   const [streets, setStreets] = useState([]);
   const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
-  const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
   const [sivugOptions, setSivugOptions] = useState([]);
   const [ownershipOptions, setOwnershipOptions] = useState([]);
-  const [expandedLogId, setExpandedLogId] = useState(null);
   const [sortConfig, setSortConfig] = useState({ field: 'updatedAt', direction: 'desc' });
   const [restoringLogId, setRestoringLogId] = useState(null);
   const rehabSivugValue = useMemo(() => {
@@ -102,14 +85,6 @@ export default function LogsPage() {
     if (!filters.bldSivug && filters.bldSivug !== 0) return false;
     return String(filters.bldSivug) === rehabSivugValue;
   }, [filters.bldSivug, rehabSivugValue]);
-  const statusIdToValue = useMemo(
-    () =>
-      statusOptions.reduce((acc, opt) => {
-        acc[opt.id] = opt.value;
-        return acc;
-      }, {}),
-    [statusOptions]
-  );
   const statuses = statusOptions;
   const dateFormatter = useMemo(
     () =>
@@ -135,16 +110,6 @@ export default function LogsPage() {
     );
     return match?.value ?? null;
   };
-  const getSivugLabel = (value) => {
-    if (value === null || value === undefined || value === '') return '—';
-    const match = sivugOptions.find((option) => String(option.value) === String(value));
-    return match ? match.label : String(value);
-  };
-  const getOwnershipLabel = (value) => {
-    if (value === null || value === undefined || value === '') return '—';
-    const match = ownershipOptions.find((option) => String(option.value) === String(value));
-    return match ? match.label : String(value);
-  };
   const getExcelAwareLabel = (fieldName) => {
     if (!fieldName) return '';
     const excelName = EXCEL_LABEL_OVERRIDES[fieldName];
@@ -166,8 +131,32 @@ export default function LogsPage() {
     }
   };
 
-  const handleShowLog = (log) => {
-    setExpandedLogId((prev) => (prev === log.id ? null : log.id));
+  const getSortedChanges = (snapshot, snapshotFields) => {
+    const changes = Array.isArray(snapshot?.changes) ? snapshot.changes : [];
+    if (changes.length === 0) return [];
+    const fieldOrder = new Map(
+      (snapshotFields || []).map((field, index) => [(field.columnName || '').toLowerCase(), index])
+    );
+    return [...changes].sort((a, b) => {
+      const aKey = String(a.columnName || '').toLowerCase();
+      const bKey = String(b.columnName || '').toLowerCase();
+      const aOrder = fieldOrder.has(aKey) ? fieldOrder.get(aKey) : Number.MAX_SAFE_INTEGER;
+      const bOrder = fieldOrder.has(bKey) ? fieldOrder.get(bKey) : Number.MAX_SAFE_INTEGER;
+      return aOrder - bOrder;
+    });
+  };
+
+  const isBlankValue = (value) =>
+    value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+
+  const getDisplayChanges = (log, snapshotFields) => {
+    const snapshot = log.snapshot || {};
+    const sortedChanges = getSortedChanges(snapshot, snapshotFields);
+    if (sortedChanges.length === 0) return [];
+    if (log.actionType === 'מחיקה') {
+      return sortedChanges.filter((change) => !isBlankValue(change.oldValue));
+    }
+    return sortedChanges;
   };
 
   const handleSortClick = (field) => {
@@ -198,18 +187,9 @@ export default function LogsPage() {
           label: opt.label,
           value: STATUS_VALUE_BY_ID[opt.value] || opt.label
         }));
-        const labelMap = mapped.reduce(
-          (acc, opt) => {
-            acc[opt.value] = opt.label;
-            return acc;
-          },
-          { Unknown: 'לא ידוע' }
-        );
         setStatusOptions(mapped);
-        setStatusLabelMap(labelMap);
       } catch {
         setStatusOptions(STATUS_OPTIONS);
-        setStatusLabelMap(STATUS_LABEL_MAP);
       }
     };
 
@@ -295,15 +275,6 @@ export default function LogsPage() {
     loadLogs(filters);
   };
 
-  const handleDeleteLog = async (logId) => {
-    try {
-      await api.deleteBuildingLog(logId);
-      await loadLogs(filters);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
   const handleRestoreBuilding = async (log) => {
     setError('');
     setRestoringLogId(log.id);
@@ -346,31 +317,12 @@ export default function LogsPage() {
         snapshot.houseNumber || getSnapshotFieldValue(snapshotFields, 'BldNum') || '';
       const nickname =
         snapshot.buildingName || getSnapshotFieldValue(snapshotFields, 'BldName') || '';
-      const sivugValue = snapshot.bldSivug ?? null;
-      const sivugLabel =
-        getSnapshotFieldValue(snapshotFields, 'BldSivug') || getSivugLabel(sivugValue);
-      const statusFromSnapshot = getSnapshotFieldValue(snapshotFields, 'ShikumStatus');
-      const statusValue = normalizeStatusValue(
-        snapshot.shikumStatus || 'Unknown',
-        statusIdToValue
-      );
-      const statusMissing =
-        !statusValue || statusValue === 'Unknown' || statusValue === 'לא ידוע';
-      const statusLabel =
-        statusFromSnapshot || (statusMissing ? '' : statusLabelMap[statusValue] || statusValue || '');
-      const statusSummary =
-        getSnapshotFieldValue(snapshotFields, 'StatusSummary') || snapshot.statusSummary || '';
-      const sugBaalutValue = snapshot.sugBaalut ?? null;
-      const sugBaalutLabel =
-        getSnapshotFieldValue(snapshotFields, 'SugBaalut') || getOwnershipLabel(sugBaalutValue);
-      const quarterValue = snapshot.quarter || getSnapshotFieldValue(snapshotFields, 'Quarter') || '';
-      const subQuarterValue =
-        snapshot.subQuarter || getSnapshotFieldValue(snapshotFields, 'SubQuarter') || '';
-      const statisticalAreaValue =
-        snapshot.statisticalArea ||
-        getSnapshotFieldValue(snapshotFields, 'StatisticalArea') ||
-        '';
-      const user = log.username || '';
+      const displayChanges = getDisplayChanges(log, snapshotFields);
+      const changedFields = displayChanges
+        .map((change) => getExcelAwareLabel(change.fieldName || change.columnName))
+        .join(', ');
+      const oldValues = displayChanges.map((change) => displayOrDash(change.oldValue)).join(', ');
+      const newValues = displayChanges.map((change) => displayOrDash(change.newValue)).join(', ');
       const updatedAtValue = log.createdAt ? new Date(log.createdAt).getTime() : null;
 
       switch (field) {
@@ -380,24 +332,16 @@ export default function LogsPage() {
           return houseNumber;
         case 'nickname':
           return nickname;
-        case 'bldSivug':
-          return sivugLabel;
-        case 'status':
-          return statusLabel;
-        case 'sugBaalut':
-          return sugBaalutLabel;
-        case 'quarter':
-          return quarterValue || '';
-        case 'subQuarter':
-          return subQuarterValue || '';
-        case 'statisticalArea':
-          return statisticalAreaValue || '';
+        case 'changedFields':
+          return changedFields;
         case 'updatedAt':
           return updatedAtValue;
-        case 'statusSummary':
-          return statusSummary;
+        case 'oldValues':
+          return oldValues;
+        case 'newValues':
+          return newValues;
         case 'user':
-          return user;
+          return log.username || '';
         default:
           return '';
       }
@@ -422,7 +366,7 @@ export default function LogsPage() {
       return 0;
     });
     return copy;
-  }, [logs, sortConfig, statusIdToValue, statusLabelMap, sivugOptions, ownershipOptions]);
+  }, [logs, sortConfig]);
 
   return (
     <main className="app logs-app">
@@ -620,8 +564,9 @@ export default function LogsPage() {
               )}
               {sortedLogs.map((log) => {
                 const snapshot = log.snapshot || {};
-                const changeEntries = Array.isArray(snapshot.changes) ? snapshot.changes : [];
                 const snapshotFields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
+                const displayChanges = getDisplayChanges(log, snapshotFields);
+                const hasChanges = displayChanges.length > 0;
                 const street =
                   snapshot.streetName ||
                   getSnapshotFieldValue(snapshotFields, 'StreetName') ||
@@ -634,123 +579,61 @@ export default function LogsPage() {
                   snapshot.buildingName ||
                   getSnapshotFieldValue(snapshotFields, 'BldName') ||
                   '—';
-                const sivugValue = snapshot.bldSivug ?? null;
-                const sivugLabel =
-                  getSnapshotFieldValue(snapshotFields, 'BldSivug') || getSivugLabel(sivugValue);
-                const statusValue = normalizeStatusValue(
-                  snapshot.shikumStatus || 'Unknown',
-                  statusIdToValue
-                );
-                const statusMissing =
-                  !statusValue || statusValue === 'Unknown' || statusValue === 'לא ידוע';
-                const statusLabel =
-                  getSnapshotFieldValue(snapshotFields, 'ShikumStatus') ||
-                  (statusMissing ? '—' : statusLabelMap[statusValue] || statusValue || '—');
-                const statusSummary =
-                  getSnapshotFieldValue(snapshotFields, 'StatusSummary') ||
-                  snapshot.statusSummary ||
-                  '';
-                const sugBaalutValue =
-                  getSnapshotFieldValue(snapshotFields, 'SugBaalut') ?? snapshot.sugBaalut;
-                const quarterValue =
-                  getSnapshotFieldValue(snapshotFields, 'Quarter') ?? snapshot.quarter;
-                const subQuarterValue =
-                  getSnapshotFieldValue(snapshotFields, 'SubQuarter') ?? snapshot.subQuarter;
-                const statisticalAreaValue =
-                  getSnapshotFieldValue(snapshotFields, 'StatisticalArea') ??
-                  snapshot.statisticalArea;
-                const timestamp = log.createdAt;
-                const isExpanded = expandedLogId === log.id;
-                const fieldOrder = new Map(
-                  snapshotFields.map((field, index) => [(field.columnName || '').toLowerCase(), index])
-                );
-                const sortedChanges = [...changeEntries].sort((a, b) => {
-                  const aKey = String(a.columnName || '').toLowerCase();
-                  const bKey = String(b.columnName || '').toLowerCase();
-                  const aOrder = fieldOrder.has(aKey) ? fieldOrder.get(aKey) : Number.MAX_SAFE_INTEGER;
-                  const bOrder = fieldOrder.has(bKey) ? fieldOrder.get(bKey) : Number.MAX_SAFE_INTEGER;
-                  return aOrder - bOrder;
-                });
-                const row = {
-                  street: displayOrDash(street),
-                  houseNumber: displayOrDash(houseNumber),
-                  nickname: displayOrDash(nickname),
-                  bldSivug: sivugLabel,
-                  status: displayOrDash(statusLabel),
-                  sugBaalut: getOwnershipLabel(sugBaalutValue),
-                  quarter: displayOrDash(quarterValue),
-                  subQuarter: displayOrDash(subQuarterValue),
-                  statisticalArea: displayOrDash(statisticalAreaValue),
-                  updatedAt: formatDate(timestamp),
-                  statusSummary: displayOrDash(statusSummary),
-                  user: displayOrDash(log.username),
-                  actions:
-                    log.actionType === 'מחיקה' ? (
-                      <button
-                        type="button"
-                        className="ghost"
-                        disabled={restoringLogId === log.id}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleRestoreBuilding(log);
-                        }}
-                      >
-                        הבניין נמחק – שחזור
-                      </button>
-                    ) : (
-                      <span className="muted">—</span>
+                const changeLabels = hasChanges
+                  ? displayChanges.map((change) =>
+                      displayOrDash(getExcelAwareLabel(change.fieldName || change.columnName))
                     )
-                };
+                  : ['—'];
+                const oldValues = hasChanges
+                  ? displayChanges.map((change) => displayOrDash(change.oldValue))
+                  : ['—'];
+                const newValues = hasChanges
+                  ? displayChanges.map((change) => displayOrDash(change.newValue))
+                  : ['—'];
+                const showRestore = log.actionType === 'מחיקה';
+
+                const changeRows = changeLabels.map((label, index) => ({
+                  label,
+                  oldValue: oldValues[index],
+                  newValue: newValues[index]
+                }));
+
                 return (
-                  <Fragment key={log.id}>
-                    <tr
-                      key={log.id}
-                      className={isExpanded ? 'active' : ''}
-                      onClick={() => handleShowLog(log)}
-                    >
-                      {LOG_TABLE_COLUMNS.map((col) => (
-                        <td key={col.key}>{row[col.key]}</td>
-                      ))}
-                    </tr>
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={LOG_TABLE_COLUMNS.length}>
-                          <div className="details-card">
-                            <div className="details-section">
-                              <div className="table-wrapper">
-                                <table>
-                                  <thead>
-                                    <tr>
-                                      <th>ערכים שהשתנו</th>
-                                      <th>ישן</th>
-                                      <th>חדש</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {sortedChanges.length > 0 ? (
-                                      sortedChanges.map((change, idx) => (
-                                        <tr key={`${change.columnName || 'change'}-${idx}`}>
-                                          <td>{getExcelAwareLabel(change.fieldName || change.columnName)}</td>
-                                          <td>{displayOrDash(change.oldValue)}</td>
-                                          <td>{displayOrDash(change.newValue)}</td>
-                                        </tr>
-                                      ))
-                                    ) : (
-                                      <tr>
-                                        <td colSpan="3" className="muted">
-                                          אין נתוני שינוי.
-                                        </td>
-                                      </tr>
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
+                  <tr key={log.id}>
+                    <td>{displayOrDash(street)}</td>
+                    <td>{displayOrDash(houseNumber)}</td>
+                    <td>{displayOrDash(nickname)}</td>
+                    <td>{formatDate(log.createdAt)}</td>
+                    <td colSpan={3} className="log-change-span">
+                      <div className="log-change-table">
+                        {changeRows.map((row, index) => (
+                          <div
+                            key={`change-${log.id}-${index}`}
+                            className={`log-change-row ${index % 2 === 0 ? 'even' : 'odd'}`}
+                          >
+                            <div className="log-change-cell">{row.label}</div>
+                            <div className="log-change-cell">{row.oldValue}</div>
+                            <div className="log-change-cell">{row.newValue}</div>
                           </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                        ))}
+                      </div>
+                    </td>
+                    <td>{displayOrDash(log.username)}</td>
+                    <td>
+                      {showRestore ? (
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={restoringLogId === log.id}
+                          onClick={() => handleRestoreBuilding(log)}
+                        >
+                          הבניין נמחק – שחזור
+                        </button>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  </tr>
                 );
               })}
               {sortedLogs.length === 0 && !loading && (
