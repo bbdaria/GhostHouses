@@ -304,7 +304,7 @@ public class BuildingsController : ApiControllerBase
             ["{PIKUACH_KLALI}"] = FormatTableValue(building.PikuachKlali, 9),
             ["{PIKUACH_AL_BNIYA}"] = FormatTableValue(building.PikuachAlBniya, 9),
             ["{TZAV_SHIPUTZ_FRONTS}"] = FormatTableValue(building.TzavShiputzFronts, 9),
-            ["{BUILDING_PERMIT}"] = ResolveYesNoMaybe(building.BuildingPermit),
+            ["{BUILDING_PERMIT}"] = ResolveIsThere(building.HeterBniya),
             ["{DAMAGE_PERCENT}"] = building.DamagePercentage.HasValue
                 ? $"{building.DamagePercentage.Value}%"
                 : "-"
@@ -1743,6 +1743,20 @@ public class BuildingsController : ApiControllerBase
 
         return SelectTables
             .GetOptions("Tbl_Y_N_Maybe")
+            .FirstOrDefault(option => option.Value == value.Value)
+            ?.Label
+            ?? value.Value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string ResolveIsThere(int? value)
+    {
+        if (!value.HasValue)
+        {
+            return "-";
+        }
+
+        return SelectTables
+            .GetOptions("Tbl_IsThere")
             .FirstOrDefault(option => option.Value == value.Value)
             ?.Label
             ?? value.Value.ToString(CultureInfo.InvariantCulture);
