@@ -367,6 +367,12 @@ export default function BuildingsPage() {
     }
   };
 
+  const handleExportCard = (building) => {
+    if (!building) return;
+    const address = [building.street, building.houseNumber].filter(Boolean).join(' ');
+    setActionMessage(`ייצוא תמונת כרטיס (בדיקה): ${address || 'מבנה ללא כתובת'}`);
+  };
+
   const handleCreateChange = (event) => {
     const { name, value } = event.target;
     setCreateForm((form) => {
@@ -1176,6 +1182,16 @@ export default function BuildingsPage() {
                               עריכה
                             </button>
                           )}
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleExportCard(building);
+                            }}
+                          >
+                            ייצוא תמונת כרטיס
+                          </button>
                           <button
                             type="button"
                             className="ghost"
