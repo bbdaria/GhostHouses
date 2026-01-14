@@ -257,13 +257,57 @@ public class BuildingsController : ApiControllerBase
             return NotFound("Building card template not found.");
         }
 
-        var streetName = building.Street?.Name ?? building.StreetName;
-        var houseNumber = building.HouseNumber;
+        var streetName = ValueOrDash(building.Street?.Name ?? building.StreetName);
+        var houseNumber = ValueOrDash(building.HouseNumber);
+        var ownershipLabel = building.SugBaalut.HasValue
+            ? SelectTables.GetOptions("Tbl_SugBaalut")
+                .FirstOrDefault(option => option.Value == building.SugBaalut.Value)
+                ?.Label
+            : null;
+        var sivugLabel = building.BldSivug.HasValue
+            ? SelectTables.GetOptions("Tbl_Sivug")
+                .FirstOrDefault(option => option.Value == building.BldSivug.Value)
+                ?.Label
+            : null;
+        var yeudLabel = building.Yeud.HasValue
+            ? SelectTables.GetOptions("Tbl_YK")
+                .FirstOrDefault(option => option.Value == building.Yeud.Value)
+                ?.Label
+            : null;
+        var kidumTichnunLabel = building.KidumTichnunStatus.HasValue
+            ? SelectTables.GetOptions("Tbl_KidumTichnun")
+                .FirstOrDefault(option => option.Value == building.KidumTichnunStatus.Value)
+                ?.Label
+            : null;
+        var shimurLabel = building.ForShimur.HasValue
+            ? SelectTables.GetOptions("Tbl_ForShimur")
+                .FirstOrDefault(option => option.Value == building.ForShimur.Value)
+                ?.Label
+            : null;
 
         var replacements = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["{STREET_NAME}"] = string.IsNullOrWhiteSpace(streetName) ? "חסר שם רחוב" : streetName,
-            ["{HOUSE_NUMBER}"] = string.IsNullOrWhiteSpace(houseNumber) ? "חסר מספר בית" : houseNumber
+            ["{STREET_NAME}"] = streetName,
+            ["{HOUSE_NUMBER}"] = houseNumber,
+            ["{QUARTER}"] = ValueOrDash(building.Quarter),
+            ["{GUSH_M}"] = ValueOrDash(building.GushM),
+            ["{PARCEL_M}"] = ValueOrDash(building.ParcelM),
+            ["{OWNERSHIP_TYPE}"] = ValueOrDash(ownershipLabel),
+            ["{OWNER_DETAILS}"] = ValueOrDash(building.OwnerDetails),
+            ["{SIVUG}"] = ValueOrDash(sivugLabel),
+            ["{BUILT_AREA_SQM}"] = ValueOrDash(building.ShtachBanuySum),
+            ["{YEUD}"] = ValueOrDash(yeudLabel),
+            ["{KIDUM_TICHNUN}"] = ValueOrDash(kidumTichnunLabel),
+            ["{SHIMUR_YEUD}"] = ValueOrDash(shimurLabel),
+            ["{OWNER_POSITION}"] = ValueOrDash(building.OwnerPosition),
+            ["{MUNI_POSITION}"] = ValueOrDash(building.MiuniPosition),
+            ["{PIKUACH_KLALI}"] = FormatTableValue(building.PikuachKlali, 9),
+            ["{PIKUACH_AL_BNIYA}"] = FormatTableValue(building.PikuachAlBniya, 9),
+            ["{TZAV_SHIPUTZ_FRONTS}"] = FormatTableValue(building.TzavShiputzFronts, 9),
+            ["{BUILDING_PERMIT}"] = ResolveYesNoMaybe(building.BuildingPermit),
+            ["{DAMAGE_PERCENT}"] = building.DamagePercentage.HasValue
+                ? $"{building.DamagePercentage.Value}%"
+                : "-"
         };
 
         var pptxBytes = BuildCardPptx(templatePath, replacements);
@@ -1643,7 +1687,7 @@ public class BuildingsController : ApiControllerBase
                 {
                     var doc = XDocument.Load(entryStream);
                     ReplaceText(doc, replacements);
-                    doc.Save(newEntryStream, SaveOptions.DisableFormatting);
+                    doc.Save(newEntryStream, System.Xml.Linq.SaveOptions.DisableFormatting);
                 }
                 else
                 {
@@ -1678,6 +1722,55 @@ public class BuildingsController : ApiControllerBase
 
             textNode.Value = value;
         }
+    }
+
+    private static string ValueOrDash(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+    }
+
+    private static string ValueOrDash(int? value)
+    {
+        return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string ResolveYesNoMaybe(int? value)
+    {
+        if (!value.HasValue)
+        {
+            return "-";
+        }
+
+        return SelectTables
+            .GetOptions("Tbl_Y_N_Maybe")
+            .FirstOrDefault(option => option.Value == value.Value)
+            ?.Label
+            ?? value.Value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatTableValue(string? value, int maxChars)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "-";
+        }
+
+        var normalized = value
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Trim();
+
+        if (normalized.Length <= maxChars || maxChars <= 0)
+        {
+            return normalized;
+        }
+
+        if (maxChars <= 3)
+        {
+            return normalized[..maxChars];
+        }
+
+        return string.Concat(normalized.AsSpan(0, maxChars - 3), "...");
     }
 
     private static IReadOnlyList<FieldChange> BuildDeleteChanges(IReadOnlyList<BuildingFieldDto> fields)
