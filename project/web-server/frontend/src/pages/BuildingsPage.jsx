@@ -64,6 +64,8 @@ export default function BuildingsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [cardExporting, setCardExporting] = useState(false);
+  const [cardExportError, setCardExportError] = useState('');
   const [createForm, setCreateForm] = useState({
     fldId: '',
     streetId: '',
@@ -367,10 +369,25 @@ export default function BuildingsPage() {
     }
   };
 
-  const handleExportCard = (building) => {
-    if (!building) return;
-    const address = [building.street, building.houseNumber].filter(Boolean).join(' ');
-    setActionMessage(`ייצוא תמונת כרטיס (בדיקה): ${address || 'מבנה ללא כתובת'}`);
+  const handleExportCard = async (building) => {
+    if (!building || cardExporting) return;
+    setCardExportError('');
+    setCardExporting(true);
+    try {
+      const blob = await api.exportBuildingCard(building.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `building-card-${building.id}.pptx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setCardExportError(err.message || 'שגיאה בייצוא כרטיס מבנה.');
+    } finally {
+      setCardExporting(false);
+    }
   };
 
   const handleCreateChange = (event) => {
@@ -921,6 +938,7 @@ export default function BuildingsPage() {
         {error && <p className="error">שגיאה בטעינת מבנים: {error}</p>}
         {actionMessage && <p className="success">{actionMessage}</p>}
         {exportError && <p className="error">שגיאה בייצוא: {exportError}</p>}
+        {cardExportError && <p className="error">שגיאה בייצוא כרטיס: {cardExportError}</p>}
       </section>
 
       {canEdit && showCreateForm && (
@@ -1189,8 +1207,9 @@ export default function BuildingsPage() {
                               event.stopPropagation();
                               handleExportCard(building);
                             }}
+                            disabled={cardExporting}
                           >
-                            ייצוא תמונת כרטיס
+                            {cardExporting ? 'מייצא...' : 'ייצוא תמונת כרטיס'}
                           </button>
                           <button
                             type="button"
