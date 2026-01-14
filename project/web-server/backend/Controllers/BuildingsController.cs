@@ -1,6 +1,9 @@
 using System.Globalization;
+using System.IO.Compression;
 using System.Text.Json;
+using System.Xml.Linq;
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,15 +27,18 @@ public class BuildingsController : ApiControllerBase
     private readonly AppDbContext _context;
     private readonly IExternalDataService _externalDataService;
     private readonly IAuditService _auditService;
+    private readonly IWebHostEnvironment _hostEnvironment;
 
     public BuildingsController(
         AppDbContext context,
         IExternalDataService externalDataService,
-        IAuditService auditService)
+        IAuditService auditService,
+        IWebHostEnvironment hostEnvironment)
     {
         _context = context;
         _externalDataService = externalDataService;
         _auditService = auditService;
+        _hostEnvironment = hostEnvironment;
     }
 
     [HttpGet]
@@ -230,6 +236,43 @@ public class BuildingsController : ApiControllerBase
             fields);
 
         return Ok(detail);
+    }
+
+    [HttpGet("{id:int}/card")]
+    [Authorize(Policy = "Viewer")]
+    public async Task<IActionResult> ExportBuildingCard(int id, CancellationToken cancellationToken)
+    {
+        var building = await _context.Buildings
+            .Include(b => b.Street)
+            .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
+
+        if (building is null)
+        {
+            return NotFound();
+        }
+
+        var templatePath = Path.Combine(_hostEnvironment.ContentRootPath, "Data", "BuildingCardTemplate.pptx");
+        if (!System.IO.File.Exists(templatePath))
+        {
+            return NotFound("Building card template not found.");
+        }
+
+        var streetName = building.Street?.Name ?? building.StreetName;
+        var houseNumber = building.HouseNumber;
+
+        var replacements = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["{STREET_NAME}"] = string.IsNullOrWhiteSpace(streetName) ? "חסר שם רחוב" : streetName,
+            ["{HOUSE_NUMBER}"] = string.IsNullOrWhiteSpace(houseNumber) ? "חסר מספר בית" : houseNumber
+        };
+
+        var pptxBytes = BuildCardPptx(templatePath, replacements);
+        var fileName = $"building-card-{id}.pptx";
+
+        return File(
+            pptxBytes,
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            fileName);
     }
 
     [HttpGet("export")]
@@ -1572,6 +1615,68 @@ public class BuildingsController : ApiControllerBase
         catch
         {
             return null;
+        }
+    }
+
+    private static byte[] BuildCardPptx(
+        string templatePath,
+        IReadOnlyDictionary<string, string> replacements)
+    {
+        using var templateStream = System.IO.File.OpenRead(templatePath);
+        using var templateZip = new ZipArchive(templateStream, ZipArchiveMode.Read);
+        using var outputStream = new MemoryStream();
+        using (var outputZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in templateZip.Entries)
+            {
+                if (string.IsNullOrEmpty(entry.Name))
+                {
+                    outputZip.CreateEntry(entry.FullName);
+                    continue;
+                }
+
+                var newEntry = outputZip.CreateEntry(entry.FullName, CompressionLevel.Optimal);
+                using var entryStream = entry.Open();
+                using var newEntryStream = newEntry.Open();
+
+                if (string.Equals(entry.FullName, "ppt/slides/slide1.xml", StringComparison.OrdinalIgnoreCase))
+                {
+                    var doc = XDocument.Load(entryStream);
+                    ReplaceText(doc, replacements);
+                    doc.Save(newEntryStream, SaveOptions.DisableFormatting);
+                }
+                else
+                {
+                    entryStream.CopyTo(newEntryStream);
+                }
+            }
+        }
+
+        return outputStream.ToArray();
+    }
+
+    private static void ReplaceText(XDocument doc, IReadOnlyDictionary<string, string> replacements)
+    {
+        if (replacements.Count == 0)
+        {
+            return;
+        }
+
+        XNamespace a = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        foreach (var textNode in doc.Descendants(a + "t"))
+        {
+            var value = textNode.Value;
+            if (string.IsNullOrEmpty(value))
+            {
+                continue;
+            }
+
+            foreach (var (key, replacement) in replacements)
+            {
+                value = value.Replace(key, replacement);
+            }
+
+            textNode.Value = value;
         }
     }
 

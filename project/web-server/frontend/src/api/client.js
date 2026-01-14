@@ -276,6 +276,12 @@ const api = {
     const path = query ? `/buildings/export?${query}` : '/buildings/export';
     return requestBlob(path);
   },
+  async exportBuildingCard(id) {
+    if (!id && id !== 0) {
+      throw new Error('building id is required');
+    }
+    return requestBlob(`/buildings/${id}/card`);
+  },
   async fetchBuilding(id) {
     const data = await request(`/buildings/${id}`);
     return mapBuildingDetail(data);
