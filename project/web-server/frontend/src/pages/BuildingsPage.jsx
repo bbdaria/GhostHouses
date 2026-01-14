@@ -938,7 +938,7 @@ export default function BuildingsPage() {
         {error && <p className="error">שגיאה בטעינת מבנים: {error}</p>}
         {actionMessage && <p className="success">{actionMessage}</p>}
         {exportError && <p className="error">שגיאה בייצוא: {exportError}</p>}
-        {cardExportError && <p className="error">שגיאה בייצוא כרטיס: {cardExportError}</p>}
+        {cardExportError && <p className="error">שגיאה בייצוא כרטיס מבנה: {cardExportError}</p>}
       </section>
 
       {canEdit && showCreateForm && (
@@ -1209,7 +1209,7 @@ export default function BuildingsPage() {
                             }}
                             disabled={cardExporting}
                           >
-                            {cardExporting ? 'מייצא...' : 'ייצוא תמונת כרטיס'}
+                            {cardExporting ? 'מייצא...' : 'ייצוא כרטיס מבנה'}
                           </button>
                           <button
                             type="button"
