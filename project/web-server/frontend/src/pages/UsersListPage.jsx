@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import api from '../api/client.js';
 import { ROLE_LABELS } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
+import { formatDate, formatDateTime } from '../utils/formatDate.js';
 
 export default function UsersListPage() {
   const { id: selectedParamId } = useParams();
@@ -301,11 +302,11 @@ export default function UsersListPage() {
           </label>
           <label>
             <span>תאריך התחלה</span>
-            <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} />
+            <input type="date" name="startDate" value={filters.startDate} lang="he-IL" onChange={handleFilterChange} />
           </label>
           <label>
             <span>תאריך סיום</span>
-            <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} />
+            <input type="date" name="endDate" value={filters.endDate} lang="he-IL" onChange={handleFilterChange} />
           </label>
           <div className="filters-actions">
             <button type="submit" className="primary">
@@ -442,7 +443,7 @@ export default function UsersListPage() {
                         <td>{u.email || '—'}</td>
                         <td>{ROLE_LABELS[u.role] || u.role}</td>
                         <td>{u.twoFactorEnabled ? 'פעיל' : 'מנוטרל'}</td>
-                        <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('he-IL') : '—'}</td>
+                        <td>{u.createdAt ? formatDate(u.createdAt) : '—'}</td>
                         <td>
                           <button
                             type="button"
@@ -572,7 +573,7 @@ export default function UsersListPage() {
                                           <span>
                                             {log.actionType} — {log.username}
                                           </span>
-                                          <span className="muted">{log.createdAt}</span>
+                                          <span className="muted">{formatDateTime(log.createdAt)}</span>
                                         </li>
                                       ))}
                                     </ul>

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/client.js';
 import { ROLE_LABELS } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
+import { formatDateTime } from '../utils/formatDate.js';
 
 export default function UserDetailsPage() {
   const { id } = useParams();
@@ -138,7 +139,7 @@ export default function UserDetailsPage() {
                 <strong>{log.actionType}</strong>
                 <p>{log.description || '—'}</p>
                 <small>
-                  מבנה #{log.buildingId} • {log.createdAt}
+                  מבנה #{log.buildingId} • {formatDateTime(log.createdAt)}
                 </small>
               </div>
             </li>
