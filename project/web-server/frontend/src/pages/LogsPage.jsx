@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
+import { formatDateTime } from '../utils/formatDate.js';
 import { STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import {
   BUILDING_FIELD_LABELS,
@@ -86,15 +87,7 @@ export default function LogsPage() {
     return String(filters.bldSivug) === rehabSivugValue;
   }, [filters.bldSivug, rehabSivugValue]);
   const statuses = statusOptions;
-  const dateFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('he-IL', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-        timeZone: 'Asia/Jerusalem'
-      }),
-    []
-  );
+  // use shared formatters (dd/mm/yyyy and HH:mm)
   useDocumentTitle('יומן פעילויות - מוקד המבנים העירוני');
   const displayOrDash = (value) => {
     if (value === null || value === undefined || value === '') return '—';
@@ -125,7 +118,7 @@ export default function LogsPage() {
   const formatDate = (value) => {
     if (!value) return '—';
     try {
-      return dateFormatter.format(new Date(value));
+      return formatDateTime(value);
     } catch {
       return value;
     }
@@ -482,6 +475,7 @@ export default function LogsPage() {
               type="date"
               name="updatedFrom"
               value={filters.updatedFrom}
+              lang="he-IL"
               onChange={handleChange}
             />
           </label>
@@ -491,6 +485,7 @@ export default function LogsPage() {
               type="date"
               name="updatedTo"
               value={filters.updatedTo}
+              lang="he-IL"
               onChange={handleChange}
             />
           </label>

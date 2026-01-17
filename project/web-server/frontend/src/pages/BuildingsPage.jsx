@@ -1,10 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
+import BuildingModal from '../components/BuildingModal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 import { BUILDING_FIELD_PLACEHOLDERS, LAST_BUILDING_KEY } from '../constants.js';
+import { formatDate, formatTime, formatDateTime } from '../utils/formatDate.js';
 
 const initialFilters = {
   streetId: '',
@@ -61,7 +63,9 @@ export default function BuildingsPage() {
   const [streets, setStreets] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [detailError, setDetailError] = useState('');
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState('view');
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [cardExporting, setCardExporting] = useState(false);
@@ -79,7 +83,7 @@ export default function BuildingsPage() {
   const [selectTablesByName, setSelectTablesByName] = useState({});
   const [selectTablesLoading, setSelectTablesLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
-  const [selectedView, setSelectedView] = useState('all');
+  const [selectedView, setSelectedView] = useState('view');
   const [sortConfig, setSortConfig] = useState({ field: 'street', direction: 'asc' });
   const [openViewCategories, setOpenViewCategories] = useState(() => new Set());
   const [openEditCategories, setOpenEditCategories] = useState(() => new Set());
@@ -112,19 +116,10 @@ export default function BuildingsPage() {
   );
   const isAdmin = user?.role === 'Admin';
   const roleLabel = ROLE_LABELS[user?.role] || user?.role;
-  const israelDateFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('he-IL', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-        timeZone: 'Asia/Jerusalem'
-      }),
-    []
-  );
   const formatLogDate = (value) => {
     if (!value) return '—';
     try {
-      return israelDateFormatter.format(new Date(value));
+      return formatDateTime(value);
     } catch {
       return value;
     }
@@ -224,10 +219,10 @@ export default function BuildingsPage() {
   }, [loadStreets]);
 
   useEffect(() => {
-    if (showCreateForm) {
+    if (showModal && modalMode === 'create') {
       loadStreets();
     }
-  }, [loadStreets, showCreateForm]);
+  }, [loadStreets, showModal, modalMode]);
 
   useEffect(() => {
     if (!selectedBuilding) {
@@ -314,7 +309,7 @@ export default function BuildingsPage() {
     }
   };
 
-  const loadBuildingDetails = async (id, view = 'all') => {
+  const loadBuildingDetails = async (id, view = 'view') => {
     setDetailError('');
     try {
       const building = await api.fetchBuilding(id);
@@ -399,10 +394,39 @@ export default function BuildingsPage() {
       }
       return next;
     });
+    setUnsavedChanges(true);
+  };
+
+  const openCreateModal = () => {
+    setModalMode('create');
+    setShowModal(true);
+    setUnsavedChanges(false);
+  };
+
+  const openBuildingModal = async (id, view = 'view') => {
+    try {
+      await loadBuildingDetails(id, view);
+      setModalMode(view);
+      setShowModal(true);
+      setUnsavedChanges(false);
+    } catch (err) {
+      // loadBuildingDetails sets detailError
+    }
+  };
+
+  const handleCloseModal = () => {
+    if (unsavedChanges) {
+      const confirmed = window.confirm('ישנם שינויים שלא נשמרו. האם ברצונך לסגור ללא שמירה?');
+      if (!confirmed) return;
+    }
+    setShowModal(false);
+    setModalMode('view');
+    setUnsavedChanges(false);
+    setSelectedBuilding(null);
   };
 
   const handleCreateBuilding = async (event) => {
-    event.preventDefault();
+    if (event && event.preventDefault) event.preventDefault();
     setActionMessage('');
     try {
       if (!createForm.streetId) {
@@ -458,7 +482,8 @@ export default function BuildingsPage() {
         shikumStatusId: '',
         category: ''
       });
-      setShowCreateForm(false);
+      setShowModal(false);
+      setUnsavedChanges(false);
       loadBuildings(filters);
       setActionMessage('המבנה נוסף בהצלחה.');
     } catch (err) {
@@ -474,10 +499,11 @@ export default function BuildingsPage() {
       }
       return next;
     });
+    setUnsavedChanges(true);
   };
 
   const handleUpdateBuildingFields = async (event) => {
-    event.preventDefault();
+    if (event && event.preventDefault) event.preventDefault();
     if (!selectedBuilding) return;
     setActionMessage('');
     const isMissing = (value) =>
@@ -500,6 +526,7 @@ export default function BuildingsPage() {
       setSelectedBuilding(updated);
       loadBuildings(filters);
       setActionMessage('פרטי המבנה עודכנו.');
+      setUnsavedChanges(false);
     } catch (err) {
       setActionMessage(err.message);
     }
@@ -893,6 +920,7 @@ export default function BuildingsPage() {
               type="date"
               name="updatedFrom"
               value={filters.updatedFrom}
+              lang="he-IL"
               onChange={handleFilterChange}
             />
           </label>
@@ -902,6 +930,7 @@ export default function BuildingsPage() {
               type="date"
               name="updatedTo"
               value={filters.updatedTo}
+              lang="he-IL"
               onChange={handleFilterChange}
             />
           </label>
@@ -923,8 +952,8 @@ export default function BuildingsPage() {
               איפוס
             </button>
             {canEdit && (
-              <button type="button" className="ghost" onClick={() => setShowCreateForm((prev) => !prev)}>
-                {showCreateForm ? 'סגור טופס הוספה' : 'הוסף מבנה'}
+              <button type="button" className="ghost" onClick={openCreateModal}>
+                הוסף מבנה
               </button>
             )}
             {isAdmin && (
@@ -940,98 +969,6 @@ export default function BuildingsPage() {
         {exportError && <p className="error">שגיאה בייצוא: {exportError}</p>}
         {cardExportError && <p className="error">שגיאה בייצוא כרטיס מבנה: {cardExportError}</p>}
       </section>
-
-      {canEdit && showCreateForm && (
-        <section className="panel">
-          <h3>הוספת מבנה</h3>
-          <form className="form-grid" onSubmit={handleCreateBuilding}>
-            <label>
-              שם רחוב
-              <select
-                name="streetId"
-                value={createForm.streetId}
-                onChange={handleCreateChange}
-                onFocus={loadStreets}
-                required
-              >
-                <option value="">בחר רחוב</option>
-                {streets.map((street) => (
-                  <option key={street.streetId} value={street.streetId}>
-                    {street.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              מספר בית
-              <input
-                name="bldNum"
-                value={createForm.bldNum}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.houseNumber}
-                required
-              />
-            </label>
-            <label>
-              כינוי הבניין
-              <input
-                name="bldName"
-                value={createForm.bldName}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.nickname}
-                required
-              />
-            </label>
-            <label>
-              סיווג
-              <select
-                name="category"
-                value={createForm.category}
-                onChange={handleCreateChange}
-                required
-              >
-                <option value="">בחר סיווג</option>
-                {sivugOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              סטטוס שיקום
-              <select
-                name="shikumStatusId"
-                value={createForm.shikumStatusId}
-                onChange={handleCreateChange}
-                required={isRehabStatusRequired}
-                disabled={!isRehabStatusRequired}
-              >
-                <option value="">בחר סטטוס שיקום</option>
-                {statusOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="full-span">
-              תמונת מצב (תמצית מצב)
-              <textarea
-                name="statusSummary"
-                value={createForm.statusSummary}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
-              />
-            </label>
-            <div className="filters-actions">
-              <button type="submit" className="primary">
-                שמירה
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
 
       <section className="content-layout">
         <div className="list-panel full-span">
@@ -1156,10 +1093,10 @@ export default function BuildingsPage() {
                         className={isActive ? 'active' : ''}
                         onClick={() => {
                           if (isActive) {
-                            setSelectedBuilding(null);
+                            handleCloseModal();
                             return;
                           }
-                          loadBuildingDetails(building.id, 'all');
+                          openBuildingModal(building.id, 'view');
                         }}
                       >
                         <td>{building.street}</td>
@@ -1186,15 +1123,7 @@ export default function BuildingsPage() {
                               className="ghost"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                if (
-                                  selectedBuilding &&
-                                  selectedBuilding.id === building.id &&
-                                  selectedView === 'edit'
-                                ) {
-                                  setSelectedBuilding(null);
-                                  return;
-                                }
-                                loadBuildingDetails(building.id, 'edit');
+                                openBuildingModal(building.id, 'edit');
                               }}
                             >
                               עריכה
@@ -1235,312 +1164,6 @@ export default function BuildingsPage() {
                           )}
                         </td>
                       </tr>
-                      {isActive && selectedBuilding && (
-                        <tr>
-                          <td colSpan="12">
-                            {selectedView === 'edit' && canEdit && (
-                              <form onSubmit={handleUpdateBuildingFields} className="details-card">
-                                {selectTablesLoading && <p className="muted">טוען טבלאות בחירה…</p>}
-                                {orderedFieldGroups.map(([category, fields]) => {
-                                  const isOpen = openEditCategories.has(category);
-                                  return (
-                                    <div key={category} className="details-section">
-                                      <div
-                                        className={`details-section__header${isOpen ? ' is-open' : ''}`}
-                                        role="button"
-                                        tabIndex={0}
-                                        aria-expanded={isOpen}
-                                        onClick={() => toggleEditCategory(category)}
-                                        onKeyDown={(event) =>
-                                          handleCategoryToggleKeyDown(event, () => toggleEditCategory(category))
-                                        }
-                                      >
-                                        <h4>{category}</h4>
-                                        <span className="details-section__indicator" aria-hidden="true">
-                                          {isOpen ? '∨' : '∧'}
-                                        </span>
-                                      </div>
-                                      {isOpen && (
-                                        <div className="form-grid">
-                                          {sortFieldsForDisplay(fields).map((field) => {
-                                            const columnName = field.columnName;
-                                            const fieldName = field.fieldName;
-                                            if (!columnName) return null;
-                                            const required = isRequiredEditColumn(columnName);
-                                            if (columnName.toLowerCase() === 'streetid') {
-                                              return (
-                                                <label key={columnName}>
-                                                  {getExcelAwareLabel(fieldName)}
-                                                  <input
-                                                    type="text"
-                                                    value={editFieldValues[columnName] ?? ''}
-                                                    disabled
-                                                  />
-                                                </label>
-                                              );
-                                            }
-
-                                            if (columnName.toLowerCase() === 'fidid') {
-                                              return (
-                                                <label key={columnName}>
-                                                  {getExcelAwareLabel(fieldName)}
-                                                  <input
-                                                    type="text"
-                                                    value={editFieldValues[columnName] ?? ''}
-                                                    disabled
-                                                  />
-                                                </label>
-                                              );
-                                            }
-
-                                            if (columnName.toLowerCase() === 'streetname') {
-                                              return (
-                                                <label key={columnName}>
-                                                  {getExcelAwareLabel(fieldName)}
-                                                  <select
-                                                    value={editFieldValues.StreetId ?? ''}
-                                                    onChange={(e) =>
-                                                      handleEditFieldChange('StreetId', e.target.value)
-                                                    }
-                                                    required
-                                                  >
-                                                    <option value="">בחר רחוב</option>
-                                                    {streets.map((street) => (
-                                                      <option key={street.streetId} value={street.streetId}>
-                                                        {street.name}
-                                                      </option>
-                                                    ))}
-                                                  </select>
-                                                </label>
-                                              );
-                                            }
-
-                                            const selectTableName = field.selectTableName;
-                                            const selectOptions =
-                                              selectTableName && selectTablesByName[selectTableName]
-                                                ? selectTablesByName[selectTableName]
-                                                : [];
-                                            const currentValue = editFieldValues[columnName] ?? '';
-                                            const isRehabStatusField =
-                                              columnName.toLowerCase() === 'shikumstatus';
-
-                                            if (selectTableName && selectOptions.length > 0) {
-                                              return (
-                                                <label key={columnName}>
-                                                  {getExcelAwareLabel(fieldName)}
-                                                  <select
-                                                    value={currentValue}
-                                                    onChange={(e) =>
-                                                      handleEditFieldChange(columnName, e.target.value)
-                                                    }
-                                                    required={
-                                                      required &&
-                                                      (!isRehabStatusField || isEditRehabStatusRequired)
-                                                    }
-                                                    disabled={isRehabStatusField && !isEditRehabStatusRequired}
-                                                  >
-                                                    <option value="">—</option>
-                                                    {selectOptions.map((opt) => (
-                                                      <option key={opt.value} value={opt.value}>
-                                                        {opt.label}
-                                                      </option>
-                                                    ))}
-                                                  </select>
-                                                </label>
-                                              );
-                                            }
-
-                                            const isDate = isDateField(field);
-                                            const useTextarea = shouldUseTextarea(fieldName) && !isDate;
-                                            const inputType = isDate ? 'date' : 'text';
-
-                                            return (
-                                              <label key={columnName} className={useTextarea ? 'full-span' : ''}>
-                                                {getExcelAwareLabel(fieldName)}
-                                                {useTextarea ? (
-                                                  <textarea
-                                                    value={currentValue}
-                                                    onChange={(e) =>
-                                                      handleEditFieldChange(columnName, e.target.value)
-                                                    }
-                                                    required={required}
-                                                  />
-                                                ) : (
-                                                  <input
-                                                    type={inputType}
-                                                    value={currentValue}
-                                                    onChange={(e) =>
-                                                      handleEditFieldChange(columnName, e.target.value)
-                                                    }
-                                                    required={required}
-                                                  />
-                                                )}
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                                <div className="filters-actions">
-                                  <button type="submit" className="primary">
-                                    שמירת שינויים
-                                  </button>
-                                  <button type="button" className="ghost" onClick={() => setSelectedBuilding(null)}>
-                                    סגירה
-                                  </button>
-                                </div>
-                              </form>
-                            )}
-                            {selectedView === 'all' && (
-                              <div className="details-card">
-                                <div>
-                                  <p className="eyebrow">פרטי מבנה</p>
-                                  <h3>
-                                    {selectedBuilding.street} {selectedBuilding.houseNumber}
-                                  </h3>
-                                </div>
-
-                                {orderedFieldGroups.length > 0 ? (
-                                  orderedFieldGroups.map(([category, fields]) => {
-                                    const isOpen = openViewCategories.has(category);
-                                    return (
-                                      <div key={category} className="details-section">
-                                        <div
-                                          className={`details-section__header${isOpen ? ' is-open' : ''}`}
-                                          role="button"
-                                          tabIndex={0}
-                                          aria-expanded={isOpen}
-                                          onClick={() => toggleViewCategory(category)}
-                                          onKeyDown={(event) =>
-                                            handleCategoryToggleKeyDown(event, () => toggleViewCategory(category))
-                                          }
-                                        >
-                                          <h4>{category}</h4>
-                                          <span className="details-section__indicator" aria-hidden="true">
-                                            {isOpen ? '∨' : '∧'}
-                                          </span>
-                                        </div>
-                                        {isOpen && (
-                                          <dl>
-                                            {sortFieldsForDisplay(fields).map((field) => {
-                                              const value = formatStatusFieldValue(field);
-                                              const titleParts = [];
-                                              if (field.selectTableName)
-                                                titleParts.push(`טבלת בחירה: ${field.selectTableName}`);
-                                              return (
-                                                <div key={`${field.columnName}-${field.fieldName}`}>
-                                                  <dt title={titleParts.join(' | ')}>
-                                                    {getExcelAwareLabel(field.fieldName)}
-                                                  </dt>
-                                                  <dd>{value}</dd>
-                                                </div>
-                                              );
-                                            })}
-                                          </dl>
-                                        )}
-                                      </div>
-                                    );
-                                  })
-                                ) : (
-                                  <p className="muted">אין שדות להצגה.</p>
-                                )}
-
-                                <div className="details-section">
-                                  <div
-                                    className={`details-section__header${isExternalOpen ? ' is-open' : ''}`}
-                                    role="button"
-                                    tabIndex={0}
-                                    aria-expanded={isExternalOpen}
-                                    onClick={toggleExternalSection}
-                                    onKeyDown={(event) =>
-                                      handleCategoryToggleKeyDown(event, toggleExternalSection)
-                                    }
-                                  >
-                                    <h4>נתונים ממערכות חיצוניות</h4>
-                                    <span className="details-section__indicator" aria-hidden="true">
-                                      {isExternalOpen ? '∨' : '∧'}
-                                    </span>
-                                  </div>
-                                  {isExternalOpen && (
-                                    <>
-                                      {externalEntries.length === 0 && <p className="muted">אין נתונים.</p>}
-                                      {externalEntries.map((entry) => {
-                                        const payload = entry.snapshot?.payload;
-                                        const parsed = typeof payload === 'string' ? tryParseJson(payload) : null;
-                                        const status = parsed?.status || null;
-                                        const notes = parsed?.notes || null;
-                                        const updatedAt = parsed?.updatedAt || null;
-                                        return (
-                                          <div key={entry.key} className="external-card">
-                                            <div className="external-card__header">
-                                              <strong>{entry.label}</strong>
-                                              <span className="muted small">
-                                                {formatLogDate(entry.snapshot?.retrievedAt)}
-                                              </span>
-                                            </div>
-                                            <dl>
-                                              <div>
-                                                <dt>סטטוס</dt>
-                                                <dd>{displayOrDash(status)}</dd>
-                                              </div>
-                                              <div>
-                                                <dt>עודכן במקור</dt>
-                                                <dd>{displayOrDash(updatedAt)}</dd>
-                                              </div>
-                                              <div>
-                                                <dt>הערות</dt>
-                                                <dd>{displayOrDash(notes)}</dd>
-                                              </div>
-                                            </dl>
-                                          </div>
-                                        );
-                                      })}
-                                    </>
-                                  )}
-                                </div>
-
-                                <div className="details-section">
-                                  <div
-                                    className={`details-section__header${isLogsOpen ? ' is-open' : ''}`}
-                                    role="button"
-                                    tabIndex={0}
-                                    aria-expanded={isLogsOpen}
-                                    onClick={toggleLogsSection}
-                                    onKeyDown={(event) =>
-                                      handleCategoryToggleKeyDown(event, toggleLogsSection)
-                                    }
-                                  >
-                                    <h4>יומן פעולות (אחרונות)</h4>
-                                    <span className="details-section__indicator" aria-hidden="true">
-                                      {isLogsOpen ? '∨' : '∧'}
-                                    </span>
-                                  </div>
-                                  {isLogsOpen && (
-                                    <>
-                                      {selectedBuilding.logs?.length ? (
-                                        <ul className="log-list">
-                                          {selectedBuilding.logs.map((log) => (
-                                            <li key={log.id}>
-                                              <span>
-                                                {displayOrDash(log.actionType)} — {displayOrDash(log.username)}
-                                              </span>
-                                              <span className="muted">{formatLogDate(log.createdAt)}</span>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      ) : (
-                                        <p className="muted">אין רישומים.</p>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
                     </Fragment>
                   );
                 })}
@@ -1557,6 +1180,45 @@ export default function BuildingsPage() {
         </div>
 
       </section>
+      <BuildingModal
+        visible={showModal}
+        mode={modalMode}
+        building={selectedBuilding}
+        createForm={createForm}
+        editFieldValues={editFieldValues}
+        streets={streets}
+        sivugOptions={sivugOptions}
+        statusOptions={statusOptions}
+        selectTablesByName={selectTablesByName}
+        selectTablesLoading={selectTablesLoading}
+        orderedFieldGroups={orderedFieldGroups}
+        externalEntries={externalEntries}
+        isEditRehabStatusRequired={isEditRehabStatusRequired}
+        canEdit={canEdit}
+        actionMessage={actionMessage}
+        onCreateChange={handleCreateChange}
+        onCreateSubmit={handleCreateBuilding}
+        onEditChange={handleEditFieldChange}
+        onEditSubmit={handleUpdateBuildingFields}
+        onDelete={handleDeleteBuilding}
+        onExportCard={handleExportCard}
+        onClose={handleCloseModal}
+        detailError={detailError}
+        loadStreets={loadStreets}
+        sortFieldsForDisplay={sortFieldsForDisplay}
+        getExcelAwareLabel={getExcelAwareLabel}
+        isDateField={isDateField}
+        shouldUseTextarea={shouldUseTextarea}
+        isRequiredEditColumn={isRequiredEditColumn}
+        displayOrDash={displayOrDash}
+        formatStatusFieldValue={formatStatusFieldValue}
+        formatLogDate={formatLogDate}
+        openViewCategories={openViewCategories}
+        toggleViewCategory={toggleViewCategory}
+        openEditCategories={openEditCategories}
+        toggleEditCategory={toggleEditCategory}
+        handleCategoryToggleKeyDown={handleCategoryToggleKeyDown}
+      />
     </main>
   );
 }
