@@ -478,6 +478,20 @@ tbody tr:hover {
   margin-left: 1rem;
 }
 
+.duplicate-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: 1rem;
+  color: #facc15;
+  font-size: 0.9rem;
+}
+
+.duplicate-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 /* Light theme modal overrides */
 .theme-light .modal-overlay {
   background: rgba(15, 23, 42, 0.06);
@@ -501,6 +515,10 @@ tbody tr:hover {
 
 .theme-light .modal-action-message {
   color: #475467;
+}
+
+.theme-light .duplicate-warning {
+  color: #b45309;
 }
 
 tbody tr.active {
