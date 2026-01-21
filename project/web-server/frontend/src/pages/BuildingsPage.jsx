@@ -70,6 +70,8 @@ export default function BuildingsPage() {
   const [exportError, setExportError] = useState('');
   const [cardExporting, setCardExporting] = useState(false);
   const [cardExportError, setCardExportError] = useState('');
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const [createForm, setCreateForm] = useState({
     fldId: '',
     streetId: '',
@@ -234,6 +236,8 @@ export default function BuildingsPage() {
   useEffect(() => {
     if (!selectedBuilding) {
       setEditFieldValues({});
+      setPhotoError('');
+      setPhotoLoading(false);
       return;
     }
 
@@ -257,6 +261,8 @@ export default function BuildingsPage() {
     }
 
     setEditFieldValues(nextValues);
+    setPhotoError('');
+    setPhotoLoading(false);
   }, [selectedBuilding]);
 
   useEffect(() => {
@@ -584,6 +590,60 @@ export default function BuildingsPage() {
 
   const handleEditDuplicateCancel = () => {
     setEditDuplicatePrompt('');
+  };
+
+  const readFileAsDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('שגיאה בקריאת הקובץ.'));
+      reader.readAsDataURL(file);
+    });
+
+  const handlePhotoUpload = async (file) => {
+    if (!selectedBuilding || !file) return;
+    setPhotoError('');
+    setActionMessage('');
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('נא לבחור קובץ תמונה.');
+      return;
+    }
+    const maxSizeMb = 5;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setPhotoError(`גודל התמונה חייב להיות עד ${maxSizeMb}MB.`);
+      return;
+    }
+    if (selectedBuilding.photos?.length) {
+      setPhotoError('ניתן לשמור תמונה אחת בלבד.');
+      return;
+    }
+    try {
+      setPhotoLoading(true);
+      const dataUrl = await readFileAsDataUrl(file);
+      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: dataUrl });
+      setSelectedBuilding(updated);
+      setActionMessage('התמונה נשמרה.');
+    } catch (err) {
+      setPhotoError(err.message || 'שגיאה בהעלאת התמונה.');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
+    if (!selectedBuilding) return;
+    setPhotoError('');
+    setActionMessage('');
+    try {
+      setPhotoLoading(true);
+      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: '' });
+      setSelectedBuilding(updated);
+      setActionMessage('התמונה נמחקה.');
+    } catch (err) {
+      setPhotoError(err.message || 'שגיאה במחיקת התמונה.');
+    } finally {
+      setPhotoLoading(false);
+    }
   };
 
   const handleDeleteBuilding = async (buildingId) => {
@@ -1265,6 +1325,10 @@ export default function BuildingsPage() {
         onOpenLogs={handleOpenLogsModal}
         onDelete={handleDeleteBuilding}
         onExportCard={handleExportCard}
+        onPhotoUpload={handlePhotoUpload}
+        onPhotoDelete={handlePhotoDelete}
+        photoLoading={photoLoading}
+        photoError={photoError}
         onClose={handleCloseModal}
         detailError={detailError}
         loadStreets={loadStreets}

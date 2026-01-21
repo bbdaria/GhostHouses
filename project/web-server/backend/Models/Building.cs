@@ -577,6 +577,8 @@ public class Building
     public string Neighborhood { get; set; } = string.Empty;
 
     [Column(TypeName = "text")]
+    [Display(Name = "תמונה")]
+    [FieldSpec(Category = "מידע כללי", FieldName = "תמונה", IncludeInEventLog = true)]
     public string PhotoUrls { get; set; } = string.Empty;
 
     public ICollection<ExternalSystemSnapshot> ExternalSnapshots { get; set; } = new List<ExternalSystemSnapshot>();

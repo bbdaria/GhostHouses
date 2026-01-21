@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 
 export default function BuildingModal({
   visible,
@@ -32,6 +32,10 @@ export default function BuildingModal({
   onDelete,
   onExportCard,
   onClose,
+  onPhotoUpload,
+  onPhotoDelete,
+  photoLoading,
+  photoError,
   detailError,
   loadStreets,
   sortFieldsForDisplay,
@@ -51,8 +55,23 @@ export default function BuildingModal({
   if (!visible) return null;
 
   const loadingBuilding = (mode !== 'create' && !building);
+  const fileInputRef = useRef(null);
+  const photoValue = building?.photos?.[0] || '';
+  const hasPhoto = Boolean(photoValue);
+  const photoSrc = photoValue
+    ? photoValue.startsWith('data:') || photoValue.startsWith('http')
+      ? photoValue
+      : `data:image/jpeg;base64,${photoValue}`
+    : '';
 
   const stop = (e) => e.stopPropagation();
+  const triggerPhotoSelect = () => fileInputRef.current?.click();
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !onPhotoUpload) return;
+    onPhotoUpload(file);
+    event.target.value = '';
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -170,6 +189,50 @@ export default function BuildingModal({
                     </div>
                     {isOpen && (
                       <div className="form-grid">
+                        {category === 'מידע כללי' && (
+                          <div className="full-span photo-editor">
+                            <div className="photo-editor__label">תמונה</div>
+                            {hasPhoto ? (
+                              <>
+                                <img className="photo-preview" src={photoSrc} alt="תמונת מבנה" />
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    className="danger"
+                                    onClick={onPhotoDelete}
+                                    disabled={photoLoading}
+                                  >
+                                    מחיקת תמונה
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <div className="photos-placeholder">אין תמונה</div>
+                                {canEdit && (
+                                  <>
+                                    <input
+                                      ref={fileInputRef}
+                                      type="file"
+                                      accept="image/*"
+                                      className="photo-input"
+                                      onChange={handlePhotoChange}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={triggerPhotoSelect}
+                                      disabled={photoLoading}
+                                    >
+                                      העלאת תמונה
+                                    </button>
+                                  </>
+                                )}
+                              </>
+                            )}
+                            {photoError && <p className="error">{photoError}</p>}
+                          </div>
+                        )}
                         {sortFieldsForDisplay(fields).map((field) => {
                           const columnName = field.columnName;
                           const fieldName = field.fieldName;
@@ -310,6 +373,18 @@ export default function BuildingModal({
                           </div>
                           {isOpen && (
                             <dl>
+                              {category === 'מידע כללי' && (
+                                <div className="photo-field">
+                                  <dt>תמונה</dt>
+                                  <dd>
+                                    {hasPhoto ? (
+                                      <img className="photo-preview" src={photoSrc} alt="תמונת מבנה" />
+                                    ) : (
+                                      <span className="muted">אין תמונה</span>
+                                    )}
+                                  </dd>
+                                </div>
+                              )}
                               {sortFieldsForDisplay(fields).map((field) => {
                                 const titleParts = [];
                                 if (field.selectTableName) titleParts.push(`טבלת בחירה: ${field.selectTableName}`);
