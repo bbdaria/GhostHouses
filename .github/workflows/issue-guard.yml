@@ -203,22 +203,6 @@ jobs:
               });
             }
 
-            if (isBlocked && issue.state !== 'closed') {
-              await github.rest.issues.update({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                state: 'closed',
-                state_reason: 'not_planned'
-              });
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                body: 'This issue was closed automatically because required fields are missing. Please add the milestone and a valid User Story parent to reopen it.'
-              });
-            }
-
             if (!isBlocked && labelNames.includes('form-blocked')) {
               await github.rest.issues.removeLabel({
                 owner,
@@ -226,12 +210,27 @@ jobs:
                 issue_number: issueNumber,
                 name: 'form-blocked'
               });
-              if (issue.state === 'closed') {
-                await github.rest.issues.update({
-                  owner,
-                  repo,
-                  issue_number: issueNumber,
-                  state: 'open'
-                });
-              }
+            }
+
+            if (isBlocked && !issue.locked) {
+              await github.rest.issues.lock({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                lock_reason: 'resolved'
+              });
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: 'This issue is locked because required fields are missing. Please add the milestone and a valid User Story parent, then it will be unlocked.'
+              });
+            }
+
+            if (!isBlocked && issue.locked) {
+              await github.rest.issues.unlock({
+                owner,
+                repo,
+                issue_number: issueNumber
+              });
             }
