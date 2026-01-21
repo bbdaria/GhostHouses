@@ -28,12 +28,13 @@ const REQUIRED_EDIT_FIELDS = [
   { key: 'StreetId', label: 'שם רחוב' },
   { key: 'BldNum', label: 'מספר בית' },
   { key: 'BldName', label: 'כינוי הבניין' },
-  { key: 'ShikumStatus', label: 'סטטוס שיקום' },
-  { key: 'BldSivug', label: 'סיווג' }
+  { key: 'BldSivug', label: 'סיווג' },
+  { key: 'ShikumStatus', label: 'סטטוס שיקום' }
 ];
 const REQUIRED_EDIT_COLUMNS = new Set(
   REQUIRED_EDIT_FIELDS.filter((field) => field.key !== 'StreetId').map((field) => field.key)
 );
+const REQUIRED_CREATE_COLUMNS = new Set(['BldNum', 'BldName', 'BldSivug', 'ShikumStatus']);
 
 const EXCEL_LABEL_OVERRIDES = {
   'ID נכס לצורך מערכת זו בלבד': 'ID',
@@ -72,15 +73,10 @@ export default function BuildingsPage() {
   const [cardExportError, setCardExportError] = useState('');
   const [photoLoading, setPhotoLoading] = useState(false);
   const [photoError, setPhotoError] = useState('');
-  const [createForm, setCreateForm] = useState({
-    fldId: '',
-    streetId: '',
-    bldNum: '',
-    bldName: '',
-    statusSummary: '',
-    shikumStatusId: '',
-    category: ''
-  });
+  const [createFieldTemplate, setCreateFieldTemplate] = useState([]);
+  const [createFieldValues, setCreateFieldValues] = useState({});
+  const [createTemplateLoading, setCreateTemplateLoading] = useState(false);
+  const [createSelectTablesLoading, setCreateSelectTablesLoading] = useState(false);
   const [editFieldValues, setEditFieldValues] = useState({});
   const [selectTablesByName, setSelectTablesByName] = useState({});
   const [selectTablesLoading, setSelectTablesLoading] = useState(false);
@@ -91,6 +87,7 @@ export default function BuildingsPage() {
   const [sortConfig, setSortConfig] = useState({ field: 'street', direction: 'asc' });
   const [openViewCategories, setOpenViewCategories] = useState(() => new Set());
   const [openEditCategories, setOpenEditCategories] = useState(() => new Set());
+  const [openCreateCategories, setOpenCreateCategories] = useState(() => new Set());
   const [isExternalOpen, setIsExternalOpen] = useState(false);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
 
@@ -101,10 +98,11 @@ export default function BuildingsPage() {
     return match ? String(match.value) : null;
   }, [sivugOptions]);
 
+  const createSivugValue = createFieldValues.BldSivug ?? '';
   const isRehabStatusRequired = useMemo(() => {
-    if (!rehabSivugValue || !createForm.category) return false;
-    return String(createForm.category) === rehabSivugValue;
-  }, [createForm.category, rehabSivugValue]);
+    if (!rehabSivugValue || !createSivugValue) return false;
+    return String(createSivugValue) === rehabSivugValue;
+  }, [createSivugValue, rehabSivugValue]);
 
   const editSivugValue = editFieldValues.BldSivug ?? selectedBuilding?.bldSivug ?? '';
   const isEditRehabStatusRequired = useMemo(() => {
@@ -143,6 +141,35 @@ export default function BuildingsPage() {
     }
   }, []);
 
+  const loadCreateTemplate = useCallback(async () => {
+    setCreateTemplateLoading(true);
+    try {
+      const fields = await api.fetchBuildingFieldTemplate();
+      setCreateFieldTemplate(fields || []);
+      const nextValues = {};
+      (fields || []).forEach((field) => {
+        if (!field?.columnName) return;
+        if (field.columnName.toLowerCase() === 'streetname') return;
+        if (field.selectTableName) {
+          const rawValue = field.rawValue;
+          nextValues[field.columnName] =
+            rawValue === null || rawValue === undefined || rawValue === 0 ? '' : String(rawValue);
+        } else {
+          nextValues[field.columnName] = field.value ?? '';
+        }
+      });
+      if (!Object.prototype.hasOwnProperty.call(nextValues, 'StreetId')) {
+        nextValues.StreetId = '';
+      }
+      setCreateFieldValues(nextValues);
+    } catch {
+      setCreateFieldTemplate([]);
+      setCreateFieldValues({});
+    } finally {
+      setCreateTemplateLoading(false);
+    }
+  }, []);
+
   const expandUpdatedRange = (filterValues) => {
     const next = { ...filterValues };
     if (filterValues.updatedFrom) {
@@ -176,6 +203,7 @@ export default function BuildingsPage() {
     return value;
   };
   const isRequiredEditColumn = (columnName) => REQUIRED_EDIT_COLUMNS.has(columnName);
+  const isRequiredCreateColumn = (columnName) => REQUIRED_CREATE_COLUMNS.has(columnName);
 
   useEffect(() => {
     const loadStatusOptions = async () => {
@@ -230,8 +258,9 @@ export default function BuildingsPage() {
   useEffect(() => {
     if (showModal && modalMode === 'create') {
       loadStreets();
+      loadCreateTemplate();
     }
-  }, [loadStreets, showModal, modalMode]);
+  }, [loadStreets, loadCreateTemplate, showModal, modalMode]);
 
   useEffect(() => {
     if (!selectedBuilding) {
@@ -302,6 +331,48 @@ export default function BuildingsPage() {
 
     loadSelectTables();
   }, [selectedBuilding, selectedView, selectTablesByName]);
+
+  useEffect(() => {
+    const loadCreateSelectTables = async () => {
+      if (!showModal || modalMode !== 'create') return;
+      if (!createFieldTemplate || createFieldTemplate.length === 0) return;
+      const tableNames = new Set(
+        createFieldTemplate
+          .map((field) => field.selectTableName)
+          .filter((name) => name && name.trim())
+      );
+      const missing = [...tableNames].filter((name) => !selectTablesByName[name]);
+      if (missing.length === 0) {
+        setCreateSelectTablesLoading(false);
+        return;
+      }
+
+      setCreateSelectTablesLoading(true);
+      try {
+        const results = await Promise.all(
+          missing.map(async (name) => {
+            try {
+              const options = await api.fetchSelectTable(name);
+              return [name, options];
+            } catch {
+              return [name, []];
+            }
+          })
+        );
+        setSelectTablesByName((prev) => {
+          const next = { ...prev };
+          results.forEach(([name, options]) => {
+            next[name] = options;
+          });
+          return next;
+        });
+      } finally {
+        setCreateSelectTablesLoading(false);
+      }
+    };
+
+    loadCreateSelectTables();
+  }, [showModal, modalMode, createFieldTemplate, selectTablesByName]);
 
   const loadBuildings = async (appliedFilters = filters) => {
     setLoading(true);
@@ -398,12 +469,11 @@ export default function BuildingsPage() {
     }
   };
 
-  const handleCreateChange = (event) => {
-    const { name, value } = event.target;
-    setCreateForm((form) => {
-      const next = { ...form, [name]: value };
-      if (name === 'category' && String(value) !== rehabSivugValue) {
-        next.shikumStatusId = '';
+  const handleCreateFieldChange = (columnName, value) => {
+    setCreateFieldValues((prev) => {
+      const next = { ...prev, [columnName]: value };
+      if (columnName === 'BldSivug' && String(value) !== rehabSivugValue) {
+        next.ShikumStatus = '';
       }
       return next;
     });
@@ -459,61 +529,87 @@ export default function BuildingsPage() {
       setDuplicatePrompt('');
     }
     try {
-      if (!createForm.streetId) {
+      const getCreateValue = (key) => createFieldValues[key] ?? '';
+      const streetId = String(getCreateValue('StreetId'));
+      const houseNumber = String(getCreateValue('BldNum')).trim();
+      const buildingName = String(getCreateValue('BldName')).trim();
+      const bldSivug = String(getCreateValue('BldSivug'));
+      const shikumStatusId = String(getCreateValue('ShikumStatus'));
+      const statusSummary = getCreateValue('StatusSummary');
+      const fldId = getCreateValue('FIdId');
+      const complaints = getCreateValue('complaints') || getCreateValue('Complaints');
+
+      if (!streetId) {
         throw new Error('יש לבחור רחוב מהרשימה');
       }
-      if (!createForm.bldNum.trim()) {
+      if (!houseNumber) {
         throw new Error('יש להזין מספר בית');
       }
-      if (!createForm.bldName.trim()) {
+      if (!buildingName) {
         throw new Error('יש להזין כינוי הבניין');
       }
-      if (isRehabStatusRequired && !createForm.shikumStatusId) {
-        throw new Error('יש לבחור סטטוס שיקום');
-      }
-      if (!createForm.category) {
+      if (!bldSivug) {
         throw new Error('יש לבחור סיווג');
+      }
+      if (isRehabStatusRequired && !shikumStatusId) {
+        throw new Error('יש לבחור סטטוס שיקום');
       }
       let statusOption = null;
       if (isRehabStatusRequired) {
         statusOption = statusOptions.find(
-          (option) => String(option.id) === createForm.shikumStatusId
+          (option) => String(option.id) === shikumStatusId
         );
         if (!statusOption) {
           throw new Error('סטטוס השיקום שבחרת אינו חוקי');
         }
       }
       const sivugOption = sivugOptions.find(
-        (option) => String(option.value) === createForm.category
+        (option) => String(option.value) === bldSivug
       );
       if (!sivugOption) {
         throw new Error('הסיווג שבחרת אינו חוקי');
       }
-      const streetOption = streets.find((street) => String(street.streetId) === createForm.streetId);
+      const streetOption = streets.find((street) => String(street.streetId) === streetId);
       if (!streetOption) {
         throw new Error('יש לבחור רחוב מהרשימה');
       }
-      await api.createBuilding({
-        fldId: createForm.fldId,
+      const created = await api.createBuilding({
+        fldId,
         streetId: streetOption.streetId,
-        houseNumber: createForm.bldNum,
-        nickname: createForm.bldName,
-        bldSivug: createForm.category,
+        houseNumber,
+        nickname: buildingName,
+        bldSivug,
         status: statusOption ? statusOption.value : undefined,
-        statusSummary: createForm.statusSummary,
-        complaints: '',
+        statusSummary,
+        complaints,
         allowDuplicate
       });
+      const coreColumns = new Set([
+        'FIdId',
+        'StreetId',
+        'StreetName',
+        'BldNum',
+        'BldName',
+        'BldSivug',
+        'ShikumStatus',
+        'StatusSummary',
+        'complaints',
+        'Complaints'
+      ]);
+      const extraFields = Object.entries(createFieldValues).reduce((acc, [column, value]) => {
+        if (!column) return acc;
+        if (coreColumns.has(column)) return acc;
+        if (column.toLowerCase() === 'streetname') return acc;
+        if (value === null || value === undefined) return acc;
+        if (typeof value === 'string' && value.trim() === '') return acc;
+        acc[column] = value;
+        return acc;
+      }, {});
+      if (Object.keys(extraFields).length > 0) {
+        await api.updateBuildingFields(created.id, extraFields, allowDuplicate);
+      }
       setDuplicatePrompt('');
-      setCreateForm({
-        fldId: '',
-        streetId: '',
-        bldNum: '',
-        bldName: '',
-        statusSummary: '',
-        shikumStatusId: '',
-        category: ''
-      });
+      loadCreateTemplate();
       setShowModal(false);
       setUnsavedChanges(false);
       loadBuildings(filters);
@@ -698,6 +794,18 @@ export default function BuildingsPage() {
     });
   };
 
+  const toggleCreateCategory = (category) => {
+    setOpenCreateCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
   const toggleExternalSection = () => {
     setIsExternalOpen((prev) => !prev);
   };
@@ -823,6 +931,16 @@ export default function BuildingsPage() {
     }, {});
   }, [selectedBuilding]);
 
+  const createFieldsByCategory = useMemo(() => {
+    const fields = createFieldTemplate || [];
+    return fields.reduce((acc, field) => {
+      const category = field.category || 'כללי';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(field);
+      return acc;
+    }, {});
+  }, [createFieldTemplate]);
+
   const orderedFieldGroups = useMemo(() => {
     const entries = Object.entries(fieldsByCategory);
     if (entries.length === 0) return [];
@@ -842,12 +960,38 @@ export default function BuildingsPage() {
       .map((item) => item.entry);
   }, [fieldsByCategory]);
 
+  const createOrderedFieldGroups = useMemo(() => {
+    const entries = Object.entries(createFieldsByCategory);
+    if (entries.length === 0) return [];
+    const priority = (category) => {
+      if (category === 'מידע כללי') return 0;
+      if (category === 'פרטים מזהים') return 1;
+      return 2;
+    };
+    return entries
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => {
+        const aPriority = priority(a.entry[0]);
+        const bPriority = priority(b.entry[0]);
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.index - b.index;
+      })
+      .map((item) => item.entry);
+  }, [createFieldsByCategory]);
+
   const defaultOpenCategories = useMemo(() => {
     if (orderedFieldGroups.length === 0) return [];
     const categories = orderedFieldGroups.map(([category]) => category);
     const defaultCategory = categories.includes('מידע כללי') ? 'מידע כללי' : categories[0];
     return defaultCategory ? [defaultCategory] : [];
   }, [orderedFieldGroups]);
+
+  const defaultCreateOpenCategories = useMemo(() => {
+    if (createOrderedFieldGroups.length === 0) return [];
+    const categories = createOrderedFieldGroups.map(([category]) => category);
+    const defaultCategory = categories.includes('מידע כללי') ? 'מידע כללי' : categories[0];
+    return defaultCategory ? [defaultCategory] : [];
+  }, [createOrderedFieldGroups]);
 
   useEffect(() => {
     if (!selectedBuilding) {
@@ -863,12 +1007,21 @@ export default function BuildingsPage() {
     setIsLogsOpen(false);
   }, [selectedBuilding, defaultOpenCategories]);
 
+  useEffect(() => {
+    if (showModal && modalMode === 'create') {
+      setOpenCreateCategories(new Set(defaultCreateOpenCategories));
+    }
+  }, [showModal, modalMode, defaultCreateOpenCategories]);
+
   const sortFieldsForDisplay = (fields) => {
     if (!Array.isArray(fields)) return [];
     const fieldPriority = (name) => {
-      if (name === 'סיווג') return 0;
-      if (name === 'סטטוס שיקום') return 1;
-      return 2;
+      if (name === 'שם רחוב') return 0;
+      if (name === 'מספר בית') return 1;
+      if (name === 'כינוי הבניין') return 2;
+      if (name === 'סיווג') return 3;
+      if (name === 'סטטוס שיקום') return 4;
+      return 5;
     };
     return fields
       .map((field, index) => ({ field, index }))
@@ -1298,22 +1451,24 @@ export default function BuildingsPage() {
         visible={showModal}
         mode={modalMode}
         building={selectedBuilding}
-        createForm={createForm}
+        createFieldValues={createFieldValues}
+        createFieldGroups={createOrderedFieldGroups}
+        createTemplateLoading={createTemplateLoading}
+        createSelectTablesLoading={createSelectTablesLoading}
         editFieldValues={editFieldValues}
         streets={streets}
-        sivugOptions={sivugOptions}
-        statusOptions={statusOptions}
         selectTablesByName={selectTablesByName}
         selectTablesLoading={selectTablesLoading}
         orderedFieldGroups={orderedFieldGroups}
         externalEntries={externalEntries}
         isRehabStatusRequired={isRehabStatusRequired}
         isEditRehabStatusRequired={isEditRehabStatusRequired}
+        isRequiredCreateColumn={isRequiredCreateColumn}
         canEdit={canEdit}
         actionMessage={actionMessage}
         duplicatePrompt={duplicatePrompt}
         editDuplicatePrompt={editDuplicatePrompt}
-        onCreateChange={handleCreateChange}
+        onCreateFieldChange={handleCreateFieldChange}
         onCreateSubmit={handleCreateBuilding}
         onDuplicateConfirm={handleDuplicateConfirm}
         onDuplicateCancel={handleDuplicateCancel}
@@ -1344,6 +1499,8 @@ export default function BuildingsPage() {
         toggleViewCategory={toggleViewCategory}
         openEditCategories={openEditCategories}
         toggleEditCategory={toggleEditCategory}
+        openCreateCategories={openCreateCategories}
+        toggleCreateCategory={toggleCreateCategory}
         handleCategoryToggleKeyDown={handleCategoryToggleKeyDown}
       />
     </main>

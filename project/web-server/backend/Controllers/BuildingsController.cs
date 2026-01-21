@@ -238,6 +238,14 @@ public class BuildingsController : ApiControllerBase
         return Ok(detail);
     }
 
+    [HttpGet("template")]
+    [Authorize(Policy = "Viewer")]
+    public ActionResult<IEnumerable<BuildingFieldDto>> GetBuildingTemplate()
+    {
+        var fields = BuildFieldsSnapshot(new Building());
+        return Ok(fields);
+    }
+
     [HttpGet("{id:int}/card")]
     [Authorize(Policy = "Viewer")]
     public async Task<IActionResult> ExportBuildingCard(int id, CancellationToken cancellationToken)

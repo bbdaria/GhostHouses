@@ -168,6 +168,16 @@ const mapLog = (log) => ({
   buildingStatisticalArea: log.buildingStatisticalArea
 });
 
+const mapBuildingField = (field) => ({
+  category: field.category,
+  fieldName: field.fieldName,
+  columnName: field.columnName,
+  selectTableName: field.selectTableName,
+  includeInEventLog: field.includeInEventLog,
+  value: field.value,
+  rawValue: field.rawValue
+});
+
 const mapBuildingDetail = (data) => ({
   id: data.summary.id,
   fldId: data.summary.fldId,
@@ -188,15 +198,7 @@ const mapBuildingDetail = (data) => ({
   photos: data.photos || [],
   external: data.externalData || {},
   fields: Array.isArray(data.fields)
-    ? data.fields.map((field) => ({
-        category: field.category,
-        fieldName: field.fieldName,
-        columnName: field.columnName,
-        selectTableName: field.selectTableName,
-        includeInEventLog: field.includeInEventLog,
-        value: field.value,
-        rawValue: field.rawValue
-      }))
+    ? data.fields.map((field) => mapBuildingField(field))
     : [],
   logs: (data.recentLogs || []).map((log) => mapLog(log))
 });
@@ -288,6 +290,10 @@ const api = {
   async fetchBuilding(id) {
     const data = await request(`/buildings/${id}`);
     return mapBuildingDetail(data);
+  },
+  async fetchBuildingFieldTemplate() {
+    const data = await request('/buildings/template');
+    return Array.isArray(data) ? data.map((field) => mapBuildingField(field)) : [];
   },
   async createBuilding(form) {
     const fldId = toOptionalInt(form.fldId) ?? generateFieldId();

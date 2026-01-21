@@ -4,22 +4,24 @@ export default function BuildingModal({
   visible,
   mode,
   building,
-  createForm,
+  createFieldValues,
+  createFieldGroups,
+  createTemplateLoading,
+  createSelectTablesLoading,
   editFieldValues,
   streets,
-  sivugOptions,
-  statusOptions,
   selectTablesByName,
   selectTablesLoading,
   orderedFieldGroups,
   externalEntries,
   isRehabStatusRequired,
   isEditRehabStatusRequired,
+  isRequiredCreateColumn,
   canEdit,
   actionMessage,
   duplicatePrompt,
   editDuplicatePrompt,
-  onCreateChange,
+  onCreateFieldChange,
   onCreateSubmit,
   onDuplicateConfirm,
   onDuplicateCancel,
@@ -50,6 +52,8 @@ export default function BuildingModal({
   toggleViewCategory,
   openEditCategories,
   toggleEditCategory,
+  openCreateCategories,
+  toggleCreateCategory,
   handleCategoryToggleKeyDown
 }) {
   if (!visible) return null;
@@ -72,6 +76,16 @@ export default function BuildingModal({
     onPhotoUpload(file);
     event.target.value = '';
   };
+  const renderLabel = (text, required = false) => (
+    <>
+      {text}
+      {required && (
+        <span className="required-marker" aria-hidden="true">
+          *
+        </span>
+      )}
+    </>
+  );
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -88,80 +102,133 @@ export default function BuildingModal({
         <div className="modal-body">
           {loadingBuilding && <p className="muted">טוען פרטי מבנה…</p>}
           {mode === 'create' && (
-            <form className="form-grid">
-              <label>
-                שם רחוב
-                <select
-                  name="streetId"
-                  value={createForm.streetId}
-                  onChange={onCreateChange}
-                  onFocus={loadStreets}
-                  required
-                >
-                  <option value="">בחר רחוב</option>
-                  {streets.map((street) => (
-                    <option key={street.streetId} value={street.streetId}>
-                      {street.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                מספר בית
-                <input
-                  name="bldNum"
-                  value={createForm.bldNum}
-                  onChange={onCreateChange}
-                  required
-                />
-              </label>
-              <label>
-                כינוי הבניין
-                <input
-                  name="bldName"
-                  value={createForm.bldName}
-                  onChange={onCreateChange}
-                  required
-                />
-              </label>
-              <label>
-                סיווג
-                <select name="category" value={createForm.category} onChange={onCreateChange} required>
-                  <option value="">בחר סיווג</option>
-                  {sivugOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                סטטוס שיקום
-                <select
-                  name="shikumStatusId"
-                  value={createForm.shikumStatusId}
-                  onChange={onCreateChange}
-                  required={isRehabStatusRequired}
-                  disabled={!isRehabStatusRequired}
-                >
-                  <option value="">בחר סטטוס שיקום</option>
-                  {statusOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="full-span">
-                תמונת מצב (תמצית מצב)
-                <textarea
-                  name="statusSummary"
-                  value={createForm.statusSummary}
-                  onChange={onCreateChange}
-                  placeholder=""
-                />
-              </label>
+            <form className="details-card">
+              {createTemplateLoading && <p className="muted">טוען שדות…</p>}
+              {createSelectTablesLoading && <p className="muted">טוען טבלאות בחירה…</p>}
+              {createFieldGroups.length === 0 && !createTemplateLoading && (
+                <p className="muted">אין שדות זמינים.</p>
+              )}
+              {createFieldGroups.map(([category, fields]) => {
+                const isOpen = openCreateCategories.has(category);
+                return (
+                  <div key={category} className="details-section">
+                    <div
+                      className={`details-section__header${isOpen ? ' is-open' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isOpen}
+                      onClick={() => toggleCreateCategory(category)}
+                      onKeyDown={(event) =>
+                        handleCategoryToggleKeyDown(event, () => toggleCreateCategory(category))
+                      }
+                    >
+                      <h4>{category}</h4>
+                      <span className="details-section__indicator" aria-hidden="true">
+                        {isOpen ? '∨' : '∧'}
+                      </span>
+                    </div>
+                    {isOpen && (
+                      <div className="form-grid">
+                        {sortFieldsForDisplay(fields).map((field) => {
+                          const columnName = field.columnName;
+                          const fieldName = field.fieldName;
+                          if (!columnName) return null;
+                          const required = isRequiredCreateColumn(columnName);
+
+                          if (columnName.toLowerCase() === 'streetid') {
+                            return (
+                              <label key={columnName}>
+                                {renderLabel(getExcelAwareLabel(fieldName), false)}
+                                <input type="text" value={createFieldValues.StreetId ?? ''} disabled />
+                              </label>
+                            );
+                          }
+
+                          if (columnName.toLowerCase() === 'streetname') {
+                            return (
+                              <label key={columnName}>
+                                {renderLabel(getExcelAwareLabel(fieldName), true)}
+                                <select
+                                  value={createFieldValues.StreetId ?? ''}
+                                  onChange={(e) => onCreateFieldChange('StreetId', e.target.value)}
+                                  onFocus={loadStreets}
+                                  required
+                                >
+                                  <option value="">בחר רחוב</option>
+                                  {streets.map((street) => (
+                                    <option key={street.streetId} value={street.streetId}>
+                                      {street.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            );
+                          }
+
+                          const selectTableName = field.selectTableName;
+                          const selectOptions =
+                            selectTableName && selectTablesByName[selectTableName]
+                              ? selectTablesByName[selectTableName]
+                              : [];
+                          const currentValue = createFieldValues[columnName] ?? '';
+                          const isRehabStatusField = columnName.toLowerCase() === 'shikumstatus';
+
+                          if (selectTableName && selectOptions.length > 0) {
+                            return (
+                              <label key={columnName}>
+                                {renderLabel(
+                                  getExcelAwareLabel(fieldName),
+                                  required && (!isRehabStatusField || isRehabStatusRequired)
+                                )}
+                                <select
+                                  value={currentValue}
+                                  onChange={(e) => onCreateFieldChange(columnName, e.target.value)}
+                                  required={required && (!isRehabStatusField || isRehabStatusRequired)}
+                                  disabled={isRehabStatusField && !isRehabStatusRequired}
+                                >
+                                  <option value="">—</option>
+                                  {selectOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            );
+                          }
+
+                          const isDate = isDateField(field);
+                          const useTextarea = shouldUseTextarea(fieldName) && !isDate;
+                          const inputType = isDate ? 'date' : 'text';
+
+                          return (
+                            <label key={columnName} className={useTextarea ? 'full-span' : ''}>
+                              {renderLabel(getExcelAwareLabel(fieldName), required)}
+                              {useTextarea ? (
+                                <textarea
+                                  value={currentValue}
+                                  onChange={(e) => onCreateFieldChange(columnName, e.target.value)}
+                                  required={required}
+                                />
+                              ) : (
+                                <input
+                                  type={inputType}
+                                  value={currentValue}
+                                  onChange={(e) => onCreateFieldChange(columnName, e.target.value)}
+                                  required={required}
+                                  lang={inputType === 'date' ? 'he-IL' : undefined}
+                                />
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {/* actions are in modal footer */}
+              <div style={{ height: 12 }} />
             </form>
           )}
 
@@ -241,7 +308,7 @@ export default function BuildingModal({
                           if (columnName.toLowerCase() === 'streetid') {
                             return (
                               <label key={columnName}>
-                                {getExcelAwareLabel(fieldName)}
+                                {renderLabel(getExcelAwareLabel(fieldName), false)}
                                 <input type="text" value={editFieldValues[columnName] ?? ''} disabled />
                               </label>
                             );
@@ -250,7 +317,7 @@ export default function BuildingModal({
                           if (columnName.toLowerCase() === 'fidid') {
                             return (
                               <label key={columnName}>
-                                {getExcelAwareLabel(fieldName)}
+                                {renderLabel(getExcelAwareLabel(fieldName), false)}
                                 <input type="text" value={editFieldValues[columnName] ?? ''} disabled />
                               </label>
                             );
@@ -259,7 +326,7 @@ export default function BuildingModal({
                           if (columnName.toLowerCase() === 'streetname') {
                             return (
                               <label key={columnName}>
-                                {getExcelAwareLabel(fieldName)}
+                                {renderLabel(getExcelAwareLabel(fieldName), true)}
                                 <select
                                   value={editFieldValues.StreetId ?? ''}
                                   onChange={(e) => onEditChange('StreetId', e.target.value)}
@@ -287,7 +354,10 @@ export default function BuildingModal({
                           if (selectTableName && selectOptions.length > 0) {
                             return (
                               <label key={columnName}>
-                                {getExcelAwareLabel(fieldName)}
+                                {renderLabel(
+                                  getExcelAwareLabel(fieldName),
+                                  required && (!isRehabStatusField || isEditRehabStatusRequired)
+                                )}
                                 <select
                                   value={currentValue}
                                   onChange={(e) => onEditChange(columnName, e.target.value)}
@@ -311,7 +381,7 @@ export default function BuildingModal({
 
                           return (
                             <label key={columnName} className={useTextarea ? 'full-span' : ''}>
-                              {getExcelAwareLabel(fieldName)}
+                              {renderLabel(getExcelAwareLabel(fieldName), required)}
                               {useTextarea ? (
                                 <textarea
                                   value={currentValue}
