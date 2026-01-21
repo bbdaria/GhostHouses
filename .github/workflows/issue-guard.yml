@@ -213,17 +213,21 @@ jobs:
             }
 
             if (isBlocked && !issue.locked) {
+              try {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: 'This issue is locked because required fields are missing. Please add the milestone and a valid User Story parent, then it will be unlocked.'
+                });
+              } catch (error) {
+                core.warning(`Failed to comment before lock: ${error.message}`);
+              }
               await github.rest.issues.lock({
                 owner,
                 repo,
                 issue_number: issueNumber,
                 lock_reason: 'resolved'
-              });
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                body: 'This issue is locked because required fields are missing. Please add the milestone and a valid User Story parent, then it will be unlocked.'
               });
             }
 
