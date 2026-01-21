@@ -1,0 +1,17 @@
+@startuml
+title Edit Building & Log
+
+actor "Editor" as Editor
+participant "Web UI" as UI
+participant "Backend API" as API
+database "Core DB" as DB
+database "Audit Log" as Audit
+
+Editor -> UI : Submit building update
+UI -> API : PUT /buildings/{id}
+API -> DB : Update record
+API -> Audit : Log change
+Audit --> API : OK
+API --> UI : 200 OK
+UI --> Editor : Update confirmed
+@enduml

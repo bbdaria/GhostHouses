@@ -1,0 +1,45 @@
+@startuml
+left to right direction
+actor "User - Editor" as User
+actor "User - Viewer" as Viewer
+actor "Admin" as Admin
+
+rectangle "Abandoned Properties System" {
+  usecase "Viewer Permissions" as VIEW_PERM
+  usecase "Editor Permissions" as USER_PERM
+
+  usecase "Admin Permissions" as ADMIN_PERM
+  usecase "Edit user permissions" as EDIT_PERM
+
+  usecase "View field logs and changes" as LOGS
+  usecase "Login (2FA)" as LOGIN
+  usecase "Search and filter the database" as SEARCH
+  usecase "Produce building card" as CARD
+  usecase "Update existing buildings" as UPDATE
+  usecase "Add and remove buildings" as DELETE
+  usecase "Delete logs" as LOG_ADMIN
+  database "Internal servers" as Internal
+}
+
+VIEW_PERM --> LOGIN
+VIEW_PERM --> LOGS
+VIEW_PERM --> SEARCH
+VIEW_PERM --> CARD
+Viewer --> VIEW_PERM
+
+USER_PERM --> UPDATE
+USER_PERM --> DELETE
+User --> USER_PERM
+User --> VIEW_PERM
+
+Admin --> ADMIN_PERM
+Admin --> VIEW_PERM
+Admin --> USER_PERM
+
+ADMIN_PERM --> EDIT_PERM
+ADMIN_PERM --> LOG_ADMIN
+
+database "Outside servers" as Outside
+
+Outside ..> Internal : status sync
+@enduml
