@@ -13,16 +13,22 @@ export default function BuildingModal({
   selectTablesLoading,
   orderedFieldGroups,
   externalEntries,
+  isRehabStatusRequired,
   isEditRehabStatusRequired,
   canEdit,
   actionMessage,
   duplicatePrompt,
+  editDuplicatePrompt,
   onCreateChange,
   onCreateSubmit,
   onDuplicateConfirm,
   onDuplicateCancel,
   onEditChange,
   onEditSubmit,
+  onEditDuplicateConfirm,
+  onEditDuplicateCancel,
+  onOpenEdit,
+  onOpenLogs,
   onDelete,
   onExportCard,
   onClose,
@@ -116,7 +122,8 @@ export default function BuildingModal({
                   name="shikumStatusId"
                   value={createForm.shikumStatusId}
                   onChange={onCreateChange}
-                  required={false}
+                  required={isRehabStatusRequired}
+                  disabled={!isRehabStatusRequired}
                 >
                   <option value="">בחר סטטוס שיקום</option>
                   {statusOptions.map((option) => (
@@ -376,12 +383,27 @@ export default function BuildingModal({
                 ייצוא כרטיס מבנה
               </button>
             )}
-            {canEdit && mode === 'edit' && (
+            {mode === 'view' && (
+              <button type="button" className="ghost" onClick={onOpenLogs}>
+                יומן
+              </button>
+            )}
+            {canEdit && mode === 'view' && (
+              <button type="button" className="ghost" onClick={onOpenEdit}>
+                עריכה
+              </button>
+            )}
+            {canEdit && mode === 'view' && (
               <button type="button" className="danger" onClick={() => onDelete(building?.id)}>
                 מחק
               </button>
             )}
             {canEdit && mode === 'edit' && (
+              <button type="button" className="danger" onClick={() => onDelete(building?.id)}>
+                מחק
+              </button>
+            )}
+            {canEdit && mode === 'edit' && !editDuplicatePrompt && (
               <button type="button" className="primary" onClick={onEditSubmit}>
                 שמירת שינויים
               </button>
@@ -400,6 +422,19 @@ export default function BuildingModal({
                   המשך והוסף בכל זאת
                 </button>
                 <button type="button" className="ghost" onClick={onDuplicateCancel}>
+                  ביטול
+                </button>
+              </div>
+            </div>
+          )}
+          {mode === 'edit' && editDuplicatePrompt && (
+            <div className="duplicate-warning">
+              <span>{editDuplicatePrompt}</span>
+              <div className="duplicate-actions">
+                <button type="button" className="primary" onClick={onEditDuplicateConfirm}>
+                  המשך והוסף בכל זאת
+                </button>
+                <button type="button" className="ghost" onClick={onEditDuplicateCancel}>
                   ביטול
                 </button>
               </div>

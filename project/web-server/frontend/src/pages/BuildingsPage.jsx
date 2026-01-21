@@ -84,6 +84,7 @@ export default function BuildingsPage() {
   const [selectTablesLoading, setSelectTablesLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [duplicatePrompt, setDuplicatePrompt] = useState('');
+  const [editDuplicatePrompt, setEditDuplicatePrompt] = useState('');
   const [selectedView, setSelectedView] = useState('view');
   const [sortConfig, setSortConfig] = useState({ field: 'street', direction: 'asc' });
   const [openViewCategories, setOpenViewCategories] = useState(() => new Set());
@@ -92,21 +93,26 @@ export default function BuildingsPage() {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
 
   const rehabSivugValue = useMemo(() => {
-    const match = sivugOptions.find((option) => option.label === 'ריק ובהליך שיקום');
-    return match ? String(match.value) : '3';
+    const match =
+      sivugOptions.find((option) => option.label === 'ריק ובהליך שיקום') ||
+      sivugOptions.find((option) => option.label && option.label.includes('שיקום'));
+    return match ? String(match.value) : null;
   }, [sivugOptions]);
 
   const isRehabStatusRequired = useMemo(() => {
-    if (!createForm.category) return false;
+    if (!rehabSivugValue || !createForm.category) return false;
     return String(createForm.category) === rehabSivugValue;
   }, [createForm.category, rehabSivugValue]);
 
+  const editSivugValue = editFieldValues.BldSivug ?? selectedBuilding?.bldSivug ?? '';
   const isEditRehabStatusRequired = useMemo(() => {
-    if (!editFieldValues.BldSivug && editFieldValues.BldSivug !== 0) return false;
-    return String(editFieldValues.BldSivug) === rehabSivugValue;
-  }, [editFieldValues.BldSivug, rehabSivugValue]);
+    if (!rehabSivugValue) return false;
+    if (editSivugValue === '' || editSivugValue === null || editSivugValue === undefined) return false;
+    return String(editSivugValue) === rehabSivugValue;
+  }, [editSivugValue, rehabSivugValue]);
 
   const isFilterRehabStatusRequired = useMemo(() => {
+    if (!rehabSivugValue) return false;
     if (!filters.bldSivug && filters.bldSivug !== 0) return false;
     return String(filters.bldSivug) === rehabSivugValue;
   }, [filters.bldSivug, rehabSivugValue]);
@@ -427,6 +433,17 @@ export default function BuildingsPage() {
     setUnsavedChanges(false);
     setSelectedBuilding(null);
     setDuplicatePrompt('');
+    setEditDuplicatePrompt('');
+  };
+
+  const handleOpenEditModal = () => {
+    if (!selectedBuilding) return;
+    openBuildingModal(selectedBuilding.id, 'edit');
+  };
+
+  const handleOpenLogsModal = () => {
+    if (!selectedBuilding) return;
+    navigate(`/logs?buildingId=${selectedBuilding.id}`);
   };
 
   const handleCreateBuilding = async (event, allowDuplicate = false) => {
@@ -520,13 +537,17 @@ export default function BuildingsPage() {
       }
       return next;
     });
+    setEditDuplicatePrompt('');
     setUnsavedChanges(true);
   };
 
-  const handleUpdateBuildingFields = async (event) => {
+  const handleUpdateBuildingFields = async (event, allowDuplicate = false) => {
     if (event && event.preventDefault) event.preventDefault();
     if (!selectedBuilding) return;
     setActionMessage('');
+    if (!allowDuplicate) {
+      setEditDuplicatePrompt('');
+    }
     const isMissing = (value) =>
       value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
     const missingField = REQUIRED_EDIT_FIELDS.find((field) => {
@@ -543,14 +564,26 @@ export default function BuildingsPage() {
         return acc;
       }, {});
 
-      const updated = await api.updateBuildingFields(selectedBuilding.id, cleaned);
+      const updated = await api.updateBuildingFields(selectedBuilding.id, cleaned, allowDuplicate);
       setSelectedBuilding(updated);
       loadBuildings(filters);
       setActionMessage('פרטי המבנה עודכנו.');
       setUnsavedChanges(false);
     } catch (err) {
+      if (err?.payload?.isDuplicate || err?.status === 409) {
+        setEditDuplicatePrompt(err?.payload?.error || 'נמצאה כפילות');
+        return;
+      }
       setActionMessage(err.message);
     }
+  };
+
+  const handleEditDuplicateConfirm = () => {
+    handleUpdateBuildingFields(null, true);
+  };
+
+  const handleEditDuplicateCancel = () => {
+    setEditDuplicatePrompt('');
   };
 
   const handleDeleteBuilding = async (buildingId) => {
@@ -986,7 +1019,7 @@ export default function BuildingsPage() {
         </form>
         {loading && <p className="muted">טוען מבנים…</p>}
         {error && <p className="error">שגיאה בטעינת מבנים: {error}</p>}
-        {actionMessage && <p className="success">{actionMessage}</p>}
+        {actionMessage && !showModal && <p className="success">{actionMessage}</p>}
         {exportError && <p className="error">שגיאה בייצוא: {exportError}</p>}
         {cardExportError && <p className="error">שגיאה בייצוא כרטיס מבנה: {cardExportError}</p>}
       </section>
@@ -1214,16 +1247,22 @@ export default function BuildingsPage() {
         selectTablesLoading={selectTablesLoading}
         orderedFieldGroups={orderedFieldGroups}
         externalEntries={externalEntries}
+        isRehabStatusRequired={isRehabStatusRequired}
         isEditRehabStatusRequired={isEditRehabStatusRequired}
         canEdit={canEdit}
         actionMessage={actionMessage}
         duplicatePrompt={duplicatePrompt}
+        editDuplicatePrompt={editDuplicatePrompt}
         onCreateChange={handleCreateChange}
         onCreateSubmit={handleCreateBuilding}
         onDuplicateConfirm={handleDuplicateConfirm}
         onDuplicateCancel={handleDuplicateCancel}
         onEditChange={handleEditFieldChange}
         onEditSubmit={handleUpdateBuildingFields}
+        onEditDuplicateConfirm={handleEditDuplicateConfirm}
+        onEditDuplicateCancel={handleEditDuplicateCancel}
+        onOpenEdit={handleOpenEditModal}
+        onOpenLogs={handleOpenLogsModal}
         onDelete={handleDeleteBuilding}
         onExportCard={handleExportCard}
         onClose={handleCloseModal}
