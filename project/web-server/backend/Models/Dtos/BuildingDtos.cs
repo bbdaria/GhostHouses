@@ -8,22 +8,36 @@ public record BuildingFilterParameters(
     int Page = 1,
     int PageSize = 20,
     string? Street = null,
+    int? StreetId = null,
     string? HouseNumber = null,
     string? Name = null,
     BuildingStatus? Status = null,
+    int? BldSivug = null,
     string? Neighborhood = null,
-    string? StatusSummary = null);
+    string? StatusSummary = null,
+    int? SugBaalut = null,
+    string? Quarter = null,
+    string? SubQuarter = null,
+    string? StatisticalArea = null,
+    DateTime? UpdatedFrom = null,
+    DateTime? UpdatedTo = null);
 
 public record BuildingSummaryDto(
     int Id,
-    string FldId,
+    int? FldId,
+    int? StreetId,
     string BuildingName,
     string StreetName,
     string HouseNumber,
     string Neighborhood,
     BuildingStatus ShikumStatus,
-    string BldSivug,
-    string StatusSummary);
+    int? BldSivug,
+    string StatusSummary,
+    DateTime? StatusSummaryUpdatedAt,
+    int? SugBaalut,
+    string? Quarter,
+    string? SubQuarter,
+    string? StatisticalArea);
 
 public record BuildingDetailDto(
     BuildingSummaryDto Summary,
@@ -32,7 +46,17 @@ public record BuildingDetailDto(
     string? Complaints,
     string[] Photos,
     BuildingExternalDataDto ExternalData,
-    IEnumerable<BuildingLogDto> RecentLogs);
+    IEnumerable<BuildingLogDto> RecentLogs,
+    IEnumerable<BuildingFieldDto> Fields);
+
+public record BuildingFieldDto(
+    string Category,
+    string FieldName,
+    string ColumnName,
+    string? SelectTableName,
+    bool IncludeInEventLog,
+    string? Value,
+    int? RawValue);
 
 public record BuildingExternalDataDto(
     ExternalSystemSnapshotDto Gis,
@@ -49,9 +73,11 @@ public record ExternalSystemSnapshotDto(
 public record BuildingEditRequest
 {
     [Required]
-    public string FldId { get; set; } = string.Empty;
+    public int FldId { get; set; }
 
     [Required]
+    public int StreetId { get; set; }
+
     public string StreetName { get; set; } = string.Empty;
 
     [Required]
@@ -59,15 +85,20 @@ public record BuildingEditRequest
 
     public string BuildingName { get; set; } = string.Empty;
     public string Neighborhood { get; set; } = string.Empty;
-    public string? BldSivug { get; set; }
+    public int? BldSivug { get; set; }
     public BuildingStatus? ShikumStatus { get; set; }
     public string? StatusSummary { get; set; }
     public string? Complaints { get; set; }
     public string[]? Photos { get; set; }
+    public bool AllowDuplicate { get; set; }
 }
 
 public record DeleteBuildingRequest(
     string Reason,
     bool Confirm);
+
+public record BuildingFieldsUpdateRequest(
+    IDictionary<string, string?> Fields,
+    bool AllowDuplicate = false);
 
 public record PaginatedResult<T>(IEnumerable<T> Items, int Total, int Page, int PageSize);

@@ -1,0 +1,17 @@
+@startuml
+title View Building Card
+
+actor User
+participant "Web UI" as UI
+participant "Backend API" as API
+database "Core DB" as DB
+participant "External Data Services" as Ext
+
+User -> UI : Request building card
+UI -> API : GET /buildings/{id}
+API -> DB : Fetch base record
+API -> Ext : Fetch external data
+Ext --> API : External data
+API --> UI : Return full building card
+UI --> User : Display data
+@enduml

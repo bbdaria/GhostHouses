@@ -4,6 +4,17 @@ let authToken = null;
 
 const toCamel = (key) => (key ? key.charAt(0).toLowerCase() + key.slice(1) : key);
 
+const toOptionalInt = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+};
+
+const generateFieldId = () => {
+  const candidate = Math.trunc(Date.now() % 2000000000);
+  return candidate <= 0 ? 1 : candidate;
+};
+
 const normalizeSnapshot = (value) => {
   if (value === null || typeof value !== 'object') {
     return value;
@@ -70,58 +81,124 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const message = payload && payload.error ? payload.error : response.statusText;
-    throw new Error(message || 'Request failed');
+    const error = new Error(message || 'Request failed');
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
 
   return payload;
 }
 
+async function requestBlob(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: options.method || 'GET',
+    headers,
+    body: options.body
+  });
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const text = await response.text();
+      if (text) {
+        const parsed = JSON.parse(text);
+        message = parsed && parsed.error ? parsed.error : message;
+      }
+    } catch {
+      // Ignore parsing errors and keep status text.
+    }
+    throw new Error(message || 'Request failed');
+  }
+
+  return response.blob();
+}
+
 const mapBuildingSummary = (item) => ({
   id: item.id,
   fldId: item.fldId,
+  streetId: item.streetId,
   street: item.streetName,
   houseNumber: item.houseNumber,
   nickname: item.buildingName,
+  bldSivug: item.bldSivug,
   status: item.shikumStatus,
   area: item.neighborhood,
+  sugBaalut: item.sugBaalut,
+  quarter: item.quarter,
+  subQuarter: item.subQuarter,
+  statisticalArea: item.statisticalArea,
   statusSummary: item.statusSummary || '',
   updatedAt: item.statusSummaryUpdatedAt
 });
+
+const getLogUsername = (log) => {
+  if (log.createdBy || log.createdByUser || log.createdByUserId) {
+    return log.createdBy || log.createdByUser || log.createdByUserId;
+  }
+  if (log.category === 'Seed' || log.title === 'אתחול מערכת') {
+    return 'אתחול מערכת';
+  }
+  return 'system';
+};
 
 const mapLog = (log) => ({
   id: log.id,
   buildingId: log.buildingId,
   actionType: log.category || log.severity || log.title,
   description: log.message,
-  username: log.createdBy || log.createdByUser || log.createdByUserId || 'system',
+  username: getLogUsername(log),
   createdAt: log.createdAt,
   snapshot: parseSnapshot(log.message),
   buildingStreet: log.buildingStreet,
   buildingHouseNumber: log.buildingHouseNumber,
   buildingNickname: log.buildingNickname,
   buildingNeighborhood: log.buildingNeighborhood,
+  buildingBldSivug: log.buildingBldSivug,
   buildingStatus: log.buildingStatus,
-  buildingStatusSummary: log.buildingStatusSummary
+  buildingStatusSummary: log.buildingStatusSummary,
+  buildingSugBaalut: log.buildingSugBaalut,
+  buildingQuarter: log.buildingQuarter,
+  buildingSubQuarter: log.buildingSubQuarter,
+  buildingStatisticalArea: log.buildingStatisticalArea
 });
 
 const mapBuildingDetail = (data) => ({
   id: data.summary.id,
   fldId: data.summary.fldId,
+  streetId: data.summary.streetId,
   street: data.summary.streetName,
   houseNumber: data.summary.houseNumber,
   nickname: data.summary.buildingName,
   bldSivug: data.summary.bldSivug,
   status: data.summary.shikumStatus,
   area: data.summary.neighborhood,
+  sugBaalut: data.summary.sugBaalut,
+  quarter: data.summary.quarter,
+  subQuarter: data.summary.subQuarter,
+  statisticalArea: data.summary.statisticalArea,
   statusSummary: data.statusSummary,
   updatedAt: data.statusSummaryUpdatedAt,
   complaints: data.complaints,
   photos: data.photos || [],
   external: data.externalData || {},
-  logs: (data.recentLogs || []).map((log) => ({
-    ...mapLog(log),
-    username: log.createdBy || 'system'
-  }))
+  fields: Array.isArray(data.fields)
+    ? data.fields.map((field) => ({
+        category: field.category,
+        fieldName: field.fieldName,
+        columnName: field.columnName,
+        selectTableName: field.selectTableName,
+        includeInEventLog: field.includeInEventLog,
+        value: field.value,
+        rawValue: field.rawValue
+      }))
+    : [],
+  logs: (data.recentLogs || []).map((log) => mapLog(log))
 });
 
 const mapUser = (user) => ({
@@ -166,42 +243,80 @@ const api = {
   async fetchBuildings(filters = {}) {
     const params = new URLSearchParams();
     if (filters.street) params.append('street', filters.street);
+    if (filters.streetId) params.append('streetId', filters.streetId);
     if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
-    if (filters.area) params.append('neighborhood', filters.area);
+    if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+    if (filters.sugBaalut) params.append('sugBaalut', filters.sugBaalut);
+    if (filters.quarter) params.append('quarter', filters.quarter);
+    if (filters.subQuarter) params.append('subQuarter', filters.subQuarter);
+    if (filters.statisticalArea) params.append('statisticalArea', filters.statisticalArea);
+    if (filters.updatedFrom) params.append('updatedFrom', filters.updatedFrom);
+    if (filters.updatedTo) params.append('updatedTo', filters.updatedTo);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
     return (data.items || []).map(mapBuildingSummary);
+  },
+  async exportBuildings(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.street) params.append('street', filters.street);
+    if (filters.streetId) params.append('streetId', filters.streetId);
+    if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);
+    if (filters.nickname) params.append('name', filters.nickname);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+    if (filters.sugBaalut) params.append('sugBaalut', filters.sugBaalut);
+    if (filters.quarter) params.append('quarter', filters.quarter);
+    if (filters.subQuarter) params.append('subQuarter', filters.subQuarter);
+    if (filters.statisticalArea) params.append('statisticalArea', filters.statisticalArea);
+    if (filters.updatedFrom) params.append('updatedFrom', filters.updatedFrom);
+    if (filters.updatedTo) params.append('updatedTo', filters.updatedTo);
+    if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
+
+    const query = params.toString();
+    const path = query ? `/buildings/export?${query}` : '/buildings/export';
+    return requestBlob(path);
+  },
+  async exportBuildingCard(id) {
+    if (!id && id !== 0) {
+      throw new Error('building id is required');
+    }
+    return requestBlob(`/buildings/${id}/card`);
   },
   async fetchBuilding(id) {
     const data = await request(`/buildings/${id}`);
     return mapBuildingDetail(data);
   },
   async createBuilding(form) {
+    const fldId = toOptionalInt(form.fldId) ?? generateFieldId();
+    const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
-      fldId: form.fldId || `GH-${Date.now()}`,
-      streetName: form.streetName || '',
+      fldId,
+      streetId: toOptionalInt(form.streetId),
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || form.streetName || 'מבנה',
       neighborhood: form.area || form.neighborhood || '',
-      bldSivug: form.category || 'Unclassified',
+      bldSivug,
       shikumStatus: form.status || form.shikumStatus || 'Unknown',
       statusSummary: form.statusSummary || '',
-      complaints: form.complaints || ''
+      complaints: form.complaints || '',
+      allowDuplicate: Boolean(form.allowDuplicate)
     };
     const created = await request('/buildings', { method: 'POST', body: payload });
     return mapBuildingSummary(created);
   },
   async updateBuilding(id, form) {
+    const fldId = toOptionalInt(form.fldId) ?? generateFieldId();
+    const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
-      fldId: String(form.fldId || `GH-${id}`),
-      streetName: form.streetName || form.street || '',
+      fldId,
+      streetId: toOptionalInt(form.streetId) ?? toOptionalInt(form.street),
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || '',
       neighborhood: form.area || form.neighborhood || '',
-      bldSivug: form.category || 'Unclassified',
+      bldSivug,
       shikumStatus: form.status || form.shikumStatus || 'Unknown',
       statusSummary: form.statusSummary || '',
       complaints: form.complaints || ''
@@ -209,11 +324,30 @@ const api = {
     await request(`/buildings/${id}`, { method: 'PUT', body: payload });
     return this.fetchBuilding(id);
   },
+  async updateBuildingFields(id, fields, allowDuplicate = false) {
+    const payload = { fields, allowDuplicate };
+    const data = await request(`/buildings/${id}/fields`, { method: 'PUT', body: payload });
+    return mapBuildingDetail(data);
+  },
   async deleteBuilding(id, reason = 'Administrative request') {
     return request(`/buildings/${id}`, {
       method: 'DELETE',
       body: { reason, confirm: true }
     });
+  },
+  async fetchStreets(search = '') {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    return request(`/streets${params.toString() ? `?${params}` : ''}`);
+  },
+  async createStreet(payload) {
+    return request('/streets', { method: 'POST', body: payload });
+  },
+  async updateStreet(id, payload) {
+    return request(`/streets/${id}`, { method: 'PUT', body: payload });
+  },
+  async deleteStreet(id) {
+    return request(`/streets/${id}`, { method: 'DELETE' });
   },
   async fetchBuildingLogs(id) {
     const data = await request(`/logs/building/${id}`);
@@ -231,22 +365,38 @@ const api = {
   async deleteBuildingLog(logId) {
     return request(`/logs/${logId}`, { method: 'DELETE' });
   },
+  async restoreBuildingFromLog(logId) {
+    return request(`/buildings/restore/${logId}`, { method: 'POST' });
+  },
   async fetchLogs(filters = {}) {
     const params = new URLSearchParams();
     if (filters.buildingId) params.append('buildingId', filters.buildingId);
     if (filters.userId) params.append('userId', filters.userId);
     if (filters.user) params.append('user', filters.user);
+    if (filters.logType) params.append('logType', filters.logType);
     if (filters.street) params.append('street', filters.street);
+    if (filters.streetId) params.append('streetId', filters.streetId);
     if (filters.houseNumber) params.append('houseNumber', filters.houseNumber);
     if (filters.nickname) params.append('name', filters.nickname);
     if (filters.status) params.append('status', filters.status);
     if (filters.area) params.append('neighborhood', filters.area);
+    if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+    if (filters.sugBaalut) params.append('sugBaalut', filters.sugBaalut);
+    if (filters.quarter) params.append('quarter', filters.quarter);
+    if (filters.subQuarter) params.append('subQuarter', filters.subQuarter);
+    if (filters.statisticalArea) params.append('statisticalArea', filters.statisticalArea);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
+    if (filters.updatedFrom) params.append('from', filters.updatedFrom);
+    if (filters.updatedTo) params.append('to', filters.updatedTo);
     if (filters.startDate) params.append('from', filters.startDate);
     if (filters.endDate) params.append('to', filters.endDate);
     const data = await request(`/logs${params.toString() ? `?${params}` : ''}`);
     const items = Array.isArray(data.items) ? data.items : data;
     return (items || []).map(mapLog);
+  },
+  async fetchSelectTable(name) {
+    if (!name) throw new Error('select table name is required');
+    return request(`/select-tables/${encodeURIComponent(name)}`);
   },
   async fetchUsers() {
     const data = await request('/users');

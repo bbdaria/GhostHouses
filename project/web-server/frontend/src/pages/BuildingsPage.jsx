@@ -1,75 +1,123 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
+import BuildingModal from '../components/BuildingModal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS } from '../i18n.js';
+import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
-import {
-  BUILDING_FIELD_LABELS,
-  BUILDING_FIELD_PLACEHOLDERS,
-  LAST_BUILDING_KEY,
-  STATUS_SELECT_PLACEHOLDER
-} from '../constants.js';
+import { BUILDING_FIELD_PLACEHOLDERS, LAST_BUILDING_KEY } from '../constants.js';
+import { formatDate, formatTime, formatDateTime } from '../utils/formatDate.js';
 
 const initialFilters = {
-  street: '',
+  streetId: '',
   houseNumber: '',
   nickname: '',
   status: '',
-  area: '',
+  bldSivug: '',
+  sugBaalut: '',
+  quarter: '',
+  subQuarter: '',
+  statisticalArea: '',
+  updatedFrom: '',
+  updatedTo: '',
   statusSummary: ''
 };
 
-const STATUS_ID_TO_VALUE = STATUS_OPTIONS.reduce((acc, option) => {
-  acc[option.id] = option.value;
-  return acc;
-}, {});
+const NO_STREET_OPTION = { streetId: -1, name: 'ללא שם רחוב' };
+const REQUIRED_EDIT_FIELDS = [
+  { key: 'StreetId', label: 'שם רחוב' },
+  { key: 'BldNum', label: 'מספר בית' },
+  { key: 'BldName', label: 'כינוי הבניין' },
+  { key: 'ShikumStatus', label: 'סטטוס שיקום' },
+  { key: 'BldSivug', label: 'סיווג' }
+];
+const REQUIRED_EDIT_COLUMNS = new Set(
+  REQUIRED_EDIT_FIELDS.filter((field) => field.key !== 'StreetId').map((field) => field.key)
+);
 
-const normalizeStatusValue = (value) => {
-  if (value === null || value === undefined) return 'Unknown';
-  if (typeof value === 'number') {
-    return STATUS_ID_TO_VALUE[value] || 'Unknown';
-  }
-  if (typeof value === 'string') {
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric) && STATUS_ID_TO_VALUE[numeric]) {
-      return STATUS_ID_TO_VALUE[numeric];
-    }
-    return value;
-  }
-  return 'Unknown';
+const EXCEL_LABEL_OVERRIDES = {
+  'ID נכס לצורך מערכת זו בלבד': 'ID',
+  'תמצית מצב': 'תמונת מצב',
+  'תאריך עדכון תמצית מצב': 'תאריך שינוי',
+  'ציון עמידה בסטנדרט': 'ציון',
+  'פרטי מחזיקים': 'פרטי מחזיק',
+  'האם הייתה צריכת מים ב־6 החודשים האחרונים': 'צריכת מים ב-6 החודשים האחרונים',
+  'האם הייתה צריכת חשמל ב־6 החודשים האחרונים': 'צריכת חשמל ב-6 החודשים האחרונים',
+  'אחוז המבנה שמוגדר ניזוק': 'אחוז המבנה שעומד ניזוק',
+  'קוארדינטות אורך': 'קוארדינטות',
+  'קוארדינטות רוחב': 'קוארדינטות'
 };
 
-
 export default function BuildingsPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   useDocumentTitle('מאגר מבנים - מוקד המבנים העירוני');
   const [filters, setFilters] = useState(initialFilters);
   const [buildings, setBuildings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [statusOptions, setStatusOptions] = useState(STATUS_OPTIONS);
+  const [statusLabelMap, setStatusLabelMap] = useState(STATUS_LABEL_MAP);
+  const [sivugOptions, setSivugOptions] = useState([]);
+  const [ownershipOptions, setOwnershipOptions] = useState([]);
+  const [streets, setStreets] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [detailError, setDetailError] = useState('');
-  const [detailTab, setDetailTab] = useState('summary');
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState('view');
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [cardExporting, setCardExporting] = useState(false);
+  const [cardExportError, setCardExportError] = useState('');
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const [createForm, setCreateForm] = useState({
     fldId: '',
-    streetName: '',
+    streetId: '',
     bldNum: '',
     bldName: '',
-    area: '',
-    statusSummary: '',
-    shikumStatusId: '',
-    complaints: '',
-    category: ''
-  });
-  const [editForm, setEditForm] = useState({
-    bldName: '',
-    area: '',
     statusSummary: '',
     shikumStatusId: '',
     category: ''
   });
+  const [editFieldValues, setEditFieldValues] = useState({});
+  const [selectTablesByName, setSelectTablesByName] = useState({});
+  const [selectTablesLoading, setSelectTablesLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  const [duplicatePrompt, setDuplicatePrompt] = useState('');
+  const [editDuplicatePrompt, setEditDuplicatePrompt] = useState('');
+  const [selectedView, setSelectedView] = useState('view');
+  const [sortConfig, setSortConfig] = useState({ field: 'street', direction: 'asc' });
+  const [openViewCategories, setOpenViewCategories] = useState(() => new Set());
+  const [openEditCategories, setOpenEditCategories] = useState(() => new Set());
+  const [isExternalOpen, setIsExternalOpen] = useState(false);
+  const [isLogsOpen, setIsLogsOpen] = useState(false);
+
+  const rehabSivugValue = useMemo(() => {
+    const match =
+      sivugOptions.find((option) => option.label === 'ריק ובהליך שיקום') ||
+      sivugOptions.find((option) => option.label && option.label.includes('שיקום'));
+    return match ? String(match.value) : null;
+  }, [sivugOptions]);
+
+  const isRehabStatusRequired = useMemo(() => {
+    if (!rehabSivugValue || !createForm.category) return false;
+    return String(createForm.category) === rehabSivugValue;
+  }, [createForm.category, rehabSivugValue]);
+
+  const editSivugValue = editFieldValues.BldSivug ?? selectedBuilding?.bldSivug ?? '';
+  const isEditRehabStatusRequired = useMemo(() => {
+    if (!rehabSivugValue) return false;
+    if (editSivugValue === '' || editSivugValue === null || editSivugValue === undefined) return false;
+    return String(editSivugValue) === rehabSivugValue;
+  }, [editSivugValue, rehabSivugValue]);
+
+  const isFilterRehabStatusRequired = useMemo(() => {
+    if (!rehabSivugValue) return false;
+    if (!filters.bldSivug && filters.bldSivug !== 0) return false;
+    return String(filters.bldSivug) === rehabSivugValue;
+  }, [filters.bldSivug, rehabSivugValue]);
 
   const canEdit = useMemo(
     () => user && (user.role === 'Editor' || user.role === 'Admin'),
@@ -77,51 +125,189 @@ export default function BuildingsPage() {
   );
   const isAdmin = user?.role === 'Admin';
   const roleLabel = ROLE_LABELS[user?.role] || user?.role;
-  const statusLabelMap = STATUS_LABEL_MAP;
-  const israelDateFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('he-IL', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-        timeZone: 'Asia/Jerusalem'
-      }),
-    []
-  );
   const formatLogDate = (value) => {
     if (!value) return '—';
     try {
-      return israelDateFormatter.format(new Date(value));
+      return formatDateTime(value);
     } catch {
       return value;
     }
   };
 
-  const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
-
-  useEffect(() => {
-    loadBuildings(initialFilters);
+  const loadStreets = useCallback(async () => {
+    try {
+      const data = await api.fetchStreets();
+      setStreets(data || []);
+    } catch {
+      setStreets([]);
+    }
   }, []);
 
-  useEffect(() => {
-    if (selectedBuilding) {
-      const statusOption = STATUS_OPTIONS.find(
-        (option) => option.value === selectedBuilding.status
-      );
-      setEditForm({
-        bldName: selectedBuilding.nickname || '',
-        area: selectedBuilding.area || '',
-        statusSummary: selectedBuilding.statusSummary || '',
-        shikumStatusId: statusOption ? String(statusOption.id) : '',
-        category: selectedBuilding.bldSivug || 'Unclassified'
-      });
+  const expandUpdatedRange = (filterValues) => {
+    const next = { ...filterValues };
+    if (filterValues.updatedFrom) {
+      next.updatedFrom = new Date(`${filterValues.updatedFrom}T00:00:00`).toISOString();
     }
+    if (filterValues.updatedTo) {
+      next.updatedTo = new Date(`${filterValues.updatedTo}T23:59:59.999`).toISOString();
+    }
+    return next;
+  };
+
+  const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
+  const getSivugLabel = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    const match = sivugOptions.find((option) => String(option.value) === String(value));
+    return match ? match.label : String(value);
+  };
+  const getOwnershipLabel = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    const match = ownershipOptions.find((option) => String(option.value) === String(value));
+    return match ? match.label : String(value);
+  };
+  const formatStatusFieldValue = (field) => {
+    if (!field || field.fieldName !== 'סטטוס שיקום') {
+      return displayOrDash(field?.value);
+    }
+    const value = field.value;
+    if (!value || value === '0' || value === 'Unknown' || value === 'לא ידוע') {
+      return '—';
+    }
+    return value;
+  };
+  const isRequiredEditColumn = (columnName) => REQUIRED_EDIT_COLUMNS.has(columnName);
+
+  useEffect(() => {
+    const loadStatusOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_StatusShikum');
+        const mapped = options.map((opt) => ({
+          id: opt.value,
+          label: opt.label,
+          value: STATUS_VALUE_BY_ID[opt.value] || opt.label
+        }));
+        const labelMap = mapped.reduce(
+          (acc, opt) => {
+            acc[opt.value] = opt.label;
+            return acc;
+          },
+          { Unknown: 'לא ידוע' }
+        );
+        setStatusOptions(mapped);
+        setStatusLabelMap(labelMap);
+      } catch {
+        // Fall back to static defaults if lookup endpoint is unavailable.
+        setStatusOptions(STATUS_OPTIONS);
+        setStatusLabelMap(STATUS_LABEL_MAP);
+      }
+    };
+
+    const loadSivugOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_Sivug');
+        setSivugOptions(options);
+      } catch {
+        setSivugOptions([]);
+      }
+    };
+
+    const loadOwnershipOptions = async () => {
+      try {
+        const options = await api.fetchSelectTable('Tbl_SugBaalut');
+        setOwnershipOptions(options);
+      } catch {
+        setOwnershipOptions([]);
+      }
+    };
+
+    loadStatusOptions();
+    loadSivugOptions();
+    loadOwnershipOptions();
+    loadStreets();
+    loadBuildings(initialFilters);
+  }, [loadStreets]);
+
+  useEffect(() => {
+    if (showModal && modalMode === 'create') {
+      loadStreets();
+    }
+  }, [loadStreets, showModal, modalMode]);
+
+  useEffect(() => {
+    if (!selectedBuilding) {
+      setEditFieldValues({});
+      setPhotoError('');
+      setPhotoLoading(false);
+      return;
+    }
+
+    const nextValues = {};
+    (selectedBuilding.fields || []).forEach((field) => {
+      if (!field?.columnName) return;
+      if (field.columnName.toLowerCase() === 'streetname') return;
+
+      if (field.selectTableName) {
+        nextValues[field.columnName] =
+          field.rawValue === null || field.rawValue === undefined ? '' : String(field.rawValue);
+      } else {
+        nextValues[field.columnName] = field.value ?? '';
+      }
+    });
+
+    if (selectedBuilding.streetId !== null && selectedBuilding.streetId !== undefined) {
+      nextValues.StreetId = String(selectedBuilding.streetId);
+    } else if (selectedBuilding.street === NO_STREET_OPTION.name) {
+      nextValues.StreetId = String(NO_STREET_OPTION.streetId);
+    }
+
+    setEditFieldValues(nextValues);
+    setPhotoError('');
+    setPhotoLoading(false);
   }, [selectedBuilding]);
+
+  useEffect(() => {
+    const loadSelectTables = async () => {
+      if (!selectedBuilding || selectedView !== 'edit') return;
+      const tableNames = new Set(
+        (selectedBuilding.fields || [])
+          .map((field) => field.selectTableName)
+          .filter((name) => name && name.trim())
+      );
+      const missing = [...tableNames].filter((name) => !selectTablesByName[name]);
+      if (missing.length === 0) return;
+
+      setSelectTablesLoading(true);
+      try {
+        const results = await Promise.all(
+          missing.map(async (name) => {
+            try {
+              const options = await api.fetchSelectTable(name);
+              return [name, options];
+            } catch {
+              return [name, []];
+            }
+          })
+        );
+        setSelectTablesByName((prev) => {
+          const next = { ...prev };
+          results.forEach(([name, options]) => {
+            next[name] = options;
+          });
+          return next;
+        });
+      } finally {
+        setSelectTablesLoading(false);
+      }
+    };
+
+    loadSelectTables();
+  }, [selectedBuilding, selectedView, selectTablesByName]);
 
   const loadBuildings = async (appliedFilters = filters) => {
     setLoading(true);
     setError('');
     try {
-      const data = await api.fetchBuildings(appliedFilters);
+      const data = await api.fetchBuildings(expandUpdatedRange(appliedFilters));
       setBuildings(data);
       if (selectedBuilding) {
         const stillExists = data.find((b) => b.id === selectedBuilding.id);
@@ -136,12 +322,12 @@ export default function BuildingsPage() {
     }
   };
 
-  const loadBuildingDetails = async (id) => {
+  const loadBuildingDetails = async (id, view = 'view') => {
     setDetailError('');
     try {
       const building = await api.fetchBuilding(id);
       setSelectedBuilding(building);
-      setDetailTab('summary');
+      setSelectedView(view);
       sessionStorage.setItem(LAST_BUILDING_KEY, String(id));
     } catch (err) {
       setDetailError(err.message);
@@ -150,7 +336,13 @@ export default function BuildingsPage() {
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
-    setFilters((prev) => ({ ...prev, [name]: value }));
+    setFilters((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === 'bldSivug' && String(value) !== rehabSivugValue) {
+        next.status = '';
+      }
+      return next;
+    });
   };
 
   const handleSearch = (event) => {
@@ -163,88 +355,304 @@ export default function BuildingsPage() {
     loadBuildings(initialFilters);
   };
 
-  const handleCreateChange = (event) => {
-    const { name, value } = event.target;
-    setCreateForm((form) => ({ ...form, [name]: value }));
+  const handleExport = async () => {
+    if (exporting) return;
+    setExportError('');
+    setExporting(true);
+    try {
+      const blob = await api.exportBuildings(expandUpdatedRange(filters));
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `buildings-${dateStamp}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err.message || 'שגיאה בייצוא קובץ האקסל.');
+    } finally {
+      setExporting(false);
+    }
   };
 
-  const handleCreateBuilding = async (event) => {
-    event.preventDefault();
-    setActionMessage('');
+  const handleExportCard = async (building) => {
+    if (!building || cardExporting) return;
+    setCardExportError('');
+    setCardExporting(true);
     try {
-      const statusOption = STATUS_OPTIONS.find(
-        (option) => String(option.id) === createForm.shikumStatusId
+      const blob = await api.exportBuildingCard(building.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `building-card-${building.id}.pptx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setCardExportError(err.message || 'שגיאה בייצוא כרטיס מבנה.');
+    } finally {
+      setCardExporting(false);
+    }
+  };
+
+  const handleCreateChange = (event) => {
+    const { name, value } = event.target;
+    setCreateForm((form) => {
+      const next = { ...form, [name]: value };
+      if (name === 'category' && String(value) !== rehabSivugValue) {
+        next.shikumStatusId = '';
+      }
+      return next;
+    });
+    setDuplicatePrompt('');
+    setUnsavedChanges(true);
+  };
+
+  const openCreateModal = () => {
+    setModalMode('create');
+    setShowModal(true);
+    setUnsavedChanges(false);
+    setDuplicatePrompt('');
+  };
+
+  const openBuildingModal = async (id, view = 'view') => {
+    try {
+      await loadBuildingDetails(id, view);
+      setModalMode(view);
+      setShowModal(true);
+      setUnsavedChanges(false);
+    } catch (err) {
+      // loadBuildingDetails sets detailError
+    }
+  };
+
+  const handleCloseModal = () => {
+    if (unsavedChanges) {
+      const confirmed = window.confirm('ישנם שינויים שלא נשמרו. האם ברצונך לסגור ללא שמירה?');
+      if (!confirmed) return;
+    }
+    setShowModal(false);
+    setModalMode('view');
+    setUnsavedChanges(false);
+    setSelectedBuilding(null);
+    setDuplicatePrompt('');
+    setEditDuplicatePrompt('');
+  };
+
+  const handleOpenEditModal = () => {
+    if (!selectedBuilding) return;
+    openBuildingModal(selectedBuilding.id, 'edit');
+  };
+
+  const handleOpenLogsModal = () => {
+    if (!selectedBuilding) return;
+    navigate(`/logs?buildingId=${selectedBuilding.id}`);
+  };
+
+  const handleCreateBuilding = async (event, allowDuplicate = false) => {
+    if (event && event.preventDefault) event.preventDefault();
+    setActionMessage('');
+    if (!allowDuplicate) {
+      setDuplicatePrompt('');
+    }
+    try {
+      if (!createForm.streetId) {
+        throw new Error('יש לבחור רחוב מהרשימה');
+      }
+      if (!createForm.bldNum.trim()) {
+        throw new Error('יש להזין מספר בית');
+      }
+      if (!createForm.bldName.trim()) {
+        throw new Error('יש להזין כינוי הבניין');
+      }
+      if (isRehabStatusRequired && !createForm.shikumStatusId) {
+        throw new Error('יש לבחור סטטוס שיקום');
+      }
+      if (!createForm.category) {
+        throw new Error('יש לבחור סיווג');
+      }
+      let statusOption = null;
+      if (isRehabStatusRequired) {
+        statusOption = statusOptions.find(
+          (option) => String(option.id) === createForm.shikumStatusId
+        );
+        if (!statusOption) {
+          throw new Error('סטטוס השיקום שבחרת אינו חוקי');
+        }
+      }
+      const sivugOption = sivugOptions.find(
+        (option) => String(option.value) === createForm.category
       );
-      const payload = {
-        fldId: createForm.fldId || `GH-${Date.now()}`,
-        streetName: createForm.streetName,
+      if (!sivugOption) {
+        throw new Error('הסיווג שבחרת אינו חוקי');
+      }
+      const streetOption = streets.find((street) => String(street.streetId) === createForm.streetId);
+      if (!streetOption) {
+        throw new Error('יש לבחור רחוב מהרשימה');
+      }
+      await api.createBuilding({
+        fldId: createForm.fldId,
+        streetId: streetOption.streetId,
         houseNumber: createForm.bldNum,
-        buildingName: createForm.bldName || createForm.streetName,
-        neighborhood: createForm.area,
-        bldSivug: createForm.category || 'Unclassified',
-        shikumStatus: statusOption ? statusOption.value : 'Unknown',
+        nickname: createForm.bldName,
+        bldSivug: createForm.category,
+        status: statusOption ? statusOption.value : undefined,
         statusSummary: createForm.statusSummary,
-        complaints: createForm.complaints || ''
-      };
-      await api.createBuilding(payload);
+        complaints: '',
+        allowDuplicate
+      });
+      setDuplicatePrompt('');
       setCreateForm({
         fldId: '',
-        streetName: '',
+        streetId: '',
         bldNum: '',
         bldName: '',
-        area: '',
         statusSummary: '',
         shikumStatusId: '',
-        complaints: '',
         category: ''
       });
-      setShowCreateForm(false);
+      setShowModal(false);
+      setUnsavedChanges(false);
       loadBuildings(filters);
       setActionMessage('המבנה נוסף בהצלחה.');
     } catch (err) {
+      if (err?.payload?.isDuplicate || err?.status === 409) {
+        setDuplicatePrompt(err?.payload?.error || 'נמצאה כפילות');
+        return;
+      }
       setActionMessage(err.message);
     }
   };
 
-  const handleEditChange = (event) => {
-    const { name, value } = event.target;
-    setEditForm((form) => ({ ...form, [name]: value }));
+  const handleDuplicateConfirm = () => {
+    handleCreateBuilding(null, true);
   };
 
-  const handleUpdateBuilding = async (event) => {
-    event.preventDefault();
+  const handleDuplicateCancel = () => {
+    setDuplicatePrompt('');
+  };
+
+  const handleEditFieldChange = (columnName, value) => {
+    setEditFieldValues((prev) => {
+      const next = { ...prev, [columnName]: value };
+      if (columnName === 'BldSivug' && String(value) !== rehabSivugValue) {
+        next.ShikumStatus = '';
+      }
+      return next;
+    });
+    setEditDuplicatePrompt('');
+    setUnsavedChanges(true);
+  };
+
+  const handleUpdateBuildingFields = async (event, allowDuplicate = false) => {
+    if (event && event.preventDefault) event.preventDefault();
     if (!selectedBuilding) return;
     setActionMessage('');
+    if (!allowDuplicate) {
+      setEditDuplicatePrompt('');
+    }
+    const isMissing = (value) =>
+      value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+    const missingField = REQUIRED_EDIT_FIELDS.find((field) => {
+      if (field.key === 'ShikumStatus' && !isEditRehabStatusRequired) return false;
+      return isMissing(editFieldValues[field.key]);
+    });
+    if (missingField) {
+      setActionMessage(`חובה למלא ${missingField.label}.`);
+      return;
+    }
     try {
-      const statusOption = STATUS_OPTIONS.find(
-        (option) => String(option.id) === editForm.shikumStatusId
-      );
-      const payload = {
-        fldId: selectedBuilding.fldId || String(selectedBuilding.id),
-        streetName: selectedBuilding.street,
-        houseNumber: selectedBuilding.houseNumber,
-        buildingName: editForm.bldName || selectedBuilding.nickname || selectedBuilding.street,
-        neighborhood: editForm.area || selectedBuilding.area || '',
-        bldSivug: editForm.category || selectedBuilding.bldSivug || 'Unclassified',
-        shikumStatus: statusOption ? statusOption.value : selectedBuilding.status || 'Unknown',
-        statusSummary: editForm.statusSummary,
-        complaints: selectedBuilding.complaints || ''
-      };
-      const updated = await api.updateBuilding(selectedBuilding.id, payload);
+      const cleaned = Object.entries(editFieldValues).reduce((acc, [key, value]) => {
+        acc[key] = value === '' ? null : value;
+        return acc;
+      }, {});
+
+      const updated = await api.updateBuildingFields(selectedBuilding.id, cleaned, allowDuplicate);
       setSelectedBuilding(updated);
       loadBuildings(filters);
       setActionMessage('פרטי המבנה עודכנו.');
+      setUnsavedChanges(false);
     } catch (err) {
+      if (err?.payload?.isDuplicate || err?.status === 409) {
+        setEditDuplicatePrompt(err?.payload?.error || 'נמצאה כפילות');
+        return;
+      }
       setActionMessage(err.message);
     }
   };
 
-  const handleDeleteBuilding = async () => {
+  const handleEditDuplicateConfirm = () => {
+    handleUpdateBuildingFields(null, true);
+  };
+
+  const handleEditDuplicateCancel = () => {
+    setEditDuplicatePrompt('');
+  };
+
+  const readFileAsDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('שגיאה בקריאת הקובץ.'));
+      reader.readAsDataURL(file);
+    });
+
+  const handlePhotoUpload = async (file) => {
+    if (!selectedBuilding || !file) return;
+    setPhotoError('');
+    setActionMessage('');
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('נא לבחור קובץ תמונה.');
+      return;
+    }
+    const maxSizeMb = 5;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setPhotoError(`גודל התמונה חייב להיות עד ${maxSizeMb}MB.`);
+      return;
+    }
+    if (selectedBuilding.photos?.length) {
+      setPhotoError('ניתן לשמור תמונה אחת בלבד.');
+      return;
+    }
+    try {
+      setPhotoLoading(true);
+      const dataUrl = await readFileAsDataUrl(file);
+      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: dataUrl });
+      setSelectedBuilding(updated);
+      setActionMessage('התמונה נשמרה.');
+    } catch (err) {
+      setPhotoError(err.message || 'שגיאה בהעלאת התמונה.');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
     if (!selectedBuilding) return;
+    setPhotoError('');
+    setActionMessage('');
+    try {
+      setPhotoLoading(true);
+      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: '' });
+      setSelectedBuilding(updated);
+      setActionMessage('התמונה נמחקה.');
+    } catch (err) {
+      setPhotoError(err.message || 'שגיאה במחיקת התמונה.');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handleDeleteBuilding = async (buildingId) => {
+    const id = buildingId ?? selectedBuilding?.id;
+    if (!id) return;
     const confirmed = window.confirm('למחוק את המבנה לצמיתות?');
     if (!confirmed) return;
     try {
-      await api.deleteBuilding(selectedBuilding.id);
+      await api.deleteBuilding(id);
       setSelectedBuilding(null);
       loadBuildings(filters);
       setActionMessage('המבנה הוסר.');
@@ -253,10 +661,260 @@ export default function BuildingsPage() {
     }
   };
 
-  const statuses = useMemo(() => STATUS_OPTIONS, []);
+  const statuses = useMemo(() => statusOptions, [statusOptions]);
 
   const handleTabChange = (tab) => {
-    setDetailTab(tab);
+    setSelectedView(tab);
+  };
+
+  const handleCategoryToggleKeyDown = (event, toggle) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggle();
+    }
+  };
+
+  const toggleViewCategory = (category) => {
+    setOpenViewCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  const toggleEditCategory = (category) => {
+    setOpenEditCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  const toggleExternalSection = () => {
+    setIsExternalOpen((prev) => !prev);
+  };
+
+  const toggleLogsSection = () => {
+    setIsLogsOpen((prev) => !prev);
+  };
+
+  const handleSortClick = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: 'asc' };
+    });
+  };
+
+  const getSortIndicator = (field) => {
+    if (sortConfig.field !== field) return '';
+    return sortConfig.direction === 'asc' ? '∧' : '∨';
+  };
+
+  const getAriaSort = (field) => {
+    if (sortConfig.field !== field) return 'none';
+    return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
+  };
+
+  const sortedBuildings = useMemo(() => {
+    if (!buildings || buildings.length === 0) return [];
+    if (!sortConfig.field) return buildings;
+
+    const compareValues = (aValue, bValue, { numeric = false } = {}) => {
+      const aMissing = aValue === null || aValue === undefined || aValue === '';
+      const bMissing = bValue === null || bValue === undefined || bValue === '';
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (numeric) return aValue - bValue;
+      return String(aValue).localeCompare(String(bValue), 'he');
+    };
+
+    const getSortValue = (building) => {
+      switch (sortConfig.field) {
+        case 'street':
+          return building.street;
+        case 'houseNumber':
+          return building.houseNumber;
+        case 'nickname':
+          return building.nickname;
+        case 'status':
+          return statusLabelMap[building.status] || building.status || '';
+        case 'bldSivug':
+          return getSivugLabel(building.bldSivug);
+        case 'sugBaalut':
+          return getOwnershipLabel(building.sugBaalut);
+        case 'quarter':
+          return building.quarter;
+        case 'subQuarter':
+          return building.subQuarter;
+        case 'statisticalArea':
+          return building.statisticalArea;
+        case 'updatedAt':
+          return building.updatedAt ? new Date(building.updatedAt).getTime() : null;
+        case 'statusSummary':
+          return building.statusSummary;
+        default:
+          return '';
+      }
+    };
+
+    const copy = [...buildings];
+    copy.sort((a, b) => {
+      const aValue = getSortValue(a);
+      const bValue = getSortValue(b);
+      const cmp = compareValues(aValue, bValue, { numeric: sortConfig.field === 'updatedAt' });
+      if (cmp !== 0) return sortConfig.direction === 'desc' ? -cmp : cmp;
+      if (sortConfig.field !== 'street') {
+        const streetCmp = compareValues(a.street, b.street);
+        if (streetCmp !== 0) return streetCmp;
+      }
+      if (sortConfig.field !== 'houseNumber') {
+        const houseCmp = compareValues(a.houseNumber, b.houseNumber);
+        if (houseCmp !== 0) return houseCmp;
+      }
+      return 0;
+    });
+    return copy;
+  }, [buildings, sortConfig, sivugOptions, statusLabelMap, ownershipOptions]);
+
+  const tryParseJson = (value) => {
+    if (!value) return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const externalEntries = useMemo(() => {
+    if (!selectedBuilding?.external) return [];
+    const entries = [
+      { key: 'gis', label: 'GIS' },
+      { key: 'water', label: 'מים' },
+      { key: 'electricity', label: 'חשמל' },
+      { key: 'tax', label: 'ארנונה' },
+      { key: 'complaints106', label: 'מוקד 106' }
+    ];
+    return entries
+      .map((entry) => ({
+        ...entry,
+        snapshot: selectedBuilding.external?.[entry.key]
+      }))
+      .filter((entry) => entry.snapshot);
+  }, [selectedBuilding]);
+
+  const fieldsByCategory = useMemo(() => {
+    const fields = selectedBuilding?.fields || [];
+    return fields.reduce((acc, field) => {
+      const category = field.category || 'כללי';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(field);
+      return acc;
+    }, {});
+  }, [selectedBuilding]);
+
+  const orderedFieldGroups = useMemo(() => {
+    const entries = Object.entries(fieldsByCategory);
+    if (entries.length === 0) return [];
+    const priority = (category) => {
+      if (category === 'מידע כללי') return 0;
+      if (category === 'פרטים מזהים') return 1;
+      return 2;
+    };
+    return entries
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => {
+        const aPriority = priority(a.entry[0]);
+        const bPriority = priority(b.entry[0]);
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.index - b.index;
+      })
+      .map((item) => item.entry);
+  }, [fieldsByCategory]);
+
+  const defaultOpenCategories = useMemo(() => {
+    if (orderedFieldGroups.length === 0) return [];
+    const categories = orderedFieldGroups.map(([category]) => category);
+    const defaultCategory = categories.includes('מידע כללי') ? 'מידע כללי' : categories[0];
+    return defaultCategory ? [defaultCategory] : [];
+  }, [orderedFieldGroups]);
+
+  useEffect(() => {
+    if (!selectedBuilding) {
+      setOpenViewCategories(new Set());
+      setOpenEditCategories(new Set());
+      setIsExternalOpen(false);
+      setIsLogsOpen(false);
+      return;
+    }
+    setOpenViewCategories(new Set(defaultOpenCategories));
+    setOpenEditCategories(new Set(defaultOpenCategories));
+    setIsExternalOpen(false);
+    setIsLogsOpen(false);
+  }, [selectedBuilding, defaultOpenCategories]);
+
+  const sortFieldsForDisplay = (fields) => {
+    if (!Array.isArray(fields)) return [];
+    const fieldPriority = (name) => {
+      if (name === 'סיווג') return 0;
+      if (name === 'סטטוס שיקום') return 1;
+      return 2;
+    };
+    return fields
+      .map((field, index) => ({ field, index }))
+      .sort((a, b) => {
+        const aPriority = fieldPriority(a.field.fieldName);
+        const bPriority = fieldPriority(b.field.fieldName);
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.index - b.index;
+      })
+      .map((entry) => entry.field);
+  };
+
+  const getExcelAwareLabel = (fieldName) => {
+    if (!fieldName) return '';
+    const excelName = EXCEL_LABEL_OVERRIDES[fieldName];
+    if (!excelName || excelName === fieldName) return fieldName;
+    if (excelName === 'ID') return excelName;
+    if (excelName === 'תאריך שינוי') return excelName;
+    if (excelName === 'קוארדינטות') {
+      if (fieldName.includes('אורך')) return 'קוארדינטות (אורך)';
+      if (fieldName.includes('רוחב')) return 'קוארדינטות (רוחב)';
+      return excelName;
+    }
+    return `${excelName} (${fieldName})`;
+  };
+
+  const shouldUseTextarea = (fieldName) => {
+    if (!fieldName) return false;
+    return (
+      fieldName.includes('פרטי') ||
+      fieldName.includes('תלונות') ||
+      fieldName.includes('תמצית') ||
+      fieldName.includes('תקציר') ||
+      fieldName.includes('הסיבה') ||
+      fieldName.includes('הערות')
+    );
+  };
+
+  const isDateField = (field) => {
+    if (!field) return false;
+    const name = field.fieldName || '';
+    const column = (field.columnName || '').toLowerCase();
+    if (name.includes('תאריך')) return true;
+    if (column.endsWith('dt') || column.includes('date')) return true;
+    if (typeof field.value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(field.value)) return true;
+    return false;
   };
 
   return (
@@ -272,17 +930,18 @@ export default function BuildingsPage() {
       <section className="filters-card">
         <form className="filters-grid" onSubmit={handleSearch}>
           <label>
-            <span>{BUILDING_FIELD_LABELS.street}</span>
-            <input
-              type="text"
-              name="street"
-              value={filters.street}
-              onChange={handleFilterChange}
-              placeholder={BUILDING_FIELD_PLACEHOLDERS.street}
-            />
+            <span>שם רחוב</span>
+            <select name="streetId" value={filters.streetId} onChange={handleFilterChange}>
+              <option value="">בחר רחוב</option>
+              {streets.map((street) => (
+                <option key={street.streetId} value={street.streetId}>
+                  {street.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.houseNumber}</span>
+            <span>מספר בית</span>
             <input
               type="text"
               name="houseNumber"
@@ -292,7 +951,7 @@ export default function BuildingsPage() {
             />
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.nickname}</span>
+            <span>כינוי הבניין</span>
             <input
               type="text"
               name="nickname"
@@ -302,9 +961,25 @@ export default function BuildingsPage() {
             />
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.status}</span>
-            <select name="status" value={filters.status} onChange={handleFilterChange}>
-              <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
+            <span>סיווג</span>
+            <select name="bldSivug" value={filters.bldSivug} onChange={handleFilterChange}>
+              <option value="">בחר סיווג</option>
+              {sivugOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>סטטוס שיקום</span>
+            <select
+              name="status"
+              value={filters.status}
+              onChange={handleFilterChange}
+              disabled={!isFilterRehabStatusRequired}
+            >
+              <option value="">בחר סטטוס שיקום</option>
               {statuses.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -313,17 +988,68 @@ export default function BuildingsPage() {
             </select>
           </label>
           <label>
-            <span>{BUILDING_FIELD_LABELS.area}</span>
+            <span>סוג הבעלות</span>
+            <select name="sugBaalut" value={filters.sugBaalut} onChange={handleFilterChange}>
+              <option value="">בחר סוג הבעלות</option>
+              {ownershipOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>רובע</span>
             <input
               type="text"
-              name="area"
-              value={filters.area}
+              name="quarter"
+              value={filters.quarter}
               onChange={handleFilterChange}
-              placeholder={BUILDING_FIELD_PLACEHOLDERS.area}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.quarter}
+            />
+          </label>
+          <label>
+            <span>תת רובע</span>
+            <input
+              type="text"
+              name="subQuarter"
+              value={filters.subQuarter}
+              onChange={handleFilterChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.subQuarter}
+            />
+          </label>
+          <label>
+            <span>אזור סטטיסטי</span>
+            <input
+              type="text"
+              name="statisticalArea"
+              value={filters.statisticalArea}
+              onChange={handleFilterChange}
+              placeholder={BUILDING_FIELD_PLACEHOLDERS.statisticalArea}
+            />
+          </label>
+          <label>
+            <span>תאריך שינוי - החל מ</span>
+            <input
+              type="date"
+              name="updatedFrom"
+              value={filters.updatedFrom}
+              lang="he-IL"
+              onChange={handleFilterChange}
+            />
+          </label>
+          <label>
+            <span>תאריך שינוי - עד</span>
+            <input
+              type="date"
+              name="updatedTo"
+              value={filters.updatedTo}
+              lang="he-IL"
+              onChange={handleFilterChange}
             />
           </label>
           <label className="full-span">
-            <span>{BUILDING_FIELD_LABELS.statusSummary}</span>
+            <span>תמונת מצב (תמצית מצב)</span>
             <input
               type="text"
               name="statusSummary"
@@ -332,102 +1058,34 @@ export default function BuildingsPage() {
               placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
             />
           </label>
-          <div className="filters-actions">
+          <div className="filters-actions full-span align-right">
             <button type="submit" className="primary">
               חיפוש
             </button>
             <button type="button" onClick={handleReset} className="ghost">
               איפוס
             </button>
+            {canEdit && (
+              <button type="button" className="ghost" onClick={openCreateModal}>
+                הוסף מבנה
+              </button>
+            )}
+            {isAdmin && (
+              <button type="button" className="ghost" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'מייצא...' : 'יצוא לאקסל'}
+              </button>
+            )}
           </div>
         </form>
-        {canEdit && (
-          <button className="ghost" onClick={() => setShowCreateForm((prev) => !prev)}>
-            {showCreateForm ? 'סגור טופס הוספה' : 'הוסף מבנה'}
-          </button>
-        )}
         {loading && <p className="muted">טוען מבנים…</p>}
         {error && <p className="error">שגיאה בטעינת מבנים: {error}</p>}
-        {actionMessage && <p className="success">{actionMessage}</p>}
+        {actionMessage && !showModal && <p className="success">{actionMessage}</p>}
+        {exportError && <p className="error">שגיאה בייצוא: {exportError}</p>}
+        {cardExportError && <p className="error">שגיאה בייצוא כרטיס מבנה: {cardExportError}</p>}
       </section>
 
-      {canEdit && showCreateForm && (
-        <section className="panel">
-          <h3>הוספת מבנה</h3>
-          <form className="form-grid" onSubmit={handleCreateBuilding}>
-            <label>
-              שם רחוב
-              <input
-                name="streetName"
-                value={createForm.streetName}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.street}
-                required
-              />
-            </label>
-            <label>
-              מספר בית
-              <input
-                name="bldNum"
-                value={createForm.bldNum}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.houseNumber}
-                required
-              />
-            </label>
-            <label>
-              כינוי
-              <input
-                name="bldName"
-                value={createForm.bldName}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.nickname}
-              />
-            </label>
-            <label>
-              סטטוס
-              <select
-                name="shikumStatusId"
-                value={createForm.shikumStatusId}
-                onChange={handleCreateChange}
-              >
-                <option value="">{STATUS_SELECT_PLACEHOLDER}</option>
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              אזור
-              <input
-                name="area"
-                value={createForm.area}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.area}
-              />
-            </label>
-            <label className="full-span">
-              תקציר מצב
-              <textarea
-                name="statusSummary"
-                value={createForm.statusSummary}
-                onChange={handleCreateChange}
-                placeholder={BUILDING_FIELD_PLACEHOLDERS.statusSummary}
-              />
-            </label>
-            <div className="filters-actions">
-              <button type="submit" className="primary">
-                שמירה
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
-
       <section className="content-layout">
-        <div className="list-panel">
+        <div className="list-panel full-span">
           <div className="panel-header">
             <h2>תוצאות ({buildings.length})</h2>
           </div>
@@ -435,40 +1093,197 @@ export default function BuildingsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>שם רחוב</th>
-                  <th>מספר בית</th>
-                  <th>כינוי</th>
-                  <th>סטטוס</th>
-                  <th>אזור</th>
-                  <th>תקציר מצב</th>
+                  <th aria-sort={getAriaSort('street')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('street')}>
+                      שם רחוב
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('street')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('houseNumber')}>
+                    <button
+                      type="button"
+                      className="sort-button"
+                      onClick={() => handleSortClick('houseNumber')}
+                    >
+                      מספר בית
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('houseNumber')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('nickname')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('nickname')}>
+                      כינוי הבניין
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('nickname')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('bldSivug')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('bldSivug')}>
+                      סיווג
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('bldSivug')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('status')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('status')}>
+                      סטטוס שיקום
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('status')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('sugBaalut')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('sugBaalut')}>
+                      סוג הבעלות
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('sugBaalut')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('quarter')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('quarter')}>
+                      רובע
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('quarter')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('subQuarter')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('subQuarter')}>
+                      תת רובע
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('subQuarter')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('statisticalArea')}>
+                    <button
+                      type="button"
+                      className="sort-button"
+                      onClick={() => handleSortClick('statisticalArea')}
+                    >
+                      אזור סטטיסטי
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('statisticalArea')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('updatedAt')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('updatedAt')}>
+                      תאריך שינוי
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('updatedAt')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('statusSummary')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('statusSummary')}>
+                      תמונת מצב (תמצית מצב)
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('statusSummary')}
+                      </span>
+                    </button>
+                  </th>
+                  <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
-                {buildings.map((building) => {
+                {sortedBuildings.map((building) => {
                   const isActive = selectedBuilding && building.id === selectedBuilding.id;
                   const statusValue = building.status || 'Unknown';
+                  const statusMissing = statusValue === 'Unknown';
                   const statusLabel = statusLabelMap[statusValue] || statusValue;
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
+                  const sivugLabel = getSivugLabel(building.bldSivug);
+                  const ownershipLabel = getOwnershipLabel(building.sugBaalut);
                   return (
-                    <tr
-                      key={building.id}
-                      onClick={() => loadBuildingDetails(building.id)}
-                      className={isActive ? 'active' : ''}
-                    >
-                      <td>{building.street}</td>
-                      <td>{building.houseNumber}</td>
-                      <td>{building.nickname || '—'}</td>
-                      <td>
-                        <span className={`status status-${statusSlug}`}>{statusLabel}</span>
-                      </td>
-                      <td>{building.area || '—'}</td>
-                      <td>{building.statusSummary || '—'}</td>
-                    </tr>
+                    <Fragment key={building.id}>
+                      <tr
+                        className={isActive ? 'active' : ''}
+                        onClick={() => {
+                          if (isActive) {
+                            handleCloseModal();
+                            return;
+                          }
+                          openBuildingModal(building.id, 'view');
+                        }}
+                      >
+                        <td>{building.street}</td>
+                        <td>{building.houseNumber}</td>
+                        <td>{building.nickname || '—'}</td>
+                        <td>{sivugLabel}</td>
+                        <td>
+                          {statusMissing ? (
+                            '—'
+                          ) : (
+                            <span className={`status status-${statusSlug}`}>{statusLabel}</span>
+                          )}
+                        </td>
+                        <td>{ownershipLabel}</td>
+                        <td>{building.quarter || '—'}</td>
+                        <td>{building.subQuarter || '—'}</td>
+                        <td>{building.statisticalArea || '—'}</td>
+                        <td>{formatLogDate(building.updatedAt)}</td>
+                        <td>{building.statusSummary || '—'}</td>
+                        <td>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openBuildingModal(building.id, 'edit');
+                              }}
+                            >
+                              עריכה
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleExportCard(building);
+                            }}
+                            disabled={cardExporting}
+                          >
+                            {cardExporting ? 'מייצא...' : 'ייצוא כרטיס מבנה'}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/logs?buildingId=${building.id}`);
+                            }}
+                          >
+                            יומן
+                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="danger"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleDeleteBuilding(building.id);
+                              }}
+                            >
+                              מחק
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
                 {buildings.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="6" className="muted">
+                    <td colSpan="12" className="muted">
                       אין מבנים שעונים על הסינון.
                     </td>
                   </tr>
@@ -478,115 +1293,59 @@ export default function BuildingsPage() {
           </div>
         </div>
 
-        <div className="details-panel">
-          <div className="panel-header">
-            <h2>פרטי מבנה</h2>
-          </div>
-          {detailError && <p className="error">שגיאה: {detailError}</p>}
-          {!selectedBuilding && <p className="muted">בחרו מבנה להצגת הנתונים.</p>}
-          {selectedBuilding && (
-            <>
-              <div className="tab-bar">
-                <button
-                  className={detailTab === 'summary' ? 'tab active' : 'tab'}
-                  onClick={() => handleTabChange('summary')}
-                >
-                  תקציר
-                </button>
-                {canEdit && (
-                  <button
-                    className={detailTab === 'edit' ? 'tab active' : 'tab'}
-                    onClick={() => handleTabChange('edit')}
-                  >
-                    עריכה
-                  </button>
-                )}
-              </div>
-
-              {detailTab === 'summary' && (
-                <div className="details-card">
-                  <div>
-                    <p className="eyebrow">כתובת</p>
-                    <h3>
-                      {selectedBuilding.street} {selectedBuilding.houseNumber}
-                    </h3>
-                    {selectedBuilding.nickname && (
-                      <p className="nickname">“{selectedBuilding.nickname}”</p>
-                    )}
-                  </div>
-                  <dl>
-                    <div>
-                      <dt>סטטוס</dt>
-                      <dd>{statusLabelMap[selectedBuilding.status || 'Unknown']}</dd>
-                    </div>
-                    <div>
-                      <dt>אזור</dt>
-                      <dd>{selectedBuilding.area || 'לא צוין'}</dd>
-                    </div>
-                    <div>
-                      <dt>עודכן לאחרונה</dt>
-                      <dd>{formatLogDate(selectedBuilding.updatedAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>תקציר מצב</dt>
-                      <dd>{selectedBuilding.statusSummary || '—'}</dd>
-                    </div>
-                  </dl>
-                  <div className="photos-placeholder">
-                    <p>תמונות (טרם זמין)</p>
-                  </div>
-                  {isAdmin && (
-                    <button className="danger" onClick={handleDeleteBuilding}>
-                      מחיקת מבנה
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {detailTab === 'edit' && canEdit && (
-                <form className="details-card form-grid" onSubmit={handleUpdateBuilding}>
-                  <label>
-                    כינוי
-                    <input name="bldName" value={editForm.bldName} onChange={handleEditChange} />
-                  </label>
-                  <label>
-                    אזור
-                    <input name="area" value={editForm.area} onChange={handleEditChange} />
-                  </label>
-                  <label>
-                    סטטוס
-                    <select
-                      name="shikumStatusId"
-                      value={editForm.shikumStatusId}
-                      onChange={handleEditChange}
-                    >
-                      <option value="">Leave unchanged</option>
-                      {STATUS_OPTIONS.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="full-span">
-                    תקציר מצב
-                    <textarea
-                      name="statusSummary"
-                      value={editForm.statusSummary}
-                      onChange={handleEditChange}
-                    />
-                  </label>
-                  <div className="filters-actions">
-                    <button type="submit" className="primary">
-                      שמירת שינויים
-                    </button>
-                  </div>
-                </form>
-              )}
-            </>
-          )}
-        </div>
       </section>
+      <BuildingModal
+        visible={showModal}
+        mode={modalMode}
+        building={selectedBuilding}
+        createForm={createForm}
+        editFieldValues={editFieldValues}
+        streets={streets}
+        sivugOptions={sivugOptions}
+        statusOptions={statusOptions}
+        selectTablesByName={selectTablesByName}
+        selectTablesLoading={selectTablesLoading}
+        orderedFieldGroups={orderedFieldGroups}
+        externalEntries={externalEntries}
+        isRehabStatusRequired={isRehabStatusRequired}
+        isEditRehabStatusRequired={isEditRehabStatusRequired}
+        canEdit={canEdit}
+        actionMessage={actionMessage}
+        duplicatePrompt={duplicatePrompt}
+        editDuplicatePrompt={editDuplicatePrompt}
+        onCreateChange={handleCreateChange}
+        onCreateSubmit={handleCreateBuilding}
+        onDuplicateConfirm={handleDuplicateConfirm}
+        onDuplicateCancel={handleDuplicateCancel}
+        onEditChange={handleEditFieldChange}
+        onEditSubmit={handleUpdateBuildingFields}
+        onEditDuplicateConfirm={handleEditDuplicateConfirm}
+        onEditDuplicateCancel={handleEditDuplicateCancel}
+        onOpenEdit={handleOpenEditModal}
+        onOpenLogs={handleOpenLogsModal}
+        onDelete={handleDeleteBuilding}
+        onExportCard={handleExportCard}
+        onPhotoUpload={handlePhotoUpload}
+        onPhotoDelete={handlePhotoDelete}
+        photoLoading={photoLoading}
+        photoError={photoError}
+        onClose={handleCloseModal}
+        detailError={detailError}
+        loadStreets={loadStreets}
+        sortFieldsForDisplay={sortFieldsForDisplay}
+        getExcelAwareLabel={getExcelAwareLabel}
+        isDateField={isDateField}
+        shouldUseTextarea={shouldUseTextarea}
+        isRequiredEditColumn={isRequiredEditColumn}
+        displayOrDash={displayOrDash}
+        formatStatusFieldValue={formatStatusFieldValue}
+        formatLogDate={formatLogDate}
+        openViewCategories={openViewCategories}
+        toggleViewCategory={toggleViewCategory}
+        openEditCategories={openEditCategories}
+        toggleEditCategory={toggleEditCategory}
+        handleCategoryToggleKeyDown={handleCategoryToggleKeyDown}
+      />
     </main>
   );
 }

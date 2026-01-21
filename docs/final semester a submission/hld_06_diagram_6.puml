@@ -1,0 +1,14 @@
+@startuml
+actor User as user
+participant "Frontend" as front
+participant "Backend" as back
+participant "SQL Server" as sql
+
+user -> front: Search and filter
+front -> back: Search and filter
+back -> sql: Request data
+sql --> back: Return data
+back --> front: Display buildings
+front --> user: Display buildings
+
+@enduml

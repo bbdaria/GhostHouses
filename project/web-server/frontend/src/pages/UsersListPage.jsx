@@ -1,19 +1,9 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api/client.js';
 import { ROLE_LABELS } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
-
-const todayIso = () => new Date().toISOString().slice(0, 10);
-const todayIsoIsrael = () =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-    .format(new Date())
-    .replace(/\//g, '-');
+import { formatDate, formatDateTime } from '../utils/formatDate.js';
 
 export default function UsersListPage() {
   const { id: selectedParamId } = useParams();
@@ -21,8 +11,8 @@ export default function UsersListPage() {
     username: '',
     email: '',
     role: '',
-    startDate: todayIsoIsrael(),
-    endDate: todayIsoIsrael()
+    startDate: '',
+    endDate: ''
   });
   const [users, setUsers] = useState([]);
   const [error, setError] = useState('');
@@ -34,6 +24,7 @@ export default function UsersListPage() {
     role: 'Viewer'
   });
   const [message, setMessage] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedLogs, setSelectedLogs] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -43,6 +34,7 @@ export default function UsersListPage() {
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
   const [passwordMessage, setPasswordMessage] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ field: 'username', direction: 'asc' });
   useDocumentTitle('ניהול משתמשים - מוקד המבנים העירוני');
 
   useEffect(() => {
@@ -51,7 +43,7 @@ export default function UsersListPage() {
 
   useEffect(() => {
     if (selectedParamId) {
-      handleSelectUser(selectedParamId);
+      openUser(selectedParamId);
     }
   }, [selectedParamId]);
 
@@ -72,6 +64,14 @@ export default function UsersListPage() {
       }
       const data = await api.fetchUsers(query);
       setUsers(data);
+      if (selectedUserId) {
+        const stillExists = (data || []).some((u) => String(u.id) === String(selectedUserId));
+        if (!stillExists) {
+          setSelectedUserId('');
+          setSelectedUser(null);
+          setSelectedLogs([]);
+        }
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -102,7 +102,11 @@ export default function UsersListPage() {
     }
   };
 
-  const handleSelectUser = async (userId) => {
+  const openUser = async (userId) => {
+    const asString = String(userId);
+    setSelectedUserId(asString);
+    setSelectedUser(null);
+    setSelectedLogs([]);
     setDetailLoading(true);
     setDetailError('');
     setDetailMessage('');
@@ -117,6 +121,26 @@ export default function UsersListPage() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const closeUser = () => {
+    setSelectedUserId('');
+    setSelectedUser(null);
+    setSelectedLogs([]);
+    setDetailLoading(false);
+    setDetailError('');
+    setDetailMessage('');
+    setPasswordMessage('');
+    setPasswordForm({ newPassword: '', confirmPassword: '' });
+  };
+
+  const toggleUser = async (userId) => {
+    const asString = String(userId);
+    if (selectedUserId && String(selectedUserId) === asString) {
+      closeUser();
+      return;
+    }
+    await openUser(userId);
   };
 
   const handleDetailChange = (event) => {
@@ -139,8 +163,8 @@ export default function UsersListPage() {
       username: '',
       email: '',
       role: '',
-      startDate: todayIsoIsrael(),
-      endDate: todayIsoIsrael()
+      startDate: '',
+      endDate: ''
     });
     loadUsers();
   };
@@ -181,6 +205,73 @@ export default function UsersListPage() {
     }
   };
 
+  const handleSortClick = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: 'asc' };
+    });
+  };
+
+  const getSortIndicator = (field) => {
+    if (sortConfig.field !== field) return '';
+    return sortConfig.direction === 'asc' ? '∧' : '∨';
+  };
+
+  const getAriaSort = (field) => {
+    if (sortConfig.field !== field) return 'none';
+    return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
+  };
+
+  const sortedUsers = useMemo(() => {
+    if (!users || users.length === 0) return [];
+    if (!sortConfig.field) return users;
+
+    const compareValues = (aValue, bValue, { numeric = false } = {}) => {
+      const aMissing = aValue === null || aValue === undefined || aValue === '';
+      const bMissing = bValue === null || bValue === undefined || bValue === '';
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (numeric) return aValue - bValue;
+      return String(aValue).localeCompare(String(bValue), 'he');
+    };
+
+    const getSortValue = (user, field) => {
+      switch (field) {
+        case 'createdAt':
+          return user.createdAt ? new Date(user.createdAt).getTime() : null;
+        case 'twoFactorEnabled':
+          return user.twoFactorEnabled ? 1 : 0;
+        case 'role':
+          return ROLE_LABELS[user.role] || user.role || '';
+        default:
+          return user[field] || '';
+      }
+    };
+
+    const copy = [...users];
+    copy.sort((a, b) => {
+      const aValue = getSortValue(a, sortConfig.field);
+      const bValue = getSortValue(b, sortConfig.field);
+      const cmp = compareValues(aValue, bValue, {
+        numeric: sortConfig.field === 'createdAt' || sortConfig.field === 'twoFactorEnabled'
+      });
+      if (cmp !== 0) return sortConfig.direction === 'desc' ? -cmp : cmp;
+      if (sortConfig.field !== 'username') {
+        const nameCmp = compareValues(getSortValue(a, 'username'), getSortValue(b, 'username'));
+        if (nameCmp !== 0) return nameCmp;
+      }
+      if (sortConfig.field !== 'role') {
+        const roleCmp = compareValues(getSortValue(a, 'role'), getSortValue(b, 'role'));
+        if (roleCmp !== 0) return roleCmp;
+      }
+      return 0;
+    });
+    return copy;
+  }, [users, sortConfig]);
+
   return (
     <main className="app users-app">
       <header className="page-header">
@@ -211,11 +302,11 @@ export default function UsersListPage() {
           </label>
           <label>
             <span>תאריך התחלה</span>
-            <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} />
+            <input type="date" name="startDate" value={filters.startDate} lang="he-IL" onChange={handleFilterChange} />
           </label>
           <label>
             <span>תאריך סיום</span>
-            <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} />
+            <input type="date" name="endDate" value={filters.endDate} lang="he-IL" onChange={handleFilterChange} />
           </label>
           <div className="filters-actions">
             <button type="submit" className="primary">
@@ -280,7 +371,7 @@ export default function UsersListPage() {
       )}
 
       <section className="content-layout">
-        <div className="list-panel">
+        <div className="list-panel full-span">
           <div className="panel-header">
             <h2>משתמשים ({users.length})</h2>
           </div>
@@ -288,11 +379,50 @@ export default function UsersListPage() {
             <table>
               <thead>
                 <tr>
-                  <th>שם משתמש</th>
-                  <th>דוא"ל</th>
-                  <th>תפקיד</th>
-                  <th>OTP</th>
-                  <th>תאריך יצירה</th>
+                  <th aria-sort={getAriaSort('username')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('username')}>
+                      שם משתמש
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('username')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('email')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('email')}>
+                      דוא"ל
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('email')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('role')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('role')}>
+                      תפקיד
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('role')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('twoFactorEnabled')}>
+                    <button
+                      type="button"
+                      className="sort-button"
+                      onClick={() => handleSortClick('twoFactorEnabled')}
+                    >
+                      OTP
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('twoFactorEnabled')}
+                      </span>
+                    </button>
+                  </th>
+                  <th aria-sort={getAriaSort('createdAt')}>
+                    <button type="button" className="sort-button" onClick={() => handleSortClick('createdAt')}>
+                      תאריך יצירה
+                      <span className="sort-indicator" aria-hidden="true">
+                        {getSortIndicator('createdAt')}
+                      </span>
+                    </button>
+                  </th>
                   <th>פעולות</th>
                 </tr>
               </thead>
@@ -304,38 +434,159 @@ export default function UsersListPage() {
                     </td>
                   </tr>
                 )}
-                {users.map((u) => (
-                  <tr key={u.id} className={selectedUser && selectedUser.id === u.id ? 'active' : ''}>
-                    <td>
-                      <button type="button" className="ghost" onClick={() => handleSelectUser(u.id)}>
-                        {u.username}
-                      </button>
-                    </td>
-                    <td>{u.email || '—'}</td>
-                    <td>{ROLE_LABELS[u.role] || u.role}</td>
-                    <td>{u.twoFactorEnabled ? 'פעיל' : 'מנוטרל'}</td>
-                    <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('he-IL') : '—'}</td>
-                    <td>
-                      <button type="button" className="ghost" onClick={() => handleSelectUser(u.id)}>
-                        עריכה
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost"
-                        onClick={async () => {
-                          try {
-                            await api.resetUserTwoFactor(u.id);
-                            setMessage('קוד ה-OTP אופס עבור המשתמש.');
-                          } catch (err) {
-                            setMessage(err.message);
-                          }
-                        }}
-                      >
-                        איפוס OTP
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {sortedUsers.map((u) => {
+                  const isActive = selectedUserId && String(selectedUserId) === String(u.id);
+                  return (
+                    <Fragment key={u.id}>
+                      <tr className={isActive ? 'active' : ''} onClick={() => toggleUser(u.id)}>
+                        <td>{u.username}</td>
+                        <td>{u.email || '—'}</td>
+                        <td>{ROLE_LABELS[u.role] || u.role}</td>
+                        <td>{u.twoFactorEnabled ? 'פעיל' : 'מנוטרל'}</td>
+                        <td>{u.createdAt ? formatDate(u.createdAt) : '—'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openUser(u.id);
+                            }}
+                          >
+                            עריכה
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={async (event) => {
+                              event.stopPropagation();
+                              try {
+                                await api.resetUserTwoFactor(u.id);
+                                setMessage('קוד ה-OTP אופס עבור המשתמש.');
+                              } catch (err) {
+                                setMessage(err.message);
+                              }
+                            }}
+                          >
+                            איפוס OTP
+                          </button>
+                        </td>
+                      </tr>
+                      {isActive && (
+                        <tr>
+                          <td colSpan="6">
+                            {detailLoading && <p className="muted">טוען משתמש…</p>}
+                            {detailError && <p className="error">שגיאה: {detailError}</p>}
+                            {!detailLoading && !selectedUser && !detailError && (
+                              <p className="muted">לא נמצאו פרטים למשתמש.</p>
+                            )}
+                            {selectedUser && !detailLoading && (
+                              <div className="details-card">
+                                <div>
+                                  <p className="eyebrow">חשבון</p>
+                                  <h3>{selectedUser.username}</h3>
+                                  <p className="subtitle">{selectedUser.email || 'ללא דוא\"ל'}</p>
+                                </div>
+
+                                <form className="form-grid" onSubmit={handleUpdateUser}>
+                                  <label>
+                                    תפקיד
+                                    <select name="role" value={detailForm.role} onChange={handleDetailChange}>
+                                      <option value="Viewer">{ROLE_LABELS.Viewer}</option>
+                                      <option value="Editor">{ROLE_LABELS.Editor}</option>
+                                      <option value="Admin">{ROLE_LABELS.Admin}</option>
+                                    </select>
+                                  </label>
+                                  <label>
+                                    דוא"ל
+                                    <input
+                                      name="email"
+                                      value={detailForm.email}
+                                      onChange={handleDetailChange}
+                                      type="email"
+                                    />
+                                  </label>
+                                  <label className="checkbox">
+                                    <input
+                                      type="checkbox"
+                                      name="twoFactorEnabled"
+                                      checked={detailForm.twoFactorEnabled}
+                                      onChange={handleDetailChange}
+                                    />
+                                    דרוש OTP
+                                  </label>
+                                  <div className="filters-actions">
+                                    <button type="submit" className="primary">
+                                      שמירה
+                                    </button>
+                                    <button type="button" className="ghost" onClick={closeUser}>
+                                      סגירה
+                                    </button>
+                                  </div>
+                                </form>
+                                {detailMessage && <p className="muted">{detailMessage}</p>}
+
+                                <hr />
+                                <form className="form-grid" onSubmit={handlePasswordSubmit}>
+                                  <label className="full-span">
+                                    <strong>איפוס סיסמה</strong>
+                                  </label>
+                                  <label>
+                                    סיסמה חדשה
+                                    <input
+                                      type="password"
+                                      name="newPassword"
+                                      value={passwordForm.newPassword}
+                                      onChange={(e) =>
+                                        setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                  <label>
+                                    אימות סיסמה
+                                    <input
+                                      type="password"
+                                      name="confirmPassword"
+                                      value={passwordForm.confirmPassword}
+                                      onChange={(e) =>
+                                        setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                  <div className="filters-actions full-span">
+                                    <button type="submit" className="ghost">
+                                      שמירת סיסמה חדשה
+                                    </button>
+                                  </div>
+                                </form>
+                                {passwordMessage && <p className="muted">{passwordMessage}</p>}
+
+                                <div className="details-section">
+                                  <h4>יומן פעילות</h4>
+                                  {selectedLogs.length === 0 && <p className="muted">אין רשומות להצגה.</p>}
+                                  {selectedLogs.length > 0 && (
+                                    <ul className="log-list">
+                                      {selectedLogs.map((log) => (
+                                        <li key={log.id}>
+                                          <span>
+                                            {log.actionType} — {log.username}
+                                          </span>
+                                          <span className="muted">{formatDateTime(log.createdAt)}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
                 {users.length === 0 && !loading && (
                   <tr>
                     <td colSpan="6" className="muted">
@@ -346,90 +597,6 @@ export default function UsersListPage() {
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div className="details-panel">
-          <div className="panel-header">
-            <h2>פרטי משתמש</h2>
-          </div>
-          {detailLoading && <p className="muted">טוען משתמש…</p>}
-          {detailError && <p className="error">שגיאה: {detailError}</p>}
-          {!detailLoading && !selectedUser && !detailError && <p className="muted">בחר משתמש לעריכה.</p>}
-          {selectedUser && !detailLoading && (
-            <div className="details-card">
-              <div>
-                <p className="eyebrow">חשבון</p>
-                <h3>{selectedUser.username}</h3>
-                <p className="subtitle">{selectedUser.email || 'ללא דוא"ל'}</p>
-              </div>
-              <form className="form-grid" onSubmit={handleUpdateUser}>
-                <label>
-                  תפקיד
-                  <select name="role" value={detailForm.role} onChange={handleDetailChange}>
-                    <option value="Viewer">{ROLE_LABELS.Viewer}</option>
-                    <option value="Editor">{ROLE_LABELS.Editor}</option>
-                    <option value="Admin">{ROLE_LABELS.Admin}</option>
-                  </select>
-                </label>
-                <label>
-                  דוא"ל
-                  <input name="email" value={detailForm.email} onChange={handleDetailChange} type="email" />
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    name="twoFactorEnabled"
-                    checked={detailForm.twoFactorEnabled}
-                    onChange={handleDetailChange}
-                  />
-                  דרוש OTP
-                </label>
-                <div className="filters-actions">
-                  <button type="submit" className="primary">
-                    שמירה
-                  </button>
-                </div>
-              </form>
-              {detailMessage && <p className="muted">{detailMessage}</p>}
-
-              <hr />
-              <form className="form-grid" onSubmit={handlePasswordSubmit}>
-                <label className="full-span">
-                  <strong>איפוס סיסמה</strong>
-                </label>
-                <label>
-                  סיסמה חדשה
-                  <input
-                    type="password"
-                    name="newPassword"
-                    value={passwordForm.newPassword}
-                    onChange={(e) =>
-                      setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
-                    }
-                    required
-                  />
-                </label>
-                <label>
-                  אימות סיסמה
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) =>
-                      setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
-                    }
-                    required
-                  />
-                </label>
-                <div className="filters-actions full-span">
-                  <button type="submit" className="ghost">
-                    שמירת סיסמה חדשה
-                  </button>
-                </div>
-              </form>
-              {passwordMessage && <p className="muted">{passwordMessage}</p>}
-            </div>
-          )}
         </div>
       </section>
     </main>

@@ -1,0 +1,55 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam usecase {
+  BackgroundColor<<Implemented>> #CFF3D2
+  BorderColor<<Implemented>> #2f8f2f
+  BackgroundColor<<Planned>> #FFF1B3
+  BorderColor<<Planned>> #d4a017
+  BackgroundColor<<Backlog>> #E0E0E0
+  BorderColor<<Backlog>> #999999
+}
+
+actor Viewer
+actor Editor
+actor Admin
+
+rectangle "GhostHouses System" {
+  usecase "Login (2FA)" as UC_Login <<Implemented>>
+  usecase "View building details" as UC_View <<Implemented>>
+  usecase "Search & filter buildings" as UC_Search <<Implemented>>
+  usecase "View building logs" as UC_Logs <<Implemented>>
+  usecase "Add building" as UC_Add <<Implemented>>
+  usecase "Edit building" as UC_Edit <<Implemented>>
+  usecase "Delete building" as UC_Delete <<Implemented>>
+  usecase "Manage users & roles" as UC_Users <<Implemented>>
+  usecase "Audit trail" as UC_Audit <<Implemented>>
+
+  usecase "Attach building image" as UC_Image <<Planned>>
+  usecase "Export building card (PNG)" as UC_Card <<Planned>>
+  usecase "Sync external municipal data" as UC_Sync <<Planned>>
+
+  usecase "Add/edit log entry" as UC_LogEdit <<Backlog>>
+  usecase "Delete log entry" as UC_LogDelete <<Backlog>>
+}
+
+Viewer --> UC_Login
+Viewer --> UC_View
+Viewer --> UC_Search
+Viewer --> UC_Logs
+Viewer --> UC_Card
+
+Editor --> UC_View
+Editor --> UC_Search
+Editor --> UC_Logs
+Editor --> UC_Add
+Editor --> UC_Edit
+Editor --> UC_Delete
+Editor --> UC_Image
+Editor --> UC_LogEdit
+
+Admin --> UC_Users
+Admin --> UC_LogDelete
+Admin --> UC_Audit
+Admin --> UC_Sync
+@enduml

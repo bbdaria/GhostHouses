@@ -44,9 +44,15 @@ The repository includes a GitHub Actions workflow that automatically builds the 
 
 ## Quick rebuild/run
 
+Restart and delete changes:
 ```bash
 cd project
 ```
 ```bash
 docker compose down -v && docker compose up -d --build
+```
+
+Restart without deleting changes:
+```bash
+docker compose down && docker compose up -d --build
 ```

@@ -27,86 +27,178 @@ public class LogsController : ApiControllerBase
         [FromQuery] LogFilterParameters filter,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.BuildingLogs
-            .Include(l => l.CreatedByUser)
-            .Include(l => l.Building)
-            .AsQueryable();
+        var query = from log in _context.BuildingLogs.Include(l => l.CreatedByUser)
+                    join building in _context.Buildings on log.BuildingId equals building.Id into buildingGroup
+                    from building in buildingGroup.DefaultIfEmpty()
+                    select new { Log = log, Building = building };
 
         if (filter.BuildingId.HasValue)
         {
-            query = query.Where(l => l.BuildingId == filter.BuildingId.Value);
+            query = query.Where(x => x.Log.BuildingId == filter.BuildingId.Value);
         }
 
         if (filter.UserId.HasValue)
         {
-            query = query.Where(l => l.CreatedByUserId == filter.UserId.Value);
+            query = query.Where(x => x.Log.CreatedByUserId == filter.UserId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.User))
         {
-            query = query.Where(l => l.CreatedByUser != null && EF.Functions.ILike(l.CreatedByUser.Username, $"%{filter.User}%"));
+            if (string.Equals(filter.User.Trim(), "אתחול מערכת", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(x =>
+                    x.Log.CreatedByUser == null ||
+                    x.Log.Category == "Seed" ||
+                    x.Log.Title == "אתחול מערכת");
+            }
+            else
+            {
+                query = query.Where(x =>
+                    x.Log.CreatedByUser != null &&
+                    EF.Functions.ILike(x.Log.CreatedByUser.Username, $"%{filter.User}%"));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.LogType))
+        {
+            var logType = filter.LogType.Trim().ToLowerInvariant();
+            if (logType == "deleted")
+            {
+                query = query.Where(x =>
+                    x.Log.Category == "מחיקה" ||
+                    x.Log.Title == "מחיקת מבנה");
+            }
+            else if (logType == "created")
+            {
+                query = query.Where(x =>
+                    x.Log.Category == "Create" ||
+                    x.Log.Category == "Seed" ||
+                    x.Log.Category == "יצירה" ||
+                    x.Log.Title == "יצירת מבנה" ||
+                    x.Log.Title == "אתחול מערכת" ||
+                    x.Log.Title == "שחזור מבנה");
+            }
         }
 
         if (filter.From.HasValue)
         {
-            query = query.Where(l => l.CreatedAt >= filter.From.Value);
+            query = query.Where(x => x.Log.CreatedAt >= filter.From.Value);
         }
 
         if (filter.To.HasValue)
         {
-            query = query.Where(l => l.CreatedAt <= filter.To.Value);
+            query = query.Where(x => x.Log.CreatedAt <= filter.To.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Street))
         {
-            query = query.Where(l => EF.Functions.ILike(l.Building.StreetName, $"%{filter.Street}%"));
+            query = query.Where(x =>
+                x.Building != null &&
+                EF.Functions.ILike(x.Building.StreetName, $"%{filter.Street}%"));
+        }
+
+        if (filter.StreetId.HasValue)
+        {
+            query = query.Where(x =>
+                x.Building != null &&
+                x.Building.StreetCode == filter.StreetId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
         {
-            query = query.Where(l => l.Building.HouseNumber == filter.HouseNumber);
+            query = query.Where(x =>
+                x.Building != null &&
+                x.Building.HouseNumber == filter.HouseNumber);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Name))
         {
-            query = query.Where(l => EF.Functions.ILike(l.Building.BuildingName, $"%{filter.Name}%"));
+            query = query.Where(x =>
+                x.Building != null &&
+                EF.Functions.ILike(x.Building.BuildingName, $"%{filter.Name}%"));
         }
 
         if (filter.Status.HasValue)
         {
-            query = query.Where(l => l.Building.ShikumStatus == filter.Status.Value);
+            query = query.Where(x =>
+                x.Building != null &&
+                x.Building.ShikumStatus == filter.Status.Value);
+        }
+
+        if (filter.BldSivug.HasValue)
+        {
+            query = query.Where(x =>
+                x.Building != null &&
+                x.Building.BldSivug == filter.BldSivug.Value);
+        }
+
+        if (filter.SugBaalut.HasValue)
+        {
+            query = query.Where(x =>
+                x.Building != null &&
+                x.Building.SugBaalut == filter.SugBaalut.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Quarter))
+        {
+            query = query.Where(x =>
+                x.Building != null &&
+                EF.Functions.ILike(x.Building.Quarter ?? string.Empty, $"%{filter.Quarter}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.SubQuarter))
+        {
+            query = query.Where(x =>
+                x.Building != null &&
+                EF.Functions.ILike(x.Building.SubQuarter ?? string.Empty, $"%{filter.SubQuarter}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StatisticalArea))
+        {
+            query = query.Where(x =>
+                x.Building != null &&
+                EF.Functions.ILike(x.Building.StatisticalArea ?? string.Empty, $"%{filter.StatisticalArea}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Neighborhood))
         {
-            query = query.Where(l => EF.Functions.ILike(l.Building.Neighborhood, $"%{filter.Neighborhood}%"));
+            query = query.Where(x =>
+                x.Building != null &&
+                EF.Functions.ILike(x.Building.Neighborhood ?? string.Empty, $"%{filter.Neighborhood}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.StatusSummary))
         {
-            query = query.Where(l => EF.Functions.ILike(l.Building.StatusSummary, $"%{filter.StatusSummary}%"));
+            query = query.Where(x =>
+                x.Building != null &&
+                EF.Functions.ILike(x.Building.StatusSummary ?? string.Empty, $"%{filter.StatusSummary}%"));
         }
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
-            .OrderByDescending(l => l.CreatedAt)
+            .OrderByDescending(x => x.Log.CreatedAt)
             .Skip((filter.Page - 1) * filter.PageSize)
             .Take(filter.PageSize)
-            .Select(l => new BuildingLogDto(
-                l.Id,
-                l.BuildingId,
-                l.Title,
-                l.Message,
-                l.Category,
-                l.Severity,
-                IsraelTime.Convert(l.CreatedAt),
-                l.CreatedByUser != null ? l.CreatedByUser.Username : null,
-                l.Building.StreetName,
-                l.Building.HouseNumber,
-                l.Building.BuildingName,
-                l.Building.Neighborhood,
-                l.Building.ShikumStatus.ToString(),
-                l.Building.StatusSummary))
+            .Select(x => new BuildingLogDto(
+                x.Log.Id,
+                x.Log.BuildingId,
+                x.Log.Title,
+                x.Log.Message,
+                x.Log.Category,
+                x.Log.Severity,
+                IsraelTime.Convert(x.Log.CreatedAt),
+                x.Log.CreatedByUser != null ? x.Log.CreatedByUser.Username : null,
+                x.Building != null ? x.Building.StreetName : null,
+                x.Building != null ? x.Building.HouseNumber : null,
+                x.Building != null ? x.Building.BuildingName : null,
+                x.Building != null ? x.Building.Neighborhood : null,
+                x.Building != null ? x.Building.BldSivug : null,
+                x.Building != null ? x.Building.ShikumStatus : null,
+                x.Building != null ? x.Building.StatusSummary : null,
+                x.Building != null ? x.Building.SugBaalut : null,
+                x.Building != null ? x.Building.Quarter : null,
+                x.Building != null ? x.Building.SubQuarter : null,
+                x.Building != null ? x.Building.StatisticalArea : null))
             .ToListAsync(cancellationToken);
 
         return Ok(new PaginatedResult<BuildingLogDto>(items, total, filter.Page, filter.PageSize));
@@ -116,26 +208,31 @@ public class LogsController : ApiControllerBase
     [Authorize(Policy = "Viewer")]
     public async Task<ActionResult<IEnumerable<BuildingLogDto>>> GetBuildingLogs(int buildingId, CancellationToken cancellationToken)
     {
-        var logs = await _context.BuildingLogs
-            .Where(l => l.BuildingId == buildingId)
-            .Include(l => l.CreatedByUser)
-            .Include(l => l.Building)
-            .OrderByDescending(l => l.CreatedAt)
-            .Select(l => new BuildingLogDto(
-                l.Id,
-                l.BuildingId,
-                l.Title,
-                l.Message,
-                l.Category,
-                l.Severity,
-                IsraelTime.Convert(l.CreatedAt),
-                l.CreatedByUser != null ? l.CreatedByUser.Username : null,
-                l.Building.StreetName,
-                l.Building.HouseNumber,
-                l.Building.BuildingName,
-                l.Building.Neighborhood,
-                l.Building.ShikumStatus.ToString(),
-                l.Building.StatusSummary))
+        var logs = await (
+            from log in _context.BuildingLogs.Where(l => l.BuildingId == buildingId).Include(l => l.CreatedByUser)
+            join building in _context.Buildings on log.BuildingId equals building.Id into buildingGroup
+            from building in buildingGroup.DefaultIfEmpty()
+            orderby log.CreatedAt descending
+            select new BuildingLogDto(
+                log.Id,
+                log.BuildingId,
+                log.Title,
+                log.Message,
+                log.Category,
+                log.Severity,
+                IsraelTime.Convert(log.CreatedAt),
+                log.CreatedByUser != null ? log.CreatedByUser.Username : null,
+                building != null ? building.StreetName : null,
+                building != null ? building.HouseNumber : null,
+                building != null ? building.BuildingName : null,
+                building != null ? building.Neighborhood : null,
+                building != null ? building.BldSivug : null,
+                building != null ? building.ShikumStatus : null,
+                building != null ? building.StatusSummary : null,
+                building != null ? building.SugBaalut : null,
+                building != null ? building.Quarter : null,
+                building != null ? building.SubQuarter : null,
+                building != null ? building.StatisticalArea : null))
             .ToListAsync(cancellationToken);
 
         return Ok(logs);
@@ -190,8 +287,13 @@ public class LogsController : ApiControllerBase
             building.HouseNumber,
             building.BuildingName,
             building.Neighborhood,
-            building.ShikumStatus.ToString(),
-            building.StatusSummary);
+            building.BldSivug,
+            building.ShikumStatus,
+            building.StatusSummary,
+            building.SugBaalut,
+            building.Quarter,
+            building.SubQuarter,
+            building.StatisticalArea);
         return CreatedAtAction(nameof(GetBuildingLogs), new { buildingId }, dto);
     }
 

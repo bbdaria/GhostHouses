@@ -7,6 +7,7 @@ import LogsPage from './pages/LogsPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import OtpPage from './pages/OtpPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import StreetsPage from './pages/StreetsPage.jsx';
 import UserDetailsPage from './pages/UserDetailsPage.jsx';
 import UsersListPage from './pages/UsersListPage.jsx';
 
@@ -19,6 +20,7 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="buildings" replace />} />
           <Route path="buildings" element={<BuildingsPage />} />
+          <Route path="streets" element={<StreetsPage />} />
           <Route path="logs" element={<LogsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route element={<RoleGate minRole="Admin" />}>

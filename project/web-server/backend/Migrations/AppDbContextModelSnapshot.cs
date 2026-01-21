@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WebServer.Data;
+using WebServer.Models;
 
 #nullable disable
 
@@ -57,6 +58,22 @@ namespace WebServer.Migrations
                     b.ToTable("AuditEntries");
                 });
 
+            modelBuilder.Entity("WebServer.Models.Street", b =>
+                {
+                    b.Property<int>("StreetId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("StreetId");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("Streets");
+                });
+
             modelBuilder.Entity("WebServer.Models.Building", b =>
                 {
                     b.Property<int>("Id")
@@ -68,64 +85,62 @@ namespace WebServer.Migrations
                     b.Property<string>("ActualUse")
                         .HasColumnType("text");
 
-                    b.Property<string>("ArnonaCodeShimush")
+                    b.Property<int?>("ArnonaCodeShimush")
+                        .HasColumnType("integer");
+
+                    b.Property<Money?>("ArnonaDept")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("BldSivug")
+                        .HasColumnType("integer")
+                        .HasColumnName("BldSivug");
+
+                    b.Property<int?>("BldgRightsNotUsed")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BuildRights")
                         .HasColumnType("text");
-
-                    b.Property<bool?>("ArnonaDebt")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("BldSivug")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<double?>("BuildRights")
-                        .HasColumnType("double precision");
 
                     b.Property<string>("BuildingName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("BldName");
 
-                    b.Property<bool?>("BuildingRightsNotUsed")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool?>("CanMunicipalityFix")
-                        .HasColumnType("boolean");
+                    b.Property<int?>("CanMuniFix")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Complaints")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("complaints");
 
-                    b.Property<decimal?>("DamagePercentage")
-                        .HasColumnType("numeric");
-
-                    b.Property<bool?>("DangerousBuilding")
-                        .HasColumnType("boolean");
-
-                    b.Property<int?>("DaysSinceElectricityConsumption")
+                    b.Property<int?>("DamagePercentage")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("DaysSinceWaterConsumption")
+                    b.Property<int?>("DangerousBldg")
                         .HasColumnType("integer");
 
-                    b.Property<decimal?>("ElectricityConsumption")
-                        .HasColumnType("numeric");
+                    b.Property<int?>("ElectricityConsumption")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("FiziNum")
-                        .HasColumnType("text");
+                    b.Property<int?>("FiziNum")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("FldId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                    b.Property<int?>("SugMivne")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FldId")
+                        .HasColumnType("integer")
+                        .HasColumnName("FIdId");
 
                     b.Property<int?>("FloorNum")
                         .HasColumnType("integer");
 
-                    b.Property<double?>("FloorSum")
-                        .HasColumnType("double precision");
+                    b.Property<int?>("FloorSum")
+                        .HasColumnType("integer");
 
-                    b.Property<bool?>("ForPreservation")
-                        .HasColumnType("boolean");
+                    b.Property<int?>("ForShimur")
+                        .HasColumnType("integer");
 
                     b.Property<string>("FutureUse")
                         .HasColumnType("text");
@@ -133,59 +148,68 @@ namespace WebServer.Migrations
                     b.Property<string>("FutureYeud")
                         .HasColumnType("text");
 
-                    b.Property<string>("GushM")
-                        .HasColumnType("text");
+                    b.Property<int?>("GushM")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("GushS")
-                        .HasColumnType("text");
+                    b.Property<int?>("GushS")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("HarigatBniya")
-                        .HasColumnType("text");
+                    b.Property<int?>("HarigatBniya")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("HeterBniya")
-                        .HasColumnType("text");
+                    b.Property<int?>("HeterBniya")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("HezkaMove")
-                        .HasColumnType("text");
+                    b.Property<int?>("HezkaMove")
+                        .HasColumnType("integer");
 
                     b.Property<string>("HolderDetails")
                         .HasColumnType("text");
 
                     b.Property<string>("HouseNumber")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("BldNum");
 
-                    b.Property<bool?>("InPilot")
-                        .HasColumnType("boolean");
+                    b.Property<int?>("InPilot")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("IntendedUse")
-                        .HasColumnType("text");
+                    b.Property<int?>("IsUnitInEmptyBuilding")
+                        .HasColumnType("integer")
+                        .HasColumnName("IsUnitInEmptyBldg");
 
-                    b.Property<bool?>("IsUnitInEmptyBuilding")
-                        .HasColumnType("boolean");
+                    b.Property<int?>("IsurShimushHoreg")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("IsurShimushHoreg")
-                        .HasColumnType("text");
+                    b.Property<int?>("KidumTichnunStatus")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("KidumTichnunStatus")
-                        .HasColumnType("text");
+                    b.Property<int?>("SugBaalut")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("LandQuality")
-                        .HasColumnType("text");
+                    b.Property<int?>("LandQuality")
+                        .HasColumnType("integer");
 
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision");
 
-                    b.Property<bool?>("LegalDispute")
-                        .HasColumnType("boolean");
+                    b.Property<int?>("LegalDespute")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PtorStage")
+                        .HasColumnType("integer");
 
                     b.Property<double?>("Longitude")
                         .HasColumnType("double precision");
 
-                    b.Property<string>("MaintenanceStatus")
-                        .HasColumnType("text");
+                    b.Property<int?>("Maintenance")
+                        .HasColumnType("integer")
+                        .HasColumnName("maintenance");
 
-                    b.Property<string>("MiuuniPosition")
+                    b.Property<int?>("Itum")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MiuniPosition")
                         .HasColumnType("text");
 
                     b.Property<string>("MivneNum")
@@ -201,20 +225,18 @@ namespace WebServer.Migrations
                     b.Property<string>("OwnerPosition")
                         .HasColumnType("text");
 
-                    b.Property<bool?>("OwnerUnderExecution")
-                        .HasColumnType("boolean");
+                    b.Property<int?>("OwnerUnderExec")
+                        .HasColumnType("integer")
+                        .HasColumnName("OwnerUnderExec");
 
-                    b.Property<string>("OwnershipType")
+                    b.Property<int?>("ParcelM")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ParcelS")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ParcelSize")
                         .HasColumnType("text");
-
-                    b.Property<string>("ParcelM")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ParcelS")
-                        .HasColumnType("text");
-
-                    b.Property<double?>("ParcelSize")
-                        .HasColumnType("double precision");
 
                     b.Property<string>("ParcelTat")
                         .HasColumnType("text");
@@ -229,61 +251,84 @@ namespace WebServer.Migrations
                     b.Property<string>("PikuachKlali")
                         .HasColumnType("text");
 
-                    b.Property<string>("PropertyNumber")
+                    b.Property<int?>("PropNum")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IsPlannedEmpty")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReasonForNonUse")
                         .HasColumnType("text");
 
-                    b.Property<bool?>("Shiabud")
-                        .HasColumnType("boolean");
+                    b.Property<int?>("Shiabud")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("ShikumStatus")
-                        .IsRequired()
+                    b.Property<int>("ShikumStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ShtachBanuySum")
                         .HasColumnType("text");
 
-                    b.Property<double?>("ShtachBantuySum")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("StandardMark")
-                        .HasColumnType("text");
+                    b.Property<int?>("StandardMark")
+                        .HasColumnType("integer");
 
                     b.Property<string>("StatusSummary")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("StatusSummaryUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("date")
+                        .HasColumnName("StatusSummary_Update_Dt");
 
-                    b.Property<string>("StreetCode")
-                        .HasColumnType("text");
+                    b.Property<int?>("StreetCode")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StreetId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("StreetName")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("TkBinyanNum")
+                    b.Property<string>("TikBinyanNum")
                         .HasColumnType("text");
 
-                    b.Property<string>("Tofes4")
+                    b.Property<int?>("Tofes4")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TzavDangerBldg")
                         .HasColumnType("text");
 
-                    b.Property<string>("TzavDangerBuilding")
-                        .HasColumnType("text");
+                    b.Property<int?>("HasDangerousBldgOrder")
+                        .HasColumnType("integer");
 
                     b.Property<string>("TzavShiputzFronts")
                         .HasColumnType("text");
 
-                    b.Property<bool?>("WantToRent")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool?>("WantToSell")
-                        .HasColumnType("boolean");
-
-                    b.Property<decimal?>("WaterConsumption")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("WhatsInside")
+                    b.Property<string>("TimeFromLastElectricityConsumption")
                         .HasColumnType("text");
 
+                    b.Property<string>("TimeFromLastWaterConsumption")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("WantToRent")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WantToSell")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WaterConsumption")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WhatsInside")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Yeud")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("StreetId");
 
                     b.ToTable("Buildings");
                 });
@@ -416,19 +461,21 @@ namespace WebServer.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("WebServer.Models.Building", b =>
+                {
+                    b.HasOne("WebServer.Models.Street", "Street")
+                        .WithMany("Buildings")
+                        .HasForeignKey("StreetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Street");
+                });
+
             modelBuilder.Entity("WebServer.Models.BuildingLog", b =>
                 {
-                    b.HasOne("WebServer.Models.Building", "Building")
-                        .WithMany("Logs")
-                        .HasForeignKey("BuildingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("WebServer.Models.Users.AppUser", "CreatedByUser")
                         .WithMany("Logs")
                         .HasForeignKey("CreatedByUserId");
-
-                    b.Navigation("Building");
 
                     b.Navigation("CreatedByUser");
                 });
@@ -447,8 +494,11 @@ namespace WebServer.Migrations
             modelBuilder.Entity("WebServer.Models.Building", b =>
                 {
                     b.Navigation("ExternalSnapshots");
+                });
 
-                    b.Navigation("Logs");
+            modelBuilder.Entity("WebServer.Models.Street", b =>
+                {
+                    b.Navigation("Buildings");
                 });
 
             modelBuilder.Entity("WebServer.Models.Users.AppUser", b =>

@@ -1,0 +1,15 @@
+@startuml
+actor User as user
+participant "Frontend" as front
+participant "Backend" as back
+participant "SQL Server" as sql
+
+user -> front: Request building card
+front -> back: Request building card
+back -> sql: Request data
+sql --> back: Return data
+back -> back: Generate building card PNG
+back --> front: Display building card PNG
+front --> user: Display building card PNG
+
+@enduml
