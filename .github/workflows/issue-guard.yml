@@ -29,6 +29,10 @@ jobs:
 
             const missing = [];
 
+            if (!Array.isArray(issue.labels) || issue.labels.length === 0) {
+              missing.push('- Label is missing.');
+            }
+
             if (!issue.milestone) {
               missing.push('- Milestone is missing.');
             }
