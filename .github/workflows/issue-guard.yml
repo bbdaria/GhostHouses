@@ -66,6 +66,7 @@ jobs:
 
             await ensureLabel('needs-milestone', 'ededed', 'Milestone is required');
             await ensureLabel('needs-user-story-parent', 'ededed', 'Parent User Story is required');
+            await ensureLabel('form-blocked', 'ededed', 'Blocked until required fields are filled');
 
             const issueResponse = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
             let hasMilestone = Boolean(issueResponse.data.milestone);
@@ -90,7 +91,8 @@ jobs:
               }
             }
 
-            if (!hasMilestone) {
+            const missingMilestone = !hasMilestone;
+            if (missingMilestone) {
               if (!labelNames.includes('needs-milestone')) {
                 await github.rest.issues.addLabels({
                   owner,
@@ -165,7 +167,8 @@ jobs:
               }
             }
 
-            if (!parentValid) {
+            const missingParent = !parentValid;
+            if (missingParent) {
               if (!labelNames.includes('needs-user-story-parent')) {
                 await github.rest.issues.addLabels({
                   owner,
@@ -187,4 +190,48 @@ jobs:
                 issue_number: issueNumber,
                 name: 'needs-user-story-parent'
               });
+            }
+
+            const isBlocked = missingMilestone || missingParent;
+
+            if (isBlocked && !labelNames.includes('form-blocked')) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                labels: ['form-blocked']
+              });
+            }
+
+            if (isBlocked && issue.state !== 'closed') {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                state: 'closed',
+                state_reason: 'not_planned'
+              });
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: 'This issue was closed automatically because required fields are missing. Please add the milestone and a valid User Story parent to reopen it.'
+              });
+            }
+
+            if (!isBlocked && labelNames.includes('form-blocked')) {
+              await github.rest.issues.removeLabel({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                name: 'form-blocked'
+              });
+              if (issue.state === 'closed') {
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  state: 'open'
+                });
+              }
             }
