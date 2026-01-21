@@ -16,8 +16,11 @@ export default function BuildingModal({
   isEditRehabStatusRequired,
   canEdit,
   actionMessage,
+  duplicatePrompt,
   onCreateChange,
   onCreateSubmit,
+  onDuplicateConfirm,
+  onDuplicateCancel,
   onEditChange,
   onEditSubmit,
   onDelete,
@@ -383,12 +386,25 @@ export default function BuildingModal({
                 שמירת שינויים
               </button>
             )}
-            {mode === 'create' && (
+            {mode === 'create' && !duplicatePrompt && (
               <button type="button" className="primary" onClick={onCreateSubmit}>
                 שמירה
               </button>
             )}
           </div>
+          {mode === 'create' && duplicatePrompt && (
+            <div className="duplicate-warning">
+              <span>{duplicatePrompt}</span>
+              <div className="duplicate-actions">
+                <button type="button" className="primary" onClick={onDuplicateConfirm}>
+                  המשך והוסף בכל זאת
+                </button>
+                <button type="button" className="ghost" onClick={onDuplicateCancel}>
+                  ביטול
+                </button>
+              </div>
+            </div>
+          )}
           {actionMessage && <div className="modal-action-message">{actionMessage}</div>}
         </div>
       </div>
