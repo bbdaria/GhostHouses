@@ -83,6 +83,7 @@ export default function BuildingsPage() {
   const [selectTablesByName, setSelectTablesByName] = useState({});
   const [selectTablesLoading, setSelectTablesLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  const [duplicatePrompt, setDuplicatePrompt] = useState('');
   const [selectedView, setSelectedView] = useState('view');
   const [sortConfig, setSortConfig] = useState({ field: 'street', direction: 'asc' });
   const [openViewCategories, setOpenViewCategories] = useState(() => new Set());
@@ -394,6 +395,7 @@ export default function BuildingsPage() {
       }
       return next;
     });
+    setDuplicatePrompt('');
     setUnsavedChanges(true);
   };
 
@@ -401,6 +403,7 @@ export default function BuildingsPage() {
     setModalMode('create');
     setShowModal(true);
     setUnsavedChanges(false);
+    setDuplicatePrompt('');
   };
 
   const openBuildingModal = async (id, view = 'view') => {
@@ -423,11 +426,15 @@ export default function BuildingsPage() {
     setModalMode('view');
     setUnsavedChanges(false);
     setSelectedBuilding(null);
+    setDuplicatePrompt('');
   };
 
-  const handleCreateBuilding = async (event) => {
+  const handleCreateBuilding = async (event, allowDuplicate = false) => {
     if (event && event.preventDefault) event.preventDefault();
     setActionMessage('');
+    if (!allowDuplicate) {
+      setDuplicatePrompt('');
+    }
     try {
       if (!createForm.streetId) {
         throw new Error('יש לבחור רחוב מהרשימה');
@@ -471,8 +478,10 @@ export default function BuildingsPage() {
         bldSivug: createForm.category,
         status: statusOption ? statusOption.value : undefined,
         statusSummary: createForm.statusSummary,
-        complaints: ''
+        complaints: '',
+        allowDuplicate
       });
+      setDuplicatePrompt('');
       setCreateForm({
         fldId: '',
         streetId: '',
@@ -487,8 +496,20 @@ export default function BuildingsPage() {
       loadBuildings(filters);
       setActionMessage('המבנה נוסף בהצלחה.');
     } catch (err) {
+      if (err?.payload?.isDuplicate || err?.status === 409) {
+        setDuplicatePrompt(err?.payload?.error || 'נמצאה כפילות');
+        return;
+      }
       setActionMessage(err.message);
     }
+  };
+
+  const handleDuplicateConfirm = () => {
+    handleCreateBuilding(null, true);
+  };
+
+  const handleDuplicateCancel = () => {
+    setDuplicatePrompt('');
   };
 
   const handleEditFieldChange = (columnName, value) => {
@@ -1196,8 +1217,11 @@ export default function BuildingsPage() {
         isEditRehabStatusRequired={isEditRehabStatusRequired}
         canEdit={canEdit}
         actionMessage={actionMessage}
+        duplicatePrompt={duplicatePrompt}
         onCreateChange={handleCreateChange}
         onCreateSubmit={handleCreateBuilding}
+        onDuplicateConfirm={handleDuplicateConfirm}
+        onDuplicateCancel={handleDuplicateCancel}
         onEditChange={handleEditFieldChange}
         onEditSubmit={handleUpdateBuildingFields}
         onDelete={handleDeleteBuilding}

@@ -90,6 +90,7 @@ public record BuildingEditRequest
     public string? StatusSummary { get; set; }
     public string? Complaints { get; set; }
     public string[]? Photos { get; set; }
+    public bool AllowDuplicate { get; set; }
 }
 
 public record DeleteBuildingRequest(
