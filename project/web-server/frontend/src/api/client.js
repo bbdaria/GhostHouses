@@ -81,7 +81,10 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const message = payload && payload.error ? payload.error : response.statusText;
-    throw new Error(message || 'Request failed');
+    const error = new Error(message || 'Request failed');
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
 
   return payload;
@@ -298,7 +301,8 @@ const api = {
       bldSivug,
       shikumStatus: form.status || form.shikumStatus || 'Unknown',
       statusSummary: form.statusSummary || '',
-      complaints: form.complaints || ''
+      complaints: form.complaints || '',
+      allowDuplicate: Boolean(form.allowDuplicate)
     };
     const created = await request('/buildings', { method: 'POST', body: payload });
     return mapBuildingSummary(created);

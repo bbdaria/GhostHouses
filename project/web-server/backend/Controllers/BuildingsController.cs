@@ -492,10 +492,11 @@ public class BuildingsController : ApiControllerBase
     [Authorize(Policy = "Editor")]
     public async Task<ActionResult<BuildingSummaryDto>> CreateBuilding([FromBody] BuildingEditRequest request, CancellationToken cancellationToken)
     {
+        var houseNumber = request.HouseNumber?.Trim() ?? string.Empty;
         var building = new Building
         {
             FldId = request.FldId,
-            HouseNumber = request.HouseNumber,
+            HouseNumber = houseNumber,
             BuildingName = request.BuildingName,
             Neighborhood = request.Neighborhood,
             BldSivug = request.BldSivug,
@@ -523,6 +524,17 @@ public class BuildingsController : ApiControllerBase
 
             building.StreetCode = street.StreetId;
             building.StreetName = street.Name;
+        }
+
+        if (!request.AllowDuplicate)
+        {
+            var duplicateExists = await _context.Buildings.AnyAsync(
+                b => b.StreetCode == building.StreetCode && b.HouseNumber == houseNumber,
+                cancellationToken);
+            if (duplicateExists)
+            {
+                return Conflict(new { error = "נמצאה כפילות", isDuplicate = true });
+            }
         }
 
         _context.Buildings.Add(building);
