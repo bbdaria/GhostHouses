@@ -1,0 +1,34 @@
+name: Issue
+description: Create a new issue.
+title: "[Issue]: "
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Short description of the task or bug.
+    validations:
+      required: true
+  - type: input
+    id: milestone
+    attributes:
+      label: Milestone
+      description: Milestone name (must exist in GitHub).
+      placeholder: Stage A
+    validations:
+      required: true
+  - type: input
+    id: parent_user_story
+    attributes:
+      label: Parent User Story
+      description: User Story issue number (example: #24).
+      placeholder: "#24"
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Steps, acceptance criteria, or extra notes.
+    validations:
+      required: false
