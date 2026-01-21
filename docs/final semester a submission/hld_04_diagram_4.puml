@@ -1,0 +1,14 @@
+@startuml
+actor User as user
+participant "Frontend" as front
+participant "Backend" as back
+participant "SQL Server" as sql
+
+user -> front: Modify field
+front -> back: Modify field
+back -> sql: Write data
+sql --> back: Success
+back --> front: Success
+front --> user: Display new value
+
+@enduml
