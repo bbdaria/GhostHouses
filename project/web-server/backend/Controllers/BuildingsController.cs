@@ -814,6 +814,24 @@ public class BuildingsController : ApiControllerBase
             }
         }
 
+        if (!request.AllowDuplicate)
+        {
+            var effectiveStreetCode = building.StreetCode;
+            var effectiveHouseNumber = (building.HouseNumber ?? string.Empty).Trim();
+            if (effectiveStreetCode.HasValue && !string.IsNullOrWhiteSpace(effectiveHouseNumber))
+            {
+                var duplicateExists = await _context.Buildings.AnyAsync(
+                    b => b.Id != building.Id &&
+                         b.StreetCode == effectiveStreetCode &&
+                         b.HouseNumber == effectiveHouseNumber,
+                    cancellationToken);
+                if (duplicateExists)
+                {
+                    return Conflict(new { error = "נמצאה כפילות", isDuplicate = true });
+                }
+            }
+        }
+
         var hasChanges = changes.Count > 0 ||
             !string.Equals(originalStreetName, building.StreetName, StringComparison.Ordinal);
         if (hasChanges)

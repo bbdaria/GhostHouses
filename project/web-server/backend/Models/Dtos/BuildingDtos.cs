@@ -98,6 +98,7 @@ public record DeleteBuildingRequest(
     bool Confirm);
 
 public record BuildingFieldsUpdateRequest(
-    IDictionary<string, string?> Fields);
+    IDictionary<string, string?> Fields,
+    bool AllowDuplicate = false);
 
 public record PaginatedResult<T>(IEnumerable<T> Items, int Total, int Page, int PageSize);

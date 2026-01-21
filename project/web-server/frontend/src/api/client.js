@@ -324,8 +324,8 @@ const api = {
     await request(`/buildings/${id}`, { method: 'PUT', body: payload });
     return this.fetchBuilding(id);
   },
-  async updateBuildingFields(id, fields) {
-    const payload = { fields };
+  async updateBuildingFields(id, fields, allowDuplicate = false) {
+    const payload = { fields, allowDuplicate };
     const data = await request(`/buildings/${id}/fields`, { method: 'PUT', body: payload });
     return mapBuildingDetail(data);
   },
