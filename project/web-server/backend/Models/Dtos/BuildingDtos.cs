@@ -24,7 +24,6 @@ public record BuildingFilterParameters(
 
 public record BuildingSummaryDto(
     int Id,
-    int? FldId,
     int? StreetId,
     string BuildingName,
     string StreetName,
@@ -73,7 +72,7 @@ public record ExternalSystemSnapshotDto(
 public record BuildingEditRequest
 {
     [Required]
-    public int FldId { get; set; }
+    public int Id { get; set; }
 
     [Required]
     public int StreetId { get; set; }

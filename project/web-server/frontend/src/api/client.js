@@ -10,11 +10,6 @@ const toOptionalInt = (value) => {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
 };
 
-const generateFieldId = () => {
-  const candidate = Math.trunc(Date.now() % 2000000000);
-  return candidate <= 0 ? 1 : candidate;
-};
-
 const normalizeSnapshot = (value) => {
   if (value === null || typeof value !== 'object') {
     return value;
@@ -121,7 +116,6 @@ async function requestBlob(path, options = {}) {
 
 const mapBuildingSummary = (item) => ({
   id: item.id,
-  fldId: item.fldId,
   streetId: item.streetId,
   street: item.streetName,
   houseNumber: item.houseNumber,
@@ -180,7 +174,6 @@ const mapBuildingField = (field) => ({
 
 const mapBuildingDetail = (data) => ({
   id: data.summary.id,
-  fldId: data.summary.fldId,
   streetId: data.summary.streetId,
   street: data.summary.streetName,
   houseNumber: data.summary.houseNumber,
@@ -261,7 +254,7 @@ const api = {
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
     return (data.items || []).map(mapBuildingSummary);
   },
-  async exportBuildings(filters = {}) {
+  async exportBuildings(filters = {}, includeImages = false) {
     const params = new URLSearchParams();
     if (filters.street) params.append('street', filters.street);
     if (filters.streetId) params.append('streetId', filters.streetId);
@@ -277,9 +270,32 @@ const api = {
     if (filters.updatedTo) params.append('updatedTo', filters.updatedTo);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
+    if (includeImages) params.append('includeImages', 'true');
     const query = params.toString();
     const path = query ? `/buildings/export?${query}` : '/buildings/export';
     return requestBlob(path);
+  },
+  async exportBuildingsByIds(ids = [], includeImages = false) {
+    const query = includeImages ? '?includeImages=true' : '';
+    return requestBlob(`/buildings/export${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+  },
+  async previewImportBuildings(file) {
+    if (!file) {
+      throw new Error('excel file is required');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    return request('/buildings/import/preview', { method: 'POST', body: formData });
+  },
+  async applyImportBuildings(rows = []) {
+    return request('/buildings/import/apply', {
+      method: 'POST',
+      body: { rows }
+    });
   },
   async exportBuildingCard(id) {
     if (!id && id !== 0) {
@@ -296,10 +312,9 @@ const api = {
     return Array.isArray(data) ? data.map((field) => mapBuildingField(field)) : [];
   },
   async createBuilding(form) {
-    const fldId = toOptionalInt(form.fldId) ?? generateFieldId();
+    const id = toOptionalInt(form.id ?? form.Id);
     const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
-      fldId,
       streetId: toOptionalInt(form.streetId),
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || form.streetName || 'מבנה',
@@ -310,14 +325,17 @@ const api = {
       complaints: form.complaints || '',
       allowDuplicate: Boolean(form.allowDuplicate)
     };
+    if (id !== null && id !== undefined) {
+      payload.id = id;
+    }
     const created = await request('/buildings', { method: 'POST', body: payload });
     return mapBuildingSummary(created);
   },
   async updateBuilding(id, form) {
-    const fldId = toOptionalInt(form.fldId) ?? generateFieldId();
+    const nextId = toOptionalInt(form.id ?? form.Id);
     const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
-      fldId,
+      id: nextId ?? id,
       streetId: toOptionalInt(form.streetId) ?? toOptionalInt(form.street),
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || '',

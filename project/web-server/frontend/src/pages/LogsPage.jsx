@@ -94,6 +94,15 @@ export default function LogsPage() {
     if (value === 'Unknown' || value === 'לא ידוע') return '—';
     return value;
   };
+  const isImageValue = (value) =>
+    typeof value === 'string' && value.trim().startsWith('data:image');
+  const renderChangeValue = (value) => {
+    const displayValue = displayOrDash(value);
+    if (isImageValue(displayValue)) {
+      return <img className="log-change-image" src={displayValue} alt="תמונה" />;
+    }
+    return displayValue;
+  };
   const getSnapshotFieldValue = (fields, columnName) => {
     if (!Array.isArray(fields)) return null;
     const match = fields.find(
@@ -574,24 +583,14 @@ export default function LogsPage() {
                   snapshot.buildingName ||
                   getSnapshotFieldValue(snapshotFields, 'BldName') ||
                   '—';
-                const changeLabels = hasChanges
-                  ? displayChanges.map((change) =>
-                      displayOrDash(getExcelAwareLabel(change.fieldName || change.columnName))
-                    )
-                  : ['—'];
-                const oldValues = hasChanges
-                  ? displayChanges.map((change) => displayOrDash(change.oldValue))
-                  : ['—'];
-                const newValues = hasChanges
-                  ? displayChanges.map((change) => displayOrDash(change.newValue))
-                  : ['—'];
+                const changeRows = hasChanges
+                  ? displayChanges.map((change) => ({
+                      label: getExcelAwareLabel(change.fieldName || change.columnName),
+                      oldValue: change.oldValue,
+                      newValue: change.newValue
+                    }))
+                  : [{ label: '—', oldValue: null, newValue: null }];
                 const showRestore = log.actionType === 'מחיקה';
-
-                const changeRows = changeLabels.map((label, index) => ({
-                  label,
-                  oldValue: oldValues[index],
-                  newValue: newValues[index]
-                }));
 
                 return (
                   <tr key={log.id}>
@@ -606,9 +605,9 @@ export default function LogsPage() {
                             key={`change-${log.id}-${index}`}
                             className={`log-change-row ${index % 2 === 0 ? 'even' : 'odd'}`}
                           >
-                            <div className="log-change-cell">{row.label}</div>
-                            <div className="log-change-cell">{row.oldValue}</div>
-                            <div className="log-change-cell">{row.newValue}</div>
+                            <div className="log-change-cell">{displayOrDash(row.label)}</div>
+                            <div className="log-change-cell">{renderChangeValue(row.oldValue)}</div>
+                            <div className="log-change-cell">{renderChangeValue(row.newValue)}</div>
                           </div>
                         ))}
                       </div>

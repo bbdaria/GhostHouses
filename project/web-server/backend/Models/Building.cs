@@ -5,6 +5,9 @@ namespace WebServer.Models;
 
 public class Building
 {
+    [Column("Id", TypeName = "integer")]
+    [Display(Name = "ID")]
+    [FieldSpec(Category = "מידע כללי", FieldName = "ID", IncludeInEventLog = true)]
     public int Id { get; set; }
 
     // General information

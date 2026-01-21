@@ -25,6 +25,7 @@ const initialFilters = {
 
 const NO_STREET_OPTION = { streetId: -1, name: 'ללא שם רחוב' };
 const REQUIRED_EDIT_FIELDS = [
+  { key: 'Id', label: 'ID' },
   { key: 'StreetId', label: 'שם רחוב' },
   { key: 'BldNum', label: 'מספר בית' },
   { key: 'BldName', label: 'כינוי הבניין' },
@@ -69,6 +70,16 @@ export default function BuildingsPage() {
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [exportSelection, setExportSelection] = useState(() => new Set());
+  const [exportMode, setExportMode] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreviewing, setImportPreviewing] = useState(false);
+  const [importApplying, setImportApplying] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importFile, setImportFile] = useState(null);
+  const [importRows, setImportRows] = useState([]);
+  const [importCompareRowId, setImportCompareRowId] = useState(null);
+  const [importSummary, setImportSummary] = useState('');
   const [cardExporting, setCardExporting] = useState(false);
   const [cardExportError, setCardExportError] = useState('');
   const [photoLoading, setPhotoLoading] = useState(false);
@@ -90,6 +101,12 @@ export default function BuildingsPage() {
   const [openCreateCategories, setOpenCreateCategories] = useState(() => new Set());
   const [isExternalOpen, setIsExternalOpen] = useState(false);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
+
+  const importBusy = importPreviewing || importApplying;
+  const importCompareRow = useMemo(
+    () => importRows.find((row) => row.rowNumber === importCompareRowId) || null,
+    [importRows, importCompareRowId]
+  );
 
   const rehabSivugValue = useMemo(() => {
     const match =
@@ -157,6 +174,9 @@ export default function BuildingsPage() {
         } else {
           nextValues[field.columnName] = field.value ?? '';
         }
+        if (field.columnName.toLowerCase() === 'id' && nextValues[field.columnName] === '0') {
+          nextValues[field.columnName] = '';
+        }
       });
       if (!Object.prototype.hasOwnProperty.call(nextValues, 'StreetId')) {
         nextValues.StreetId = '';
@@ -182,6 +202,15 @@ export default function BuildingsPage() {
   };
 
   const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
+  const isDataImageValue = (value) =>
+    typeof value === 'string' && value.trim().startsWith('data:image');
+  const renderImportValue = (value) => {
+    const displayValue = displayOrDash(value);
+    if (isDataImageValue(displayValue)) {
+      return <img className="log-change-image" src={displayValue} alt="תמונה" />;
+    }
+    return displayValue;
+  };
   const getSivugLabel = (value) => {
     if (value === null || value === undefined || value === '') return '—';
     const match = sivugOptions.find((option) => String(option.value) === String(value));
@@ -204,6 +233,70 @@ export default function BuildingsPage() {
   };
   const isRequiredEditColumn = (columnName) => REQUIRED_EDIT_COLUMNS.has(columnName);
   const isRequiredCreateColumn = (columnName) => REQUIRED_CREATE_COLUMNS.has(columnName);
+  const requiredImportLabels = {
+    Id: 'ID',
+    StreetId: 'שם רחוב',
+    BldNum: 'מספר בית',
+    BldName: 'כינוי הבניין',
+    BldSivug: 'סיווג',
+    ShikumStatus: 'סטטוס שיקום'
+  };
+  const resolveSelectValue = (raw, options) => {
+    if (raw === null || raw === undefined) return null;
+    const text = String(raw).trim();
+    if (!text) return null;
+    const numeric = Number(text);
+    if (Number.isFinite(numeric)) return numeric;
+    const match = options.find((opt) => String(opt.label || '').trim() === text);
+    if (!match) return null;
+    const value = match.value ?? match.id;
+    return value === null || value === undefined ? null : Number(value);
+  };
+  const getMissingImportRequired = useCallback(
+    (values, idMode = 'manual') => {
+      const missing = [];
+      const getValue = (key) => (values?.[key] ?? '').toString().trim();
+
+      if (idMode !== 'auto') {
+        const idValue = getValue('Id');
+        if (!idValue || !Number.isFinite(Number(idValue)) || Number(idValue) <= 0) {
+          missing.push('Id');
+        }
+      }
+
+      const streetIdValue = getValue('StreetId');
+      if (!streetIdValue || !Number.isFinite(Number(streetIdValue))) {
+        missing.push('StreetId');
+      }
+
+      if (!getValue('BldNum')) {
+        missing.push('BldNum');
+      }
+
+      if (!getValue('BldName')) {
+        missing.push('BldName');
+      }
+
+      const sivugRaw = getValue('BldSivug');
+      const sivugValue = resolveSelectValue(sivugRaw, sivugOptions);
+      if (!sivugRaw || sivugValue === null || Number.isNaN(sivugValue)) {
+        missing.push('BldSivug');
+      }
+
+      if (rehabSivugValue && sivugValue !== null && String(sivugValue) === String(rehabSivugValue)) {
+        const shikumRaw = getValue('ShikumStatus');
+        const shikumValue = resolveSelectValue(shikumRaw, statusOptions);
+        if (!shikumRaw || shikumValue === null || Number.isNaN(shikumValue)) {
+          missing.push('ShikumStatus');
+        }
+      }
+
+      return missing;
+    },
+    [rehabSivugValue, sivugOptions, statusOptions]
+  );
+  const getImportRequiredLabel = (columnName) =>
+    requiredImportLabels[columnName] || getExcelAwareLabel(columnName) || columnName;
 
   useEffect(() => {
     const loadStatusOptions = async () => {
@@ -254,6 +347,19 @@ export default function BuildingsPage() {
     loadStreets();
     loadBuildings(initialFilters);
   }, [loadStreets]);
+
+  useEffect(() => {
+    setExportSelection((prev) => {
+      const currentIds = new Set(buildings.map((building) => building.id));
+      const next = new Set();
+      prev.forEach((id) => {
+        if (currentIds.has(id)) {
+          next.add(id);
+        }
+      });
+      return next;
+    });
+  }, [buildings]);
 
   useEffect(() => {
     if (showModal && modalMode === 'create') {
@@ -426,26 +532,283 @@ export default function BuildingsPage() {
     loadBuildings(initialFilters);
   };
 
-  const handleExport = async () => {
+  const downloadExportFile = (blob, prefix = 'buildings') => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const extension = blob?.type === 'application/zip' ? 'zip' : 'xlsx';
+    link.href = url;
+    link.download = `${prefix}-${dateStamp}.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleToggleExportAll = () => {
+    if (!exportMode) return;
+    if (allSelected) {
+      setExportSelection(new Set());
+      return;
+    }
+    setExportSelection(new Set(buildings.map((b) => b.id)));
+  };
+
+  const handleToggleExportBuilding = (id) => {
+    if (!exportMode) return;
+    setExportSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleExportSelected = async (includeImages) => {
     if (exporting) return;
     setExportError('');
     setExporting(true);
     try {
-      const blob = await api.exportBuildings(expandUpdatedRange(filters));
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      link.href = url;
-      link.download = `buildings-${dateStamp}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      const blob = await api.exportBuildingsByIds([...exportSelection], includeImages);
+      downloadExportFile(blob);
+      setExportMode(false);
+      setExportSelection(new Set());
     } catch (err) {
-      setExportError(err.message || 'שגיאה בייצוא קובץ האקסל.');
+      setExportError(err.message || 'שגיאה בייצוא קובץ הייצוא.');
     } finally {
       setExporting(false);
     }
+  };
+
+  const handleExportAction = () => {
+    if (!exportMode) {
+      setExportMode(true);
+    }
+  };
+
+  const handleCancelExportMode = () => {
+    setExportMode(false);
+    setExportSelection(new Set());
+  };
+
+  const openImportModal = () => {
+    setImportError('');
+    setImportSummary('');
+    setImportFile(null);
+    setImportRows([]);
+    setImportCompareRowId(null);
+    setImportPreviewing(false);
+    setImportApplying(false);
+    setShowImportModal(true);
+  };
+
+  const closeImportModal = () => {
+    setImportError('');
+    setImportSummary('');
+    setImportFile(null);
+    setImportRows([]);
+    setImportCompareRowId(null);
+    setImportPreviewing(false);
+    setImportApplying(false);
+    setShowImportModal(false);
+  };
+
+  const handleImportFileChange = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    setImportFile(file);
+    setImportError('');
+    setImportSummary('');
+    setImportRows([]);
+    setImportCompareRowId(null);
+  };
+
+  const buildImportRows = (rows) =>
+    rows.map((row) => {
+      const idValue = row.values?.Id ? String(row.values.Id).trim() : '';
+      const hasIdValue = Boolean(idValue);
+      const idMode = row.hasIdConflict ? 'auto' : hasIdValue ? 'manual' : 'auto';
+      const missingRequired = getMissingImportRequired(row.values, idMode);
+      const action =
+        row.hasAddressDuplicate || missingRequired.length > 0 ? 'skip' : 'create';
+      return {
+        ...row,
+        action,
+        idMode,
+        overrideId: hasIdValue ? idValue : '',
+        missingRequired
+      };
+    });
+
+  const updateImportRow = (rowNumber, updates) => {
+    setImportRows((prev) =>
+      prev.map((row) => (row.rowNumber === rowNumber ? { ...row, ...updates } : row))
+    );
+  };
+
+  const handlePreviewImport = async () => {
+    if (!importFile) {
+      setImportError('נא לבחור קובץ אקסל או ZIP.');
+      return;
+    }
+    setImportError('');
+    setImportSummary('');
+    setImportPreviewing(true);
+    try {
+      const result = await api.previewImportBuildings(importFile);
+      const rows = buildImportRows(result.rows || []);
+      setImportRows(rows);
+      setImportSummary(`נטענו ${rows.length} שורות לייבוא.`);
+    } catch (err) {
+      setImportError(err.message || 'שגיאה בקריאת קובץ הייבוא.');
+    } finally {
+      setImportPreviewing(false);
+    }
+  };
+
+  const handleImportApply = async () => {
+    if (importRows.length === 0) {
+      setImportError('אין שורות לייבוא.');
+      return;
+    }
+    const anyApply = importRows.some((row) => row.action !== 'skip');
+    if (!anyApply) {
+      setImportError('כל השורות מסומנות לדילוג.');
+      return;
+    }
+    const missingRequired = importRows.filter(
+      (row) => row.action !== 'skip' && (row.missingRequired?.length ?? 0) > 0
+    );
+    if (missingRequired.length > 0) {
+      setImportError('יש שורות עם שדות חובה חסרים או לא תקינים.');
+      return;
+    }
+    const invalidCreate = importRows.filter(
+      (row) => row.action === 'create' && row.hasAddressDuplicate
+    );
+    if (invalidCreate.length > 0) {
+      setImportError('יש שורות עם כפילות כתובת שסומנו להוספה. יש לבחור החלפה או דילוג.');
+      return;
+    }
+    const invalidReplace = importRows.filter(
+      (row) =>
+        row.action === 'replace' && !row.existingId && !row.existingIdById
+    );
+    if (invalidReplace.length > 0) {
+      setImportError('יש שורות להחלפה ללא מבנה תואם במערכת.');
+      return;
+    }
+    setImportError('');
+    setImportApplying(true);
+    try {
+      const payloadRows = importRows.map((row) => {
+        const action = row.action || 'skip';
+        const idMode = row.idMode || 'manual';
+        const parsedOverrideId = Number(row.overrideId);
+        const overrideId =
+          idMode === 'manual' && Number.isFinite(parsedOverrideId) ? parsedOverrideId : undefined;
+        return {
+          rowNumber: row.rowNumber,
+          action,
+          values: row.values,
+          existingId: row.existingId ?? row.existingIdById ?? null,
+          idMode,
+          overrideId
+        };
+      });
+      const result = await api.applyImportBuildings(payloadRows);
+      const summary = `הייבוא הושלם. נוספו ${result.created} מבנים, עודכנו ${result.updated}, דולגו ${result.skipped}.`;
+      setActionMessage(summary);
+      closeImportModal();
+      loadBuildings(filters);
+    } catch (err) {
+      setImportError(err.message || 'שגיאה בייבוא קובץ הייבוא.');
+    } finally {
+      setImportApplying(false);
+    }
+  };
+
+  const handleImportRowActionChange = (rowNumber, action) => {
+    updateImportRow(rowNumber, { action });
+  };
+
+  const handleImportValueChange = (rowNumber, columnName, value) => {
+    setImportRows((prev) =>
+      prev.map((row) => {
+        if (row.rowNumber !== rowNumber) return row;
+        const nextValues = { ...row.values, [columnName]: value };
+        const missingRequired = getMissingImportRequired(nextValues, row.idMode);
+        const nextImportFields = Array.isArray(row.importFields)
+          ? row.importFields.map((field) => {
+              const fieldColumn = field.columnName ? field.columnName.toLowerCase() : '';
+              const targetColumn = columnName.toLowerCase();
+              return fieldColumn === targetColumn ? { ...field, value } : field;
+            })
+          : row.importFields;
+        const nextRow = { ...row, values: nextValues, missingRequired, importFields: nextImportFields };
+        if (columnName === 'Id') {
+          nextRow.overrideId = value;
+        }
+        return nextRow;
+      })
+    );
+  };
+
+  const handleImportIdModeChange = (rowNumber, idMode) => {
+    setImportRows((prev) =>
+      prev.map((row) => {
+        if (row.rowNumber !== rowNumber) return row;
+        const nextValues =
+          idMode === 'auto' ? { ...row.values, Id: '' } : { ...row.values, Id: row.overrideId };
+        const missingRequired = getMissingImportRequired(nextValues, idMode);
+        const nextImportFields = Array.isArray(row.importFields)
+          ? row.importFields.map((field) =>
+              field.columnName?.toLowerCase() === 'id' ? { ...field, value: nextValues.Id } : field
+            )
+          : row.importFields;
+        return { ...row, idMode, values: nextValues, missingRequired, importFields: nextImportFields };
+      })
+    );
+  };
+
+  const handleImportOverrideIdChange = (rowNumber, value) => {
+    setImportRows((prev) =>
+      prev.map((row) => {
+        if (row.rowNumber !== rowNumber) return row;
+        const nextValues = { ...row.values, Id: value };
+        const missingRequired = getMissingImportRequired(nextValues, row.idMode);
+        const nextImportFields = Array.isArray(row.importFields)
+          ? row.importFields.map((field) =>
+              field.columnName?.toLowerCase() === 'id' ? { ...field, value } : field
+            )
+          : row.importFields;
+        return {
+          ...row,
+          overrideId: value,
+          values: nextValues,
+          missingRequired,
+          importFields: nextImportFields
+        };
+      })
+    );
+  };
+
+  const handleImportSkipAll = () => {
+    setImportRows((prev) =>
+      prev.map((row) =>
+        row.hasAddressDuplicate || row.hasIdConflict ? { ...row, action: 'skip' } : row
+      )
+    );
+  };
+
+  const handleImportReplaceAll = () => {
+    setImportRows((prev) =>
+      prev.map((row) =>
+        row.hasAddressDuplicate || row.hasIdConflict ? { ...row, action: 'replace' } : row
+      )
+    );
   };
 
   const handleExportCard = async (building) => {
@@ -536,9 +899,13 @@ export default function BuildingsPage() {
       const bldSivug = String(getCreateValue('BldSivug'));
       const shikumStatusId = String(getCreateValue('ShikumStatus'));
       const statusSummary = getCreateValue('StatusSummary');
-      const fldId = getCreateValue('FIdId');
+      const idRaw = String(getCreateValue('Id')).trim();
       const complaints = getCreateValue('complaints') || getCreateValue('Complaints');
 
+      const idNumber = idRaw ? Number(idRaw) : null;
+      if (idRaw && (!Number.isInteger(idNumber) || idNumber <= 0)) {
+        throw new Error('ID חייב להיות מספר חיובי');
+      }
       if (!streetId) {
         throw new Error('יש לבחור רחוב מהרשימה');
       }
@@ -574,7 +941,7 @@ export default function BuildingsPage() {
         throw new Error('יש לבחור רחוב מהרשימה');
       }
       const created = await api.createBuilding({
-        fldId,
+        id: idNumber ?? undefined,
         streetId: streetOption.streetId,
         houseNumber,
         nickname: buildingName,
@@ -585,7 +952,7 @@ export default function BuildingsPage() {
         allowDuplicate
       });
       const coreColumns = new Set([
-        'FIdId',
+        'Id',
         'StreetId',
         'StreetName',
         'BldNum',
@@ -615,6 +982,10 @@ export default function BuildingsPage() {
       loadBuildings(filters);
       setActionMessage('המבנה נוסף בהצלחה.');
     } catch (err) {
+      if (err?.payload?.isIdDuplicate) {
+        setActionMessage(err?.payload?.error || 'קיים מבנה עם ID זה');
+        return;
+      }
       if (err?.payload?.isDuplicate || err?.status === 409) {
         setDuplicatePrompt(err?.payload?.error || 'נמצאה כפילות');
         return;
@@ -670,8 +1041,13 @@ export default function BuildingsPage() {
       setSelectedBuilding(updated);
       loadBuildings(filters);
       setActionMessage('פרטי המבנה עודכנו.');
+      setEditDuplicatePrompt('');
       setUnsavedChanges(false);
     } catch (err) {
+      if (err?.payload?.isIdDuplicate) {
+        setActionMessage(err?.payload?.error || 'קיים מבנה עם ID זה');
+        return;
+      }
       if (err?.payload?.isDuplicate || err?.status === 409) {
         setEditDuplicatePrompt(err?.payload?.error || 'נמצאה כפילות');
         return;
@@ -716,7 +1092,7 @@ export default function BuildingsPage() {
     try {
       setPhotoLoading(true);
       const dataUrl = await readFileAsDataUrl(file);
-      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: dataUrl });
+      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: dataUrl }, true);
       setSelectedBuilding(updated);
       setActionMessage('התמונה נשמרה.');
     } catch (err) {
@@ -732,7 +1108,7 @@ export default function BuildingsPage() {
     setActionMessage('');
     try {
       setPhotoLoading(true);
-      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: '' });
+      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: '' }, true);
       setSelectedBuilding(updated);
       setActionMessage('התמונה נמחקה.');
     } catch (err) {
@@ -758,6 +1134,29 @@ export default function BuildingsPage() {
   };
 
   const statuses = useMemo(() => statusOptions, [statusOptions]);
+  const allSelected = useMemo(
+    () =>
+      exportMode &&
+      buildings.length > 0 &&
+      buildings.every((building) => exportSelection.has(building.id)),
+    [buildings, exportSelection, exportMode]
+  );
+  const importStats = useMemo(() => {
+    return importRows.reduce(
+      (acc, row) => {
+        const action = row.action || 'skip';
+        if (action === 'create') acc.create += 1;
+        else if (action === 'replace') acc.replace += 1;
+        else acc.skip += 1;
+        return acc;
+      },
+      { create: 0, replace: 0, skip: 0 }
+    );
+  }, [importRows]);
+  const hasImportBlockingMissing = useMemo(
+    () => importRows.some((row) => row.action !== 'skip' && (row.missingRequired?.length ?? 0) > 0),
+    [importRows]
+  );
 
   const handleTabChange = (tab) => {
     setSelectedView(tab);
@@ -1048,6 +1447,26 @@ export default function BuildingsPage() {
     return `${excelName} (${fieldName})`;
   };
 
+  const importCompareFields = useMemo(() => {
+    if (!importCompareRow) return [];
+    const ordered = sortFieldsForDisplay(importCompareRow.importFields || []);
+    const existingByColumn = new Map(
+      (importCompareRow.existingFields || [])
+        .filter((field) => field?.columnName)
+        .map((field) => [field.columnName.toLowerCase(), field])
+    );
+    return ordered.map((field) => {
+      const columnKey = field.columnName || field.fieldName;
+      const lookupKey = columnKey ? columnKey.toLowerCase() : '';
+      return {
+        columnName: columnKey,
+        label: getExcelAwareLabel(field.fieldName || field.columnName),
+        importValue: field.value,
+        existingValue: existingByColumn.get(lookupKey)?.value ?? null
+      };
+    });
+  }, [importCompareRow, sortFieldsForDisplay]);
+
   const shouldUseTextarea = (fieldName) => {
     if (!fieldName) return false;
     return (
@@ -1224,9 +1643,39 @@ export default function BuildingsPage() {
               </button>
             )}
             {isAdmin && (
-              <button type="button" className="ghost" onClick={handleExport} disabled={exporting}>
-                {exporting ? 'מייצא...' : 'יצוא לאקסל'}
-              </button>
+              <>
+                {!exportMode && (
+                  <button type="button" className="ghost" onClick={handleExportAction} disabled={exporting}>
+                    {exporting ? 'מייצא...' : 'יצוא לאקסל'}
+                  </button>
+                )}
+                {exportMode && (
+                  <>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => handleExportSelected(false)}
+                      disabled={exporting}
+                    >
+                      {exporting ? 'מייצא...' : 'יצוא ללא תמונות (Excel)'}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => handleExportSelected(true)}
+                      disabled={exporting}
+                    >
+                      {exporting ? 'מייצא...' : 'יצוא עם תמונות (ZIP)'}
+                    </button>
+                    <button type="button" className="ghost" onClick={handleCancelExportMode} disabled={exporting}>
+                      ביטול יצוא
+                    </button>
+                  </>
+                )}
+                <button type="button" className="ghost" onClick={openImportModal} disabled={importBusy}>
+                  {importBusy ? 'מייבא...' : 'יבוא קובץ'}
+                </button>
+              </>
             )}
           </div>
         </form>
@@ -1240,12 +1689,25 @@ export default function BuildingsPage() {
       <section className="content-layout">
         <div className="list-panel full-span">
           <div className="panel-header">
-            <h2>תוצאות ({buildings.length})</h2>
+            <div>
+              <h2>תוצאות ({buildings.length})</h2>
+              {exportMode && <p className="muted">נבחרו {exportSelection.size} מבנים לייצוא</p>}
+            </div>
           </div>
           <div className="table-wrapper">
             <table>
               <thead>
                 <tr>
+                  {exportMode && (
+                    <th>
+                      <input
+                        type="checkbox"
+                        aria-label="בחר הכל"
+                        checked={allSelected}
+                        onChange={handleToggleExportAll}
+                      />
+                    </th>
+                  )}
                   <th aria-sort={getAriaSort('street')}>
                     <button type="button" className="sort-button" onClick={() => handleSortClick('street')}>
                       שם רחוב
@@ -1354,18 +1816,30 @@ export default function BuildingsPage() {
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
                   const sivugLabel = getSivugLabel(building.bldSivug);
                   const ownershipLabel = getOwnershipLabel(building.sugBaalut);
+                  const isSelected = exportSelection.has(building.id);
                   return (
                     <Fragment key={building.id}>
                       <tr
-                        className={isActive ? 'active' : ''}
+                        className={`${isActive ? 'active' : ''}${isSelected ? ' selected-row' : ''}`}
                         onClick={() => {
-                          if (isActive) {
-                            handleCloseModal();
-                            return;
+                          if (exportMode) {
+                            handleToggleExportBuilding(building.id);
+                          } else {
+                            openBuildingModal(building.id, 'view');
                           }
-                          openBuildingModal(building.id, 'view');
                         }}
+                        onDoubleClick={() => openBuildingModal(building.id, 'view')}
                       >
+                        {exportMode && (
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleExportBuilding(building.id)}
+                              onClick={(event) => event.stopPropagation()}
+                            />
+                          </td>
+                        )}
                         <td>{building.street}</td>
                         <td>{building.houseNumber}</td>
                         <td>{building.nickname || '—'}</td>
@@ -1436,7 +1910,7 @@ export default function BuildingsPage() {
                 })}
                 {buildings.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="12" className="muted">
+                    <td colSpan={exportMode ? 13 : 12} className="muted">
                       אין מבנים שעונים על הסינון.
                     </td>
                   </tr>
@@ -1447,6 +1921,329 @@ export default function BuildingsPage() {
         </div>
 
       </section>
+      {showImportModal && (
+        <div className="modal-overlay" onClick={closeImportModal}>
+          <div className="modal-window modal-large" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>יבוא מבנים</h3>
+              <button type="button" className="modal-close" onClick={closeImportModal}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="import-controls">
+                <input
+                  type="file"
+                  accept=".xlsx,.zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip"
+                  onChange={handleImportFileChange}
+                  disabled={importBusy}
+                />
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={handlePreviewImport}
+                  disabled={importPreviewing || !importFile}
+                >
+                  {importPreviewing ? 'טוען…' : 'טעינת קובץ'}
+                </button>
+              </div>
+              {importSummary && <p className="muted">{importSummary}</p>}
+              {importError && <p className="error">{importError}</p>}
+
+              {importRows.length > 0 && (
+                <>
+                  <div className="import-summary">
+                    <span className="muted">
+                      להוספה: {importStats.create} | להחלפה: {importStats.replace} | דילוג: {importStats.skip}
+                    </span>
+                  </div>
+                  <div className="table-wrapper">
+                    <table className="import-table">
+                      <thead>
+                        <tr>
+                          <th>שורה</th>
+                          <th>ID</th>
+                          <th>שם רחוב</th>
+                          <th>מספר בית</th>
+                          <th>כינוי הבניין</th>
+                          <th>סטטוס</th>
+                          <th>פעולה</th>
+                          <th>השוואה</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRows.map((row) => {
+                          const missingLabels = (row.missingRequired || [])
+                            .map((column) => getImportRequiredLabel(column))
+                            .join(', ');
+                          const flags = [];
+                          if (row.hasAddressDuplicate) flags.push('כפילות כתובת');
+                          if (row.hasIdConflict) flags.push('כפילות ID');
+                          if (missingLabels) flags.push(`חסרים שדות: ${missingLabels}`);
+                          if (row.warnings?.length) flags.push(`אזהרות: ${row.warnings.join(', ')}`);
+                          const statusText = flags.length > 0 ? flags.join(' | ') : '—';
+                          const rowStreetName =
+                            row.values?.StreetName ||
+                            streets.find((street) => String(street.streetId) === String(row.values?.StreetId))
+                              ?.name ||
+                            '';
+                          const canReplace = Boolean(row.existingId || row.existingIdById);
+                          return (
+                            <tr
+                              key={row.rowNumber}
+                              className={`import-row import-row--${row.action || 'skip'}`}
+                              onClick={() => setImportCompareRowId(row.rowNumber)}
+                            >
+                              <td>{row.rowNumber}</td>
+                              <td>{displayOrDash(row.values?.Id)}</td>
+                              <td>{displayOrDash(rowStreetName)}</td>
+                              <td>{displayOrDash(row.values?.BldNum)}</td>
+                              <td>{displayOrDash(row.values?.BldName)}</td>
+                              <td>{statusText}</td>
+                              <td>
+                                <select
+                                  value={row.action}
+                                  onChange={(event) =>
+                                    handleImportRowActionChange(row.rowNumber, event.target.value)
+                                  }
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <option value="create">הוסף</option>
+                                  <option value="replace" disabled={!canReplace}>
+                                    החלף
+                                  </option>
+                                  <option value="skip">דלג</option>
+                                </select>
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="ghost"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setImportCompareRowId(row.rowNumber);
+                                  }}
+                                >
+                                  השוואה
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <div className="footer-actions">
+                <button type="button" className="ghost" onClick={closeImportModal} disabled={importBusy}>
+                  סגירה
+                </button>
+                {importRows.length > 0 && (
+                  <>
+                    <button type="button" className="ghost" onClick={handleImportSkipAll} disabled={importBusy}>
+                      דלג הכל
+                    </button>
+                    <button type="button" className="ghost" onClick={handleImportReplaceAll} disabled={importBusy}>
+                      החלף הכל
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={handleImportApply}
+                      disabled={importApplying || importBusy || hasImportBlockingMissing}
+                    >
+                      {importApplying ? 'מייבא...' : 'בצע ייבוא'}
+                    </button>
+                  </>
+                )}
+              </div>
+              {hasImportBlockingMissing && (
+                <p className="error">יש שורות עם שדות חובה חסרים או לא תקינים.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {importCompareRow && (
+        <div className="modal-overlay" onClick={() => setImportCompareRowId(null)}>
+          <div className="modal-window modal-large" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>השוואת שורה {importCompareRow.rowNumber}</h3>
+              <button type="button" className="modal-close" onClick={() => setImportCompareRowId(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              {importCompareRow.warnings?.length > 0 && (
+                <p className="muted">אזהרות: {importCompareRow.warnings.join(', ')}</p>
+              )}
+              {(importCompareRow.missingRequired?.length ?? 0) > 0 && (
+                <p className="error">
+                  חסרים שדות חובה:{' '}
+                  {importCompareRow.missingRequired.map((column) => getImportRequiredLabel(column)).join(', ')}
+                </p>
+              )}
+              <div className="import-compare-controls">
+                <label>
+                  פעולה
+                  <select
+                    value={importCompareRow.action}
+                    onChange={(event) =>
+                      handleImportRowActionChange(importCompareRow.rowNumber, event.target.value)
+                    }
+                  >
+                    <option value="create">הוסף</option>
+                    <option value="replace" disabled={!importCompareRow.existingId && !importCompareRow.existingIdById}>
+                      החלף
+                    </option>
+                    <option value="skip">דלג</option>
+                  </select>
+                </label>
+                <label>
+                  מצב ID
+                  <select
+                    value={importCompareRow.idMode}
+                    onChange={(event) =>
+                      handleImportIdModeChange(importCompareRow.rowNumber, event.target.value)
+                    }
+                  >
+                    <option value="auto">אוטומטי</option>
+                    <option value="manual">ידני</option>
+                  </select>
+                </label>
+                {importCompareRow.idMode === 'manual' && (
+                  <label>
+                    ID ידני
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={importCompareRow.overrideId || ''}
+                      onChange={(event) =>
+                        handleImportOverrideIdChange(importCompareRow.rowNumber, event.target.value)
+                      }
+                    />
+                  </label>
+                )}
+              </div>
+
+              {(importCompareRow.missingRequired?.length ?? 0) > 0 && (
+                <div className="import-missing-fields">
+                  {importCompareRow.missingRequired.map((column) => {
+                    const currentValue = importCompareRow.values?.[column] ?? '';
+                    const label = getImportRequiredLabel(column);
+                    if (column === 'StreetId') {
+                      return (
+                        <label key={column}>
+                          {label}
+                          <select
+                            value={currentValue}
+                            onChange={(event) =>
+                              handleImportValueChange(importCompareRow.rowNumber, column, event.target.value)
+                            }
+                          >
+                            <option value="">בחר רחוב</option>
+                            {streets.map((street) => (
+                              <option key={street.streetId} value={street.streetId}>
+                                {street.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      );
+                    }
+                    if (column === 'BldSivug') {
+                      return (
+                        <label key={column}>
+                          {label}
+                          <select
+                            value={currentValue}
+                            onChange={(event) =>
+                              handleImportValueChange(importCompareRow.rowNumber, column, event.target.value)
+                            }
+                          >
+                            <option value="">—</option>
+                            {sivugOptions.map((opt) => (
+                              <option key={opt.value} value={opt.label}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      );
+                    }
+                    if (column === 'ShikumStatus') {
+                      return (
+                        <label key={column}>
+                          {label}
+                          <select
+                            value={currentValue}
+                            onChange={(event) =>
+                              handleImportValueChange(importCompareRow.rowNumber, column, event.target.value)
+                            }
+                          >
+                            <option value="">—</option>
+                            {statuses.map((opt) => (
+                              <option key={opt.id} value={opt.label}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      );
+                    }
+                    return (
+                      <label key={column}>
+                        {label}
+                        <input
+                          type={column === 'Id' ? 'number' : 'text'}
+                          min={column === 'Id' ? 1 : undefined}
+                          step={column === 'Id' ? 1 : undefined}
+                          value={currentValue}
+                          onChange={(event) =>
+                            handleImportValueChange(importCompareRow.rowNumber, column, event.target.value)
+                          }
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="table-wrapper">
+                <table className="import-compare-table">
+                  <thead>
+                    <tr>
+                      <th>שדה</th>
+                      <th>מיובא</th>
+                      <th>קיים במערכת</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importCompareFields.map((row) => (
+                      <tr key={row.columnName}>
+                        <td>{row.label}</td>
+                        <td>{renderImportValue(row.importValue)}</td>
+                        <td>{renderImportValue(row.existingValue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <div className="footer-actions">
+                <button type="button" className="ghost" onClick={() => setImportCompareRowId(null)}>
+                  סגירה
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <BuildingModal
         visible={showModal}
         mode={modalMode}

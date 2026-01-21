@@ -1,10 +1,12 @@
 using System.Globalization;
+using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Xml.Linq;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
@@ -23,6 +25,7 @@ public class BuildingsController : ApiControllerBase
 {
     private const int NoStreetId = -1;
     private const string NoStreetName = "ללא שם רחוב";
+    private const int MaxPhotoSizeBytes = 5 * 1024 * 1024;
 
     private readonly AppDbContext _context;
     private readonly IExternalDataService _externalDataService;
@@ -148,7 +151,6 @@ public class BuildingsController : ApiControllerBase
             .Take(filter.PageSize)
             .Select(b => new BuildingSummaryDto(
                 b.Id,
-                b.FldId,
                 b.StreetCode,
                 b.BuildingName,
                 b.Street != null ? b.Street.Name : b.StreetName,
@@ -213,7 +215,6 @@ public class BuildingsController : ApiControllerBase
         var detail = new BuildingDetailDto(
             new BuildingSummaryDto(
                 building.Id,
-                building.FldId,
                 building.StreetCode,
                 building.BuildingName,
                 building.Street?.Name ?? building.StreetName,
@@ -331,6 +332,7 @@ public class BuildingsController : ApiControllerBase
     [Authorize(Policy = "Admin")]
     public async Task<IActionResult> ExportBuildings(
         [FromQuery] BuildingFilterParameters filter,
+        [FromQuery] bool includeImages,
         CancellationToken cancellationToken)
     {
         var query = _context.Buildings.AsNoTracking().AsQueryable();
@@ -432,7 +434,12 @@ public class BuildingsController : ApiControllerBase
             .ThenBy(b => b.HouseNumber)
             .ToListAsync(cancellationToken);
 
-        var fieldDefinitions = BuildFieldsSnapshot(buildings.FirstOrDefault() ?? new Building());
+        return BuildBuildingsExport(buildings, includeImages);
+    }
+
+    private IActionResult BuildBuildingsExport(IReadOnlyList<Building> buildings, bool includeImages)
+    {
+        var fieldDefinitions = BuildFieldsSnapshot(buildings.FirstOrDefault() ?? new Building(), includePhotos: false);
         var groupedFields = OrderFieldGroupsForExport(fieldDefinitions);
         var orderedFields = groupedFields.SelectMany(group => group.Fields).ToList();
 
@@ -466,7 +473,7 @@ public class BuildingsController : ApiControllerBase
         for (var i = 0; i < buildings.Count; i++)
         {
             var building = buildings[i];
-            var snapshot = BuildFieldsSnapshot(building);
+            var snapshot = BuildFieldsSnapshot(building, includePhotos: false);
             var valuesByColumn = snapshot
                 .Where(field => !string.IsNullOrWhiteSpace(field.ColumnName))
                 .ToDictionary(
@@ -484,16 +491,708 @@ public class BuildingsController : ApiControllerBase
         }
 
         worksheet.Columns().AdjustToContents();
+        using var excelStream = new MemoryStream();
+        workbook.SaveAs(excelStream);
+        excelStream.Position = 0;
 
-        using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        stream.Position = 0;
+        if (!includeImages)
+        {
+            var fileName = $"buildings-{DateTimeOffset.UtcNow:yyyy-MM-dd}.xlsx";
+            return File(
+                excelStream.ToArray(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                fileName);
+        }
 
-        var fileName = $"buildings-{DateTimeOffset.UtcNow:yyyy-MM-dd}.xlsx";
-        return File(
-            stream.ToArray(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            fileName);
+        using var zipStream = new MemoryStream();
+        using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var excelEntry = archive.CreateEntry("buildings.xlsx", CompressionLevel.Optimal);
+            using (var entryStream = excelEntry.Open())
+            {
+                excelStream.Position = 0;
+                excelStream.CopyTo(entryStream);
+            }
+
+            foreach (var building in buildings)
+            {
+                var photo = ParsePhotoUrls(building.PhotoUrls).FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(photo))
+                {
+                    continue;
+                }
+
+                if (!TryDecodeImageDataUrl(photo, out var bytes, out var extension))
+                {
+                    continue;
+                }
+
+                if (bytes.Length > MaxPhotoSizeBytes)
+                {
+                    continue;
+                }
+
+                var imageEntry = archive.CreateEntry($"images/{building.Id}.{extension}", CompressionLevel.Optimal);
+                using var imageStream = imageEntry.Open();
+                imageStream.Write(bytes, 0, bytes.Length);
+            }
+        }
+
+        var zipName = $"buildings-{DateTimeOffset.UtcNow:yyyy-MM-dd}.zip";
+        return File(zipStream.ToArray(), "application/zip", zipName);
+    }
+
+    public sealed record ExportSelectionRequest(List<int> Ids);
+
+    [HttpPost("export")]
+    [Authorize(Policy = "Admin")]
+    public async Task<IActionResult> ExportBuildingsSelection(
+        [FromBody] ExportSelectionRequest request,
+        [FromQuery] bool includeImages,
+        CancellationToken cancellationToken)
+    {
+        if (request?.Ids is null || request.Ids.Count == 0)
+        {
+            return BuildBuildingsExport(Array.Empty<Building>(), includeImages);
+        }
+
+        var buildings = await _context.Buildings
+            .AsNoTracking()
+            .Where(b => request.Ids.Contains(b.Id))
+            .OrderBy(b => b.StreetName)
+            .ThenBy(b => b.HouseNumber)
+            .ToListAsync(cancellationToken);
+
+        return BuildBuildingsExport(buildings, includeImages);
+    }
+
+    public sealed class BuildingsImportRequest
+    {
+        public IFormFile? File { get; set; }
+        public bool AllowUpdates { get; set; }
+        public bool SkipDuplicates { get; set; }
+    }
+
+    public sealed class ImportPreviewRequest
+    {
+        public IFormFile? File { get; set; }
+    }
+
+    public sealed record ImportPreviewRow(
+        int RowNumber,
+        Dictionary<string, string?> Values,
+        int? ExistingId,
+        int? ExistingIdById,
+        bool HasAddressDuplicate,
+        bool HasIdConflict,
+        List<string> MissingRequired,
+        List<string> Warnings,
+        List<BuildingFieldDto> ImportFields,
+        List<BuildingFieldDto>? ExistingFields);
+
+    public sealed record ImportPreviewResponse(List<ImportPreviewRow> Rows);
+
+    public sealed record ImportApplyRequest(List<ImportApplyRow> Rows);
+
+    public sealed record ImportApplyRow(
+        int RowNumber,
+        string Action,
+        Dictionary<string, string?> Values,
+        int? ExistingId,
+        string? IdMode,
+        int? OverrideId);
+
+    private sealed record ImportDuplicateInfo(int RowNumber, int StreetId, string HouseNumber, int ExistingId);
+    private sealed record ImportApplyResult(string? Error, List<FieldChange> Changes);
+    private sealed record ImportRowData(int RowNumber, Dictionary<string, string?> Values, List<string> Warnings);
+    private sealed record ImportPackage(
+        Stream ExcelStream,
+        Dictionary<int, string> ImagesById,
+        Dictionary<int, string> ImageWarningsById);
+
+    [HttpPost("import")]
+    [Authorize(Policy = "Admin")]
+    public async Task<IActionResult> ImportBuildings(
+        [FromForm] BuildingsImportRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File == null || request.File.Length == 0)
+        {
+            return BadRequest("Import file is required.");
+        }
+
+        ImportPackage package;
+        try
+        {
+            package = await ReadImportPackageAsync(request.File, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        using var stream = package.ExcelStream;
+        using var workbook = new XLWorkbook(stream);
+        var worksheet = workbook.Worksheets.FirstOrDefault();
+        if (worksheet == null)
+        {
+            return BadRequest("Excel worksheet not found.");
+        }
+
+        var fieldDefinitions = BuildFieldsSnapshot(new Building(), includePhotos: true);
+        var labelToColumn = fieldDefinitions
+            .ToDictionary(
+                field => GetExcelAwareLabel(field.FieldName),
+                field => field.ColumnName,
+                StringComparer.Ordinal);
+
+        var headerRow = worksheet.Row(2);
+        var lastHeaderCell = headerRow.LastCellUsed();
+        if (lastHeaderCell == null)
+        {
+            return BadRequest("Excel header row not found.");
+        }
+
+        var headerMap = new Dictionary<int, string>();
+        var lastHeaderColumn = lastHeaderCell.Address.ColumnNumber;
+        for (var col = 1; col <= lastHeaderColumn; col++)
+        {
+            var header = headerRow.Cell(col).GetString().Trim();
+            if (string.IsNullOrWhiteSpace(header))
+            {
+                continue;
+            }
+
+            if (labelToColumn.TryGetValue(header, out var columnName))
+            {
+                headerMap[col] = columnName;
+            }
+        }
+
+        if (headerMap.Count == 0)
+        {
+            return BadRequest("Excel headers do not match the export format.");
+        }
+
+        var importRows = new List<(int RowNumber, Dictionary<string, string?> Values, int StreetId, string HouseNumber)>();
+
+        var importData = ReadImportRows(worksheet, headerMap, package.ImagesById, package.ImageWarningsById);
+
+        foreach (var row in importData)
+        {
+            var values = row.Values;
+
+            values.TryGetValue("StreetId", out var streetIdRaw);
+            if (string.IsNullOrWhiteSpace(streetIdRaw) ||
+                !int.TryParse(streetIdRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out var streetId))
+            {
+                return BadRequest($"Row {row.RowNumber}: StreetId is required and must be a number.");
+            }
+
+            values.TryGetValue("BldNum", out var houseNumberRaw);
+            var houseNumber = houseNumberRaw?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(houseNumber))
+            {
+                return BadRequest($"Row {row.RowNumber}: House number is required.");
+            }
+
+            importRows.Add((row.RowNumber, values, streetId, houseNumber));
+        }
+
+        if (importRows.Count == 0)
+        {
+            return BadRequest("No data rows found.");
+        }
+
+        var propertyByColumn = typeof(Building)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.CanWrite)
+            .Select(p => new
+            {
+                Property = p,
+                Column = p.GetCustomAttribute<ColumnAttribute>()
+            })
+            .Where(x => x.Column is not null)
+            .ToDictionary(
+                x => string.IsNullOrWhiteSpace(x.Column!.Name) ? x.Property.Name : x.Column!.Name!,
+                x => x.Property,
+                StringComparer.OrdinalIgnoreCase);
+
+        var duplicateRows = new List<ImportDuplicateInfo>();
+        var existingByKey = new Dictionary<(int StreetId, string HouseNumber), Building>();
+
+        foreach (var row in importRows)
+        {
+            var key = (row.StreetId, row.HouseNumber);
+            if (!existingByKey.TryGetValue(key, out var existing))
+            {
+                existing = await _context.Buildings
+                    .Include(b => b.Street)
+                    .FirstOrDefaultAsync(
+                        b => b.StreetCode == row.StreetId && b.HouseNumber == row.HouseNumber,
+                        cancellationToken);
+                if (existing != null)
+                {
+                    existingByKey[key] = existing;
+                }
+            }
+
+            if (existing != null)
+            {
+                duplicateRows.Add(new ImportDuplicateInfo(row.RowNumber, row.StreetId, row.HouseNumber, existing.Id));
+            }
+        }
+
+        if (duplicateRows.Count > 0 && !request.AllowUpdates && !request.SkipDuplicates)
+        {
+            return Conflict(new
+            {
+                error = "נמצאה כפילות",
+                isDuplicate = true,
+                duplicates = duplicateRows.Select(d => new
+                {
+                    d.RowNumber,
+                    d.StreetId,
+                    d.HouseNumber,
+                    d.ExistingId
+                })
+            });
+        }
+
+        var createdCount = 0;
+        var updatedCount = 0;
+        var skippedCount = 0;
+        var importLogs = new List<(Building Building, List<FieldChange> Changes, bool IsCreate)>();
+        var actorId = await ResolveActorIdAsync(cancellationToken);
+
+        foreach (var row in importRows)
+        {
+            var key = (row.StreetId, row.HouseNumber);
+            if (existingByKey.TryGetValue(key, out var existing))
+            {
+                if (request.SkipDuplicates)
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var updateResult = await ApplyImportRow(existing, row.Values, row.StreetId, propertyByColumn, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(updateResult.Error))
+                {
+                    return BadRequest($"Row {row.RowNumber}: {updateResult.Error}");
+                }
+                importLogs.Add((existing, updateResult.Changes, false));
+                updatedCount++;
+                continue;
+            }
+
+            var building = new Building();
+            var createResult = await ApplyImportRow(building, row.Values, row.StreetId, propertyByColumn, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(createResult.Error))
+            {
+                return BadRequest($"Row {row.RowNumber}: {createResult.Error}");
+            }
+            _context.Buildings.Add(building);
+            importLogs.Add((building, BuildCreateChanges(building).ToList(), true));
+            createdCount++;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        foreach (var (building, changes, isCreate) in importLogs)
+        {
+            var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
+            var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
+
+            _context.BuildingLogs.Add(new BuildingLog
+            {
+                BuildingId = building.Id,
+                Title = isCreate ? "יצירת מבנה (ייבוא)" : "עדכון מבנה (ייבוא)",
+                Message = JsonSerializer.Serialize(new
+                {
+                    building.Id,
+                    building.StreetCode,
+                    building.BuildingName,
+                    building.StreetName,
+                    building.HouseNumber,
+                    building.Neighborhood,
+                    building.BldSivug,
+                    building.ShikumStatus,
+                    building.StatusSummary,
+                    building.StatusSummaryUpdatedAt,
+                    Changes = changes,
+                    Fields = fieldsSnapshot,
+                    ExternalData = externalData
+                }),
+                Category = isCreate ? "Create" : "Edit",
+                Severity = "info",
+                CreatedByUserId = actorId,
+                CreatedAt = IsraelTime.NowUtc
+            });
+
+            await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Import", changes, cancellationToken);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await UpdateBuildingIdSequenceAsync(cancellationToken);
+
+        return Ok(new
+        {
+            created = createdCount,
+            updated = updatedCount,
+            skipped = skippedCount
+        });
+    }
+
+    [HttpPost("import/preview")]
+    [Authorize(Policy = "Admin")]
+    public async Task<ActionResult<ImportPreviewResponse>> ImportBuildingsPreview(
+        [FromForm] ImportPreviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File == null || request.File.Length == 0)
+        {
+            return BadRequest("Import file is required.");
+        }
+
+        ImportPackage package;
+        try
+        {
+            package = await ReadImportPackageAsync(request.File, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        using var stream = package.ExcelStream;
+        using var workbook = new XLWorkbook(stream);
+        var worksheet = workbook.Worksheets.FirstOrDefault();
+        if (worksheet == null)
+        {
+            return BadRequest("Excel worksheet not found.");
+        }
+
+        var fieldDefinitions = BuildFieldsSnapshot(new Building(), includePhotos: true);
+        var labelToColumn = fieldDefinitions
+            .ToDictionary(
+                field => GetExcelAwareLabel(field.FieldName),
+                field => field.ColumnName,
+                StringComparer.Ordinal);
+
+        var headerMap = BuildImportHeaderMap(worksheet, labelToColumn);
+        if (headerMap.Count == 0)
+        {
+            return BadRequest("Excel headers do not match the export format.");
+        }
+
+        var importRows = ReadImportRows(worksheet, headerMap, package.ImagesById, package.ImageWarningsById);
+        if (importRows.Count == 0)
+        {
+            return BadRequest("No data rows found.");
+        }
+
+        var rehabSivugValue = ResolveRehabSivugValue();
+
+        var requestedIds = importRows
+            .Select(row => TryParsePositiveInt(row.Values.TryGetValue("Id", out var raw) ? raw : null))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        var existingById = requestedIds.Count == 0
+            ? new Dictionary<int, Building>()
+            : await _context.Buildings
+                .Include(b => b.Street)
+                .Where(b => requestedIds.Contains(b.Id))
+                .ToDictionaryAsync(b => b.Id, cancellationToken);
+
+        var previewRows = new List<ImportPreviewRow>();
+
+        foreach (var row in importRows)
+        {
+            var warnings = new List<string>(row.Warnings);
+            var values = NormalizeImportValues(row.Values);
+            var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings);
+
+            var idValue = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
+            var streetId = TryParseStreetId(values.TryGetValue("StreetId", out var streetRaw) ? streetRaw : null);
+            var houseNumber = values.TryGetValue("BldNum", out var houseRaw) ? houseRaw?.Trim() ?? string.Empty : string.Empty;
+
+            Building? existingByAddress = null;
+            if (streetId.HasValue && !string.IsNullOrWhiteSpace(houseNumber))
+            {
+                existingByAddress = await _context.Buildings
+                    .Include(b => b.Street)
+                    .FirstOrDefaultAsync(
+                        b => b.StreetCode == streetId.Value && b.HouseNumber == houseNumber,
+                        cancellationToken);
+            }
+
+            Building? existingIdMatch = null;
+            if (idValue.HasValue)
+            {
+                existingById.TryGetValue(idValue.Value, out existingIdMatch);
+            }
+            var hasIdConflict = existingIdMatch != null &&
+                (existingByAddress == null || existingByAddress.Id != existingIdMatch.Id);
+
+            var importFields = BuildImportFields(fieldDefinitions, values);
+            var existingForCompare = existingByAddress ?? existingIdMatch;
+            var existingFields = existingForCompare != null
+                ? AlignFieldsToDefinitions(
+                    fieldDefinitions,
+                    BuildFieldsSnapshot(existingForCompare, includePhotos: true))
+                : null;
+
+            previewRows.Add(new ImportPreviewRow(
+                row.RowNumber,
+                values,
+                existingByAddress?.Id,
+                existingIdMatch?.Id,
+                existingByAddress != null,
+                hasIdConflict,
+                missingRequired,
+                warnings,
+                importFields,
+                existingFields));
+        }
+
+        return Ok(new ImportPreviewResponse(previewRows));
+    }
+
+    [HttpPost("import/apply")]
+    [Authorize(Policy = "Admin")]
+    public async Task<IActionResult> ImportBuildingsApply(
+        [FromBody] ImportApplyRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Rows is null || request.Rows.Count == 0)
+        {
+            return BadRequest("No import rows supplied.");
+        }
+
+        var propertyByColumn = typeof(Building)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.CanWrite)
+            .Select(p => new
+            {
+                Property = p,
+                Column = p.GetCustomAttribute<ColumnAttribute>()
+            })
+            .Where(x => x.Column is not null)
+            .ToDictionary(
+                x => string.IsNullOrWhiteSpace(x.Column!.Name) ? x.Property.Name : x.Column!.Name!,
+                x => x.Property,
+                StringComparer.OrdinalIgnoreCase);
+
+        var rehabSivugValue = ResolveRehabSivugValue();
+        var createdCount = 0;
+        var updatedCount = 0;
+        var skippedCount = 0;
+        var importLogs = new List<(Building Building, List<FieldChange> Changes, bool IsCreate)>();
+        var actorId = await ResolveActorIdAsync(cancellationToken);
+
+        foreach (var row in request.Rows)
+        {
+            var action = row.Action?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(action))
+            {
+                return BadRequest($"Row {row.RowNumber}: Action is required.");
+            }
+
+            if (action == "skip")
+            {
+                skippedCount++;
+                continue;
+            }
+
+            if (action != "create" && action != "replace")
+            {
+                return BadRequest($"Row {row.RowNumber}: Unsupported action '{row.Action}'.");
+            }
+
+            var values = NormalizeImportValues(row.Values ?? new Dictionary<string, string?>());
+            var warnings = new List<string>();
+            var idMode = row.IdMode?.Trim().ToLowerInvariant();
+            var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings);
+            if (idMode != "manual")
+            {
+                missingRequired.RemoveAll(column =>
+                    string.Equals(column, "Id", StringComparison.OrdinalIgnoreCase));
+            }
+            if (missingRequired.Count > 0)
+            {
+                return BadRequest($"Row {row.RowNumber}: Missing required fields.");
+            }
+
+            var streetId = TryParseStreetId(values.TryGetValue("StreetId", out var streetRaw) ? streetRaw : null);
+            if (!streetId.HasValue)
+            {
+                return BadRequest($"Row {row.RowNumber}: StreetId is required and must be a number.");
+            }
+
+            var houseNumber = values.TryGetValue("BldNum", out var houseRaw) ? houseRaw?.Trim() ?? string.Empty : string.Empty;
+            if (string.IsNullOrWhiteSpace(houseNumber))
+            {
+                return BadRequest($"Row {row.RowNumber}: House number is required.");
+            }
+
+            var existingByAddress = await _context.Buildings
+                .Include(b => b.Street)
+                .FirstOrDefaultAsync(
+                    b => b.StreetCode == streetId.Value && b.HouseNumber == houseNumber,
+                    cancellationToken);
+
+            var manualId = row.OverrideId.HasValue
+                ? row.OverrideId
+                : TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
+
+            if (action == "create")
+            {
+                if (existingByAddress != null)
+                {
+                    return Conflict(new { error = "נמצאה כפילות", row.RowNumber, existingByAddress.Id });
+                }
+
+                int? desiredId = null;
+                if (idMode != "auto")
+                {
+                    if (!manualId.HasValue)
+                    {
+                        return BadRequest($"Row {row.RowNumber}: ID is required.");
+                    }
+
+                    desiredId = manualId.Value;
+                }
+
+                if (desiredId.HasValue)
+                {
+                    var idExists = await _context.Buildings.AnyAsync(
+                        b => b.Id == desiredId.Value,
+                        cancellationToken);
+                    if (idExists)
+                    {
+                        return Conflict(new { error = "קיים מבנה עם ID זה", row.RowNumber, isIdDuplicate = true });
+                    }
+                }
+
+                var building = new Building();
+                if (desiredId.HasValue)
+                {
+                    building.Id = desiredId.Value;
+                }
+
+                var createResult = await ApplyImportRow(building, values, streetId.Value, propertyByColumn, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(createResult.Error))
+                {
+                    return BadRequest($"Row {row.RowNumber}: {createResult.Error}");
+                }
+
+                _context.Buildings.Add(building);
+                importLogs.Add((building, BuildCreateChanges(building).ToList(), true));
+                createdCount++;
+            }
+            else
+            {
+                var existingId = row.ExistingId ?? existingByAddress?.Id;
+                if (!existingId.HasValue)
+                {
+                    return BadRequest($"Row {row.RowNumber}: Existing building not found for replace.");
+                }
+
+                var building = await _context.Buildings.FirstOrDefaultAsync(
+                    b => b.Id == existingId.Value,
+                    cancellationToken);
+                if (building == null)
+                {
+                    return BadRequest($"Row {row.RowNumber}: Existing building not found.");
+                }
+
+                var updateResult = await ApplyImportRow(building, values, streetId.Value, propertyByColumn, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(updateResult.Error))
+                {
+                    return BadRequest($"Row {row.RowNumber}: {updateResult.Error}");
+                }
+
+                var changes = updateResult.Changes;
+                if (idMode == "manual" && manualId.HasValue && manualId.Value != building.Id)
+                {
+                    var idExists = await _context.Buildings.AnyAsync(
+                        b => b.Id == manualId.Value && b.Id != building.Id,
+                        cancellationToken);
+                    if (idExists)
+                    {
+                        return Conflict(new { error = "קיים מבנה עם ID זה", row.RowNumber, isIdDuplicate = true });
+                    }
+
+                    var oldId = building.Id;
+                    building = await ReplaceBuildingIdAsync(building, manualId.Value, cancellationToken);
+                    var idProperty = typeof(Building).GetProperty(nameof(Building.Id));
+                    var idChange = BuildChange(idProperty, oldId, manualId.Value);
+                    if (idChange is not null)
+                    {
+                        changes.Add(idChange);
+                    }
+                }
+
+                importLogs.Add((building, changes, false));
+                updatedCount++;
+            }
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        foreach (var (building, changes, isCreate) in importLogs)
+        {
+            var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
+            var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
+
+            _context.BuildingLogs.Add(new BuildingLog
+            {
+                BuildingId = building.Id,
+                Title = isCreate ? "יצירת מבנה (ייבוא)" : "עדכון מבנה (ייבוא)",
+                Message = JsonSerializer.Serialize(new
+                {
+                    building.Id,
+                    building.StreetCode,
+                    building.BuildingName,
+                    building.StreetName,
+                    building.HouseNumber,
+                    building.Neighborhood,
+                    building.BldSivug,
+                    building.ShikumStatus,
+                    building.StatusSummary,
+                    building.StatusSummaryUpdatedAt,
+                    Changes = changes,
+                    Fields = fieldsSnapshot,
+                    ExternalData = externalData
+                }),
+                Category = isCreate ? "Create" : "Edit",
+                Severity = "info",
+                CreatedByUserId = actorId,
+                CreatedAt = IsraelTime.NowUtc
+            });
+
+            await _auditService.RecordAsync(
+                CurrentUserId,
+                nameof(Building),
+                building.Id.ToString(),
+                isCreate ? "ImportCreate" : "ImportUpdate",
+                changes,
+                cancellationToken);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await UpdateBuildingIdSequenceAsync(cancellationToken);
+
+        return Ok(new
+        {
+            created = createdCount,
+            updated = updatedCount,
+            skipped = skippedCount
+        });
     }
 
     [HttpPost]
@@ -506,9 +1205,17 @@ public class BuildingsController : ApiControllerBase
         }
 
         var houseNumber = request.HouseNumber?.Trim() ?? string.Empty;
+        if (request.Id > 0)
+        {
+            var idExists = await _context.Buildings.AnyAsync(b => b.Id == request.Id, cancellationToken);
+            if (idExists)
+            {
+                return Conflict(new { error = "קיים מבנה עם ID זה", isIdDuplicate = true });
+            }
+        }
+
         var building = new Building
         {
-            FldId = request.FldId,
             HouseNumber = houseNumber,
             BuildingName = request.BuildingName,
             Neighborhood = request.Neighborhood,
@@ -519,6 +1226,10 @@ public class BuildingsController : ApiControllerBase
             Complaints = request.Complaints ?? string.Empty,
             PhotoUrls = request.Photos is null ? string.Empty : string.Join(',', request.Photos)
         };
+        if (request.Id > 0)
+        {
+            building.Id = request.Id;
+        }
 
         if (request.StreetId == NoStreetId)
         {
@@ -555,13 +1266,12 @@ public class BuildingsController : ApiControllerBase
 
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
 
-        var fieldsSnapshot = BuildFieldsSnapshot(building);
+        var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
         var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
         var createChanges = BuildCreateChanges(building);
         var createSnapshot = new
         {
             building.Id,
-            building.FldId,
             building.StreetCode,
             building.BuildingName,
             building.StreetName,
@@ -587,11 +1297,11 @@ public class BuildingsController : ApiControllerBase
             CreatedAt = IsraelTime.NowUtc
         });
         await _context.SaveChangesAsync(cancellationToken);
+        await UpdateBuildingIdSequenceAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "Create", request, cancellationToken);
 
         return CreatedAtAction(nameof(GetBuilding), new { id = building.Id }, new BuildingSummaryDto(
             building.Id,
-            building.FldId,
             building.StreetCode,
             building.BuildingName,
             building.StreetName,
@@ -622,6 +1332,26 @@ public class BuildingsController : ApiControllerBase
             return NotFound();
         }
 
+        if (request.Id <= 0)
+        {
+            return BadRequest("ID is required.");
+        }
+
+        var originalId = building.Id;
+        int? pendingIdChange = null;
+        if (request.Id != building.Id)
+        {
+            var idExists = await _context.Buildings.AnyAsync(
+                b => b.Id == request.Id && b.Id != building.Id,
+                cancellationToken);
+            if (idExists)
+            {
+                return Conflict(new { error = "קיים מבנה עם ID זה", isIdDuplicate = true });
+            }
+
+            pendingIdChange = request.Id;
+        }
+
         var oldStreetName = building.StreetName;
         var oldHouseNumber = building.HouseNumber;
         var oldBuildingName = building.BuildingName;
@@ -630,7 +1360,6 @@ public class BuildingsController : ApiControllerBase
         var oldStatusSummary = building.StatusSummary;
         var oldStatusSummaryUpdatedAt = building.StatusSummaryUpdatedAt;
 
-        building.FldId = request.FldId;
         building.HouseNumber = request.HouseNumber;
         if (!string.IsNullOrWhiteSpace(request.BuildingName))
         {
@@ -668,12 +1397,36 @@ public class BuildingsController : ApiControllerBase
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var fieldsSnapshot = BuildFieldsSnapshot(building);
+        if (pendingIdChange.HasValue && pendingIdChange.Value != building.Id)
+        {
+            building = await ReplaceBuildingIdAsync(building, pendingIdChange.Value, cancellationToken);
+        }
+
+        var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
         var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
+        var changes = BuildCoreChanges(
+            oldStreetName,
+            oldHouseNumber,
+            oldBuildingName,
+            oldBldSivug,
+            oldShikumStatus,
+            oldStatusSummary,
+            oldStatusSummaryUpdatedAt,
+            building).ToList();
+
+        if (pendingIdChange.HasValue && pendingIdChange.Value != originalId)
+        {
+            var idProperty = typeof(Building).GetProperty(nameof(Building.Id));
+            var idChange = BuildChange(idProperty, originalId, pendingIdChange.Value);
+            if (idChange is not null)
+            {
+                changes.Add(idChange);
+            }
+        }
+
         var changeSnapshot = new
         {
             building.Id,
-            building.FldId,
             building.StreetCode,
             building.BuildingName,
             building.StreetName,
@@ -683,15 +1436,7 @@ public class BuildingsController : ApiControllerBase
             building.ShikumStatus,
             building.StatusSummary,
             building.StatusSummaryUpdatedAt,
-            Changes = BuildCoreChanges(
-                oldStreetName,
-                oldHouseNumber,
-                oldBuildingName,
-                oldBldSivug,
-                oldShikumStatus,
-                oldStatusSummary,
-                oldStatusSummaryUpdatedAt,
-                building),
+            Changes = changes,
             Fields = fieldsSnapshot,
             ExternalData = externalData
         };
@@ -734,6 +1479,7 @@ public class BuildingsController : ApiControllerBase
             return NotFound();
         }
 
+        var originalId = building.Id;
         var propertyByColumn = typeof(Building)
             .GetProperties(BindingFlags.Instance | BindingFlags.Public)
             .Where(p => p.CanWrite)
@@ -749,7 +1495,10 @@ public class BuildingsController : ApiControllerBase
                 StringComparer.OrdinalIgnoreCase);
 
         bool streetIdProvided = false;
+        bool houseNumberProvided = false;
         int? desiredStreetId = null;
+        bool idProvided = false;
+        int? desiredId = null;
 
         var originalStreetName = building.StreetName;
         var changes = new List<FieldChange>();
@@ -785,9 +1534,33 @@ public class BuildingsController : ApiControllerBase
                 continue;
             }
 
+            if (string.Equals(columnName, "Id", StringComparison.OrdinalIgnoreCase))
+            {
+                idProvided = true;
+                if (string.IsNullOrWhiteSpace(rawValue))
+                {
+                    desiredId = null;
+                }
+                else if (int.TryParse(rawValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedId))
+                {
+                    desiredId = parsedId;
+                }
+                else
+                {
+                    return BadRequest("ID must be an integer.");
+                }
+
+                continue;
+            }
+
             if (!propertyByColumn.TryGetValue(columnName, out var property))
             {
                 continue;
+            }
+
+            if (string.Equals(columnName, "BldNum", StringComparison.OrdinalIgnoreCase))
+            {
+                houseNumberProvided = true;
             }
 
             var oldValue = property.GetValue(building);
@@ -803,6 +1576,25 @@ public class BuildingsController : ApiControllerBase
                 changes.Add(change);
             }
             property.SetValue(building, converted);
+        }
+
+        if (idProvided)
+        {
+            if (!desiredId.HasValue || desiredId.Value <= 0)
+            {
+                return BadRequest("ID is required.");
+            }
+
+            if (desiredId.Value != building.Id)
+            {
+                var idExists = await _context.Buildings.AnyAsync(
+                    b => b.Id == desiredId.Value && b.Id != building.Id,
+                    cancellationToken);
+                if (idExists)
+                {
+                    return Conflict(new { error = "קיים מבנה עם ID זה", isIdDuplicate = true });
+                }
+            }
         }
 
         if (streetIdProvided)
@@ -832,7 +1624,7 @@ public class BuildingsController : ApiControllerBase
             }
         }
 
-        if (!request.AllowDuplicate)
+        if (!request.AllowDuplicate && (streetIdProvided || houseNumberProvided))
         {
             var effectiveStreetCode = building.StreetCode;
             var effectiveHouseNumber = (building.HouseNumber ?? string.Empty).Trim();
@@ -859,6 +1651,11 @@ public class BuildingsController : ApiControllerBase
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        if (idProvided && desiredId.HasValue && desiredId.Value != building.Id)
+        {
+            building = await ReplaceBuildingIdAsync(building, desiredId.Value, cancellationToken);
+        }
+
         if (!string.Equals(originalStreetName, building.StreetName, StringComparison.Ordinal))
         {
             var streetNameProperty = propertyByColumn.TryGetValue("StreetName", out var property)
@@ -874,7 +1671,17 @@ public class BuildingsController : ApiControllerBase
             }
         }
 
-        var fieldsSnapshot = BuildFieldsSnapshot(building);
+        if (idProvided && desiredId.HasValue && desiredId.Value != originalId)
+        {
+            var idProperty = typeof(Building).GetProperty(nameof(Building.Id));
+            var idChange = BuildChange(idProperty, originalId, desiredId.Value);
+            if (idChange is not null)
+            {
+                changes.Add(idChange);
+            }
+        }
+
+        var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
         var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
         _context.BuildingLogs.Add(new BuildingLog
@@ -884,7 +1691,6 @@ public class BuildingsController : ApiControllerBase
             Message = JsonSerializer.Serialize(new
             {
                 building.Id,
-                building.FldId,
                 building.StreetCode,
                 building.BuildingName,
                 building.StreetName,
@@ -906,14 +1712,14 @@ public class BuildingsController : ApiControllerBase
         await _context.SaveChangesAsync(cancellationToken);
         await _auditService.RecordAsync(CurrentUserId, nameof(Building), building.Id.ToString(), "UpdateFields", request, cancellationToken);
 
-        return await GetBuilding(id, cancellationToken);
+        return await GetBuilding(building.Id, cancellationToken);
     }
 
     private sealed record InvalidFieldValue(string Message);
 
     private sealed record FieldChange(string ColumnName, string FieldName, string? OldValue, string? NewValue);
 
-    private static IReadOnlyList<BuildingFieldDto> BuildFieldsSnapshot(Building building)
+    private static IReadOnlyList<BuildingFieldDto> BuildFieldsSnapshot(Building building, bool includePhotos = false)
     {
         return typeof(Building)
             .GetProperties(BindingFlags.Instance | BindingFlags.Public)
@@ -925,7 +1731,8 @@ public class BuildingsController : ApiControllerBase
                     return false;
                 }
 
-                if (p.Name is nameof(Building.Neighborhood) or nameof(Building.PhotoUrls))
+                if (p.Name is nameof(Building.Neighborhood) or nameof(Building.FldId) ||
+                    (!includePhotos && p.Name is nameof(Building.PhotoUrls)))
                 {
                     return false;
                 }
@@ -1090,9 +1897,12 @@ public class BuildingsController : ApiControllerBase
 
     private static int GetFieldPriority(string? fieldName)
     {
-        if (fieldName == "סיווג") return 0;
-        if (fieldName == "סטטוס שיקום") return 1;
-        return 2;
+        if (fieldName == "שם רחוב") return 0;
+        if (fieldName == "מספר בית") return 1;
+        if (fieldName == "כינוי הבניין") return 2;
+        if (fieldName == "סיווג") return 3;
+        if (fieldName == "סטטוס שיקום") return 4;
+        return 5;
     }
 
     private static IReadOnlyList<FieldChange> BuildCreateChanges(Building building)
@@ -1109,6 +1919,7 @@ public class BuildingsController : ApiControllerBase
             typeof(Building).GetProperty(nameof(Building.StatusSummaryUpdatedAt)),
             null,
             building.StatusSummaryUpdatedAt);
+        AddChangeIfSet(changes, typeof(Building).GetProperty(nameof(Building.PhotoUrls)), null, building.PhotoUrls);
         return changes;
     }
 
@@ -1208,7 +2019,8 @@ public class BuildingsController : ApiControllerBase
         if (property.Name == nameof(Building.PhotoUrls))
         {
             var raw = value as string;
-            return string.IsNullOrWhiteSpace(raw) ? null : "קיים";
+            var urls = ParsePhotoUrls(raw);
+            return urls.Length > 0 ? urls[0] : null;
         }
 
         var fieldSpec = property.GetCustomAttribute<FieldSpecAttribute>();
@@ -1401,6 +2213,105 @@ public class BuildingsController : ApiControllerBase
         return new InvalidFieldValue("unsupported field type.");
     }
 
+    private async Task<ImportApplyResult> ApplyImportRow(
+        Building building,
+        IReadOnlyDictionary<string, string?> values,
+        int streetId,
+        IReadOnlyDictionary<string, PropertyInfo> propertyByColumn,
+        CancellationToken cancellationToken)
+    {
+        var changes = new List<FieldChange>();
+        var originalStreetName = building.StreetName;
+
+        foreach (var (columnName, rawValue) in values)
+        {
+            if (string.IsNullOrWhiteSpace(columnName))
+            {
+                continue;
+            }
+
+            if (string.Equals(columnName, "StreetName", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(columnName, "StreetId", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(columnName, "Id", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!propertyByColumn.TryGetValue(columnName, out var property))
+            {
+                continue;
+            }
+
+            if (string.Equals(columnName, nameof(Building.PhotoUrls), StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(rawValue) &&
+                TryGetPhotoSizeBytes(rawValue, out var photoSizeBytes) &&
+                photoSizeBytes > MaxPhotoSizeBytes)
+            {
+                continue;
+            }
+
+            var oldValue = property.GetValue(building);
+            var converted = ConvertFieldValue(rawValue, property);
+            if (converted is InvalidFieldValue invalid)
+            {
+                return new ImportApplyResult($"Invalid value for '{columnName}': {invalid.Message}", changes);
+            }
+
+            var change = BuildChange(property, oldValue, converted);
+            if (change is not null)
+            {
+                changes.Add(change);
+            }
+            property.SetValue(building, converted);
+        }
+
+        if (streetId == NoStreetId)
+        {
+            building.StreetCode = NoStreetId;
+            building.StreetName = NoStreetName;
+        }
+        else
+        {
+            var street = await _context.Streets.FirstOrDefaultAsync(
+                s => s.StreetId == streetId,
+                cancellationToken);
+            if (street == null)
+            {
+                return new ImportApplyResult($"Street with id {streetId} not found.", changes);
+            }
+
+            building.StreetCode = street.StreetId;
+            building.StreetName = street.Name;
+        }
+
+        if (!string.Equals(originalStreetName, building.StreetName, StringComparison.Ordinal))
+        {
+            var streetNameProperty = typeof(Building).GetProperty(nameof(Building.StreetName));
+            if (streetNameProperty is not null)
+            {
+                var change = BuildChange(streetNameProperty, originalStreetName, building.StreetName);
+                if (change is not null)
+                {
+                    changes.Add(change);
+                }
+            }
+        }
+
+        building.HouseNumber = (building.HouseNumber ?? string.Empty).Trim();
+        building.BuildingName = (building.BuildingName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(building.BuildingName))
+        {
+            building.BuildingName = "מבנה";
+        }
+
+        if (!building.StatusSummaryUpdatedAt.HasValue)
+        {
+            building.StatusSummaryUpdatedAt = DateTime.UtcNow;
+        }
+
+        return new ImportApplyResult(null, changes);
+    }
+
     private async Task<Guid?> ResolveActorIdAsync(CancellationToken cancellationToken)
     {
         var actorId = CurrentUserId;
@@ -1414,6 +2325,76 @@ public class BuildingsController : ApiControllerBase
         }
 
         return actorId;
+    }
+
+    private async Task UpdateBuildingIdSequenceAsync(CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT setval(
+                pg_get_serial_sequence('"Buildings"', 'Id'),
+                COALESCE((SELECT MAX("Id") FROM "Buildings"), 1),
+                true
+            );
+            """;
+        await _context.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+    }
+
+    private static Building CloneBuildingForIdChange(Building source)
+    {
+        var clone = new Building();
+        foreach (var property in typeof(Building).GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (!property.CanRead || !property.CanWrite)
+            {
+                continue;
+            }
+
+            if (property.Name is nameof(Building.Id) or nameof(Building.ExternalSnapshots) or nameof(Building.Street))
+            {
+                continue;
+            }
+
+            property.SetValue(clone, property.GetValue(source));
+        }
+
+        return clone;
+    }
+
+    private async Task<Building> ReplaceBuildingIdAsync(
+        Building building,
+        int newId,
+        CancellationToken cancellationToken)
+    {
+        var oldId = building.Id;
+        var replacement = CloneBuildingForIdChange(building);
+        replacement.Id = newId;
+
+        _context.Buildings.Add(replacement);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _context.ExternalSystemSnapshots
+            .Where(snapshot => snapshot.BuildingId == oldId)
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(snapshot => snapshot.BuildingId, newId),
+                cancellationToken);
+
+        await _context.BuildingLogs
+            .Where(log => log.BuildingId == oldId)
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(log => log.BuildingId, newId),
+                cancellationToken);
+
+        await _context.AuditEntries
+            .Where(entry => entry.EntityType == nameof(Building) && entry.EntityId == oldId.ToString())
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(entry => entry.EntityId, newId.ToString()),
+                cancellationToken);
+
+        _context.Buildings.Remove(building);
+        await _context.SaveChangesAsync(cancellationToken);
+        await UpdateBuildingIdSequenceAsync(cancellationToken);
+
+        return replacement;
     }
 
     [HttpDelete("{id:int}")]
@@ -1438,12 +2419,11 @@ public class BuildingsController : ApiControllerBase
         }
 
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
-        var fieldsSnapshot = BuildFieldsSnapshot(building);
+        var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
         var externalData = await _externalDataService.GetBuildingDataAsync(id, cancellationToken);
         var deleteSnapshot = new
         {
             building.Id,
-            building.FldId,
             building.StreetCode,
             building.BuildingName,
             building.StreetName,
@@ -1509,7 +2489,6 @@ public class BuildingsController : ApiControllerBase
         var building = new Building
         {
             Id = buildingId,
-            FldId = snapshot.FldId,
             BuildingName = snapshot.BuildingName ?? string.Empty,
             StreetName = snapshot.StreetName ?? string.Empty,
             HouseNumber = snapshot.HouseNumber ?? string.Empty,
@@ -1614,7 +2593,7 @@ public class BuildingsController : ApiControllerBase
         await _context.SaveChangesAsync(cancellationToken);
 
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
-        var restoredFields = BuildFieldsSnapshot(building);
+        var restoredFields = BuildFieldsSnapshot(building, includePhotos: true);
         BuildingExternalDataDto externalData;
         try
         {
@@ -1633,7 +2612,6 @@ public class BuildingsController : ApiControllerBase
         var restoreSnapshot = new
         {
             building.Id,
-            building.FldId,
             building.StreetCode,
             building.BuildingName,
             building.StreetName,
@@ -1675,7 +2653,6 @@ public class BuildingsController : ApiControllerBase
 
         return new BuildingSummaryDto(
             building.Id,
-            building.FldId,
             building.StreetCode,
             building.BuildingName,
             building.StreetName,
@@ -1799,6 +2776,126 @@ public class BuildingsController : ApiControllerBase
         return trimmed.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
     }
 
+    private static bool TryDecodeImageDataUrl(string raw, out byte[] bytes, out string extension)
+    {
+        bytes = Array.Empty<byte>();
+        extension = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        var trimmed = raw.Trim();
+        if (!trimmed.StartsWith("data:image", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var commaIndex = trimmed.IndexOf(',');
+        if (commaIndex < 0)
+        {
+            return false;
+        }
+
+        var header = trimmed[..commaIndex];
+        var mimeType = string.Empty;
+        var semicolonIndex = header.IndexOf(';');
+        if (semicolonIndex > 5)
+        {
+            mimeType = header[5..semicolonIndex];
+        }
+        else if (header.Length > 5)
+        {
+            mimeType = header[5..];
+        }
+
+        extension = GetImageExtension(mimeType);
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return false;
+        }
+
+        var base64 = trimmed[(commaIndex + 1)..].Trim();
+        if (base64.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            bytes = Convert.FromBase64String(base64);
+            return bytes.Length > 0;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static string GetImageExtension(string? mimeType)
+    {
+        if (string.IsNullOrWhiteSpace(mimeType))
+        {
+            return string.Empty;
+        }
+
+        return mimeType.Trim().ToLowerInvariant() switch
+        {
+            "image/png" => "png",
+            "image/jpeg" => "jpg",
+            "image/jpg" => "jpg",
+            "image/webp" => "webp",
+            "image/gif" => "gif",
+            _ => string.Empty
+        };
+    }
+
+    private static string GetImageMimeType(string? extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return string.Empty;
+        }
+
+        var normalized = extension.Trim().TrimStart('.').ToLowerInvariant();
+        return normalized switch
+        {
+            "png" => "image/png",
+            "jpg" => "image/jpeg",
+            "jpeg" => "image/jpeg",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            _ => string.Empty
+        };
+    }
+
+    private static bool TryGetPhotoSizeBytes(string? raw, out long sizeBytes)
+    {
+        sizeBytes = 0;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        var trimmed = raw.Trim();
+        if (!trimmed.StartsWith("data:image", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var commaIndex = trimmed.IndexOf(',');
+        var base64 = commaIndex >= 0 ? trimmed[(commaIndex + 1)..] : trimmed;
+        base64 = base64.Trim();
+        if (base64.Length == 0)
+        {
+            return false;
+        }
+
+        sizeBytes = base64.Length * 3L / 4L;
+        return true;
+    }
+
     private static string ValueOrDash(int? value)
     {
         return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "-";
@@ -1869,9 +2966,363 @@ public class BuildingsController : ApiControllerBase
             .ToList();
     }
 
+    private static Dictionary<int, string> BuildImportHeaderMap(
+        IXLWorksheet worksheet,
+        IReadOnlyDictionary<string, string> labelToColumn)
+    {
+        var headerRow = worksheet.Row(2);
+        var lastHeaderCell = headerRow.LastCellUsed();
+        if (lastHeaderCell == null)
+        {
+            return new Dictionary<int, string>();
+        }
+
+        var headerMap = new Dictionary<int, string>();
+        var lastHeaderColumn = lastHeaderCell.Address.ColumnNumber;
+        for (var col = 1; col <= lastHeaderColumn; col++)
+        {
+            var header = headerRow.Cell(col).GetString().Trim();
+            if (string.IsNullOrWhiteSpace(header))
+            {
+                continue;
+            }
+
+            if (labelToColumn.TryGetValue(header, out var columnName))
+            {
+                headerMap[col] = columnName;
+            }
+        }
+
+        return headerMap;
+    }
+
+    private static async Task<ImportPackage> ReadImportPackageAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file == null)
+        {
+            throw new InvalidOperationException("Import file is required.");
+        }
+
+        if (!file.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ImportPackage(file.OpenReadStream(), new Dictionary<int, string>(), new Dictionary<int, string>());
+        }
+
+        using var archive = new ZipArchive(file.OpenReadStream(), ZipArchiveMode.Read, leaveOpen: false);
+        var excelEntry = archive.Entries.FirstOrDefault(entry =>
+            string.Equals(entry.Name, "buildings.xlsx", StringComparison.OrdinalIgnoreCase))
+            ?? archive.Entries.FirstOrDefault(entry =>
+                entry.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase));
+        if (excelEntry == null)
+        {
+            throw new InvalidOperationException("Excel file not found inside the ZIP package.");
+        }
+
+        var excelStream = new MemoryStream();
+        await using (var entryStream = excelEntry.Open())
+        {
+            await entryStream.CopyToAsync(excelStream, cancellationToken);
+        }
+        excelStream.Position = 0;
+
+        var imagesById = new Dictionary<int, string>();
+        var warningsById = new Dictionary<int, string>();
+
+        foreach (var entry in archive.Entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Name))
+            {
+                continue;
+            }
+
+            var normalizedPath = entry.FullName.Replace('\\', '/');
+            if (!normalizedPath.StartsWith("images/", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var idRaw = Path.GetFileNameWithoutExtension(entry.Name);
+            if (!int.TryParse(idRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out var buildingId))
+            {
+                continue;
+            }
+
+            var extension = Path.GetExtension(entry.Name);
+            var mimeType = GetImageMimeType(extension);
+            if (string.IsNullOrWhiteSpace(mimeType))
+            {
+                continue;
+            }
+
+            await using var imageStream = entry.Open();
+            using var buffer = new MemoryStream();
+            await imageStream.CopyToAsync(buffer, cancellationToken);
+            var bytes = buffer.ToArray();
+            if (bytes.Length == 0)
+            {
+                continue;
+            }
+
+            if (bytes.Length > MaxPhotoSizeBytes)
+            {
+                warningsById[buildingId] = "התמונה הושמטה (גדולה מ-5MB).";
+                continue;
+            }
+
+            var dataUrl = $"data:{mimeType};base64,{Convert.ToBase64String(bytes)}";
+            imagesById[buildingId] = dataUrl;
+        }
+
+        return new ImportPackage(excelStream, imagesById, warningsById);
+    }
+
+    private static List<ImportRowData> ReadImportRows(
+        IXLWorksheet worksheet,
+        IReadOnlyDictionary<int, string> headerMap,
+        IReadOnlyDictionary<int, string>? imagesById = null,
+        IReadOnlyDictionary<int, string>? imageWarningsById = null)
+    {
+        var rows = new List<ImportRowData>();
+        var lastRow = worksheet.LastRowUsed()?.RowNumber() ?? 2;
+
+        for (var rowIndex = 3; rowIndex <= lastRow; rowIndex++)
+        {
+            var row = worksheet.Row(rowIndex);
+            var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            var warnings = new List<string>();
+            var hasValue = false;
+
+            foreach (var (colIndex, columnName) in headerMap)
+            {
+                var raw = row.Cell(colIndex).GetValue<string>();
+                var value = string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    hasValue = true;
+                }
+                values[columnName] = value;
+            }
+
+            if (!hasValue)
+            {
+                continue;
+            }
+
+            if (values.TryGetValue("Id", out var idRaw) &&
+                int.TryParse(idRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedId))
+            {
+                if (imagesById != null && imagesById.TryGetValue(parsedId, out var imageData))
+                {
+                    values[nameof(Building.PhotoUrls)] = imageData;
+                }
+
+                if (imageWarningsById != null &&
+                    imageWarningsById.TryGetValue(parsedId, out var warningMessage))
+                {
+                    warnings.Add(warningMessage);
+                }
+            }
+
+            if (values.TryGetValue(nameof(Building.PhotoUrls), out var photoValue) &&
+                !string.IsNullOrWhiteSpace(photoValue) &&
+                TryGetPhotoSizeBytes(photoValue, out var sizeBytes) &&
+                sizeBytes > MaxPhotoSizeBytes)
+            {
+                warnings.Add("התמונה הושמטה (גדולה מ-5MB).");
+                values[nameof(Building.PhotoUrls)] = null;
+            }
+
+            rows.Add(new ImportRowData(rowIndex, values, warnings));
+        }
+
+        return rows;
+    }
+
+    private static Dictionary<string, string?> NormalizeImportValues(IReadOnlyDictionary<string, string?> values)
+    {
+        var normalized = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in values)
+        {
+            normalized[key] = value?.Trim();
+        }
+        return normalized;
+    }
+
+    private static List<BuildingFieldDto> BuildImportFields(
+        IReadOnlyList<BuildingFieldDto> definitions,
+        IReadOnlyDictionary<string, string?> values)
+    {
+        return definitions
+            .Select(definition =>
+            {
+                values.TryGetValue(definition.ColumnName, out var value);
+                return new BuildingFieldDto(
+                    definition.Category,
+                    definition.FieldName,
+                    definition.ColumnName,
+                    definition.SelectTableName,
+                    definition.IncludeInEventLog,
+                    value,
+                    null);
+            })
+            .ToList();
+    }
+
+    private static List<BuildingFieldDto> AlignFieldsToDefinitions(
+        IReadOnlyList<BuildingFieldDto> definitions,
+        IReadOnlyList<BuildingFieldDto> actual)
+    {
+        var actualByColumn = actual
+            .Where(field => !string.IsNullOrWhiteSpace(field.ColumnName))
+            .ToDictionary(field => field.ColumnName, StringComparer.OrdinalIgnoreCase);
+
+        return definitions
+            .Select(definition =>
+            {
+                if (actualByColumn.TryGetValue(definition.ColumnName, out var value))
+                {
+                    return value;
+                }
+
+                return new BuildingFieldDto(
+                    definition.Category,
+                    definition.FieldName,
+                    definition.ColumnName,
+                    definition.SelectTableName,
+                    definition.IncludeInEventLog,
+                    null,
+                    null);
+            })
+            .ToList();
+    }
+
+    private static int? TryParsePositiveInt(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        return int.TryParse(raw.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var value) && value > 0
+            ? value
+            : null;
+    }
+
+    private static int? TryParseStreetId(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        return int.TryParse(raw.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
+    }
+
+    private static int? ResolveRehabSivugValue()
+    {
+        return SelectTables
+            .GetOptions("Tbl_Sivug")
+            .FirstOrDefault(option =>
+                string.Equals(option.Label, "ריק ובהליך שיקום", StringComparison.Ordinal) ||
+                (option.Label?.Contains("שיקום", StringComparison.Ordinal) ?? false))
+            ?.Value;
+    }
+
+    private static int? TryResolveSelectValue(string? raw, string tableName)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        if (int.TryParse(raw.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
+        {
+            return value;
+        }
+
+        var normalizedRaw = raw.Trim().Replace("\"\"", "\"");
+        return SelectTables
+            .GetOptions(tableName)
+            .FirstOrDefault(option =>
+                string.Equals(option.Label?.Trim().Replace("\"\"", "\""), normalizedRaw, StringComparison.Ordinal))
+            ?.Value;
+    }
+
+    private static List<string> GetMissingRequiredColumns(
+        IReadOnlyDictionary<string, string?> values,
+        int? rehabSivugValue,
+        List<string> warnings)
+    {
+        var missing = new List<string>();
+
+        values.TryGetValue("Id", out var idRaw);
+        if (string.IsNullOrWhiteSpace(idRaw))
+        {
+            missing.Add("Id");
+        }
+        else if (!TryParsePositiveInt(idRaw).HasValue)
+        {
+            missing.Add("Id");
+            warnings.Add("ID חייב להיות מספר חיובי.");
+        }
+
+        values.TryGetValue("StreetId", out var streetRaw);
+        if (string.IsNullOrWhiteSpace(streetRaw))
+        {
+            missing.Add("StreetId");
+        }
+        else if (!TryParseStreetId(streetRaw).HasValue)
+        {
+            missing.Add("StreetId");
+            warnings.Add("קוד רחוב חייב להיות מספר.");
+        }
+
+        values.TryGetValue("BldNum", out var houseRaw);
+        if (string.IsNullOrWhiteSpace(houseRaw))
+        {
+            missing.Add("BldNum");
+        }
+
+        values.TryGetValue("BldName", out var nameRaw);
+        if (string.IsNullOrWhiteSpace(nameRaw))
+        {
+            missing.Add("BldName");
+        }
+
+        values.TryGetValue("BldSivug", out var sivugRaw);
+        if (string.IsNullOrWhiteSpace(sivugRaw))
+        {
+            missing.Add("BldSivug");
+        }
+
+        var sivugValue = TryResolveSelectValue(sivugRaw, "Tbl_Sivug");
+        if (!string.IsNullOrWhiteSpace(sivugRaw) && !sivugValue.HasValue)
+        {
+            missing.Add("BldSivug");
+            warnings.Add("ערך סיווג אינו חוקי.");
+        }
+
+        if (rehabSivugValue.HasValue && sivugValue == rehabSivugValue.Value)
+        {
+            values.TryGetValue("ShikumStatus", out var shikumRaw);
+            if (string.IsNullOrWhiteSpace(shikumRaw))
+            {
+                missing.Add("ShikumStatus");
+            }
+            else if (!TryResolveSelectValue(shikumRaw, "Tbl_StatusShikum").HasValue)
+            {
+                missing.Add("ShikumStatus");
+                warnings.Add("ערך סטטוס שיקום אינו חוקי.");
+            }
+        }
+
+        return missing;
+    }
+
     private sealed record BuildingSnapshot(
         int Id,
-        int? FldId,
         int? StreetCode,
         string? BuildingName,
         string? StreetName,

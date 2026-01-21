@@ -40,11 +40,19 @@ It is written in English and kept in the repo to stay versioned with the code.
 - If an issue is **Canceled**, close it and do not merge.
 
 ## 5) Issue Management
-### Required Fields
+### User Story Issues
+- Must be labeled `User Story`.
+- Describe the user value in plain language.
+- Do **not** set a parent issue (they are the parent).
+- Can have multiple implementation issues linked as sub-issues.
+- Must still include milestone, status, and time-tracked updates.
+
+### Implementation Issues (Non‑User Story)
+- Must have a **User Story** parent issue (and that parent must be labeled `User Story`).
 - Title and body must be clear and specific.
 - Milestone is required.
 - Labels are required.
-- Each issue must have a **User Story** parent issue and that parent must be labeled `User Story`.
+- Time-tracked updates are required on every progress comment.
 
 ### Status Usage (Project)
 - **Backlog**: not planned for the current sprint.

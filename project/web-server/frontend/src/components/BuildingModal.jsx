@@ -199,7 +199,8 @@ export default function BuildingModal({
 
                           const isDate = isDateField(field);
                           const useTextarea = shouldUseTextarea(fieldName) && !isDate;
-                          const inputType = isDate ? 'date' : 'text';
+                          const isIdField = columnName.toLowerCase() === 'id';
+                          const inputType = isDate ? 'date' : isIdField ? 'number' : 'text';
 
                           return (
                             <label key={columnName} className={useTextarea ? 'full-span' : ''}>
@@ -216,6 +217,8 @@ export default function BuildingModal({
                                   value={currentValue}
                                   onChange={(e) => onCreateFieldChange(columnName, e.target.value)}
                                   required={required}
+                                  min={isIdField ? 1 : undefined}
+                                  step={isIdField ? 1 : undefined}
                                   lang={inputType === 'date' ? 'he-IL' : undefined}
                                 />
                               )}
@@ -314,15 +317,6 @@ export default function BuildingModal({
                             );
                           }
 
-                          if (columnName.toLowerCase() === 'fidid') {
-                            return (
-                              <label key={columnName}>
-                                {renderLabel(getExcelAwareLabel(fieldName), false)}
-                                <input type="text" value={editFieldValues[columnName] ?? ''} disabled />
-                              </label>
-                            );
-                          }
-
                           if (columnName.toLowerCase() === 'streetname') {
                             return (
                               <label key={columnName}>
@@ -377,7 +371,8 @@ export default function BuildingModal({
 
                           const isDate = isDateField(field);
                           const useTextarea = shouldUseTextarea(fieldName) && !isDate;
-                          const inputType = isDate ? 'date' : 'text';
+                          const isIdField = columnName.toLowerCase() === 'id';
+                          const inputType = isDate ? 'date' : isIdField ? 'number' : 'text';
 
                           return (
                             <label key={columnName} className={useTextarea ? 'full-span' : ''}>
@@ -394,6 +389,8 @@ export default function BuildingModal({
                                   value={currentValue}
                                   onChange={(e) => onEditChange(columnName, e.target.value)}
                                   required={required}
+                                  min={isIdField ? 1 : undefined}
+                                  step={isIdField ? 1 : undefined}
                                   lang={inputType === 'date' ? 'he-IL' : undefined}
                                 />
                               )}

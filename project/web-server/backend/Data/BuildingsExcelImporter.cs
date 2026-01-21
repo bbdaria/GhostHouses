@@ -45,7 +45,7 @@ public static class BuildingsExcelImporter
             { "צריכת מים ב-6 החודשים האחרונים", "האם הייתה צריכת מים ב־6 החודשים האחרונים" },
             { "צריכת חשמל ב-6 החודשים האחרונים", "האם הייתה צריכת חשמל ב־6 החודשים האחרונים" },
             { "א\"ס", "אזור סטטיסטי" },
-            { "ID", "ID נכס לצורך מערכת זו בלבד" },
+            { "ID נכס לצורך מערכת זו בלבד", "ID" },
             { "ציון", "ציון עמידה בסטנדרט" }
         };
 
@@ -138,7 +138,6 @@ public static class BuildingsExcelImporter
                 var snapshot = new
                 {
                     building.Id,
-                    building.FldId,
                     building.StreetCode,
                     building.BuildingName,
                     building.StreetName,
@@ -650,7 +649,7 @@ public static class BuildingsExcelImporter
                     return false;
                 }
 
-                if (p.Name is nameof(Building.Neighborhood) or nameof(Building.PhotoUrls))
+                if (p.Name is nameof(Building.Neighborhood) or nameof(Building.FldId))
                 {
                     return false;
                 }
@@ -726,7 +725,7 @@ public static class BuildingsExcelImporter
 
     private static bool IsBuildingEmpty(Building building)
     {
-        if (building.FldId.HasValue)
+        if (building.Id > 0)
         {
             return false;
         }
