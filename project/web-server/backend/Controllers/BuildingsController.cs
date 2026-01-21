@@ -230,7 +230,7 @@ public class BuildingsController : ApiControllerBase
             building.StatusSummary,
             IsraelTime.Convert(building.StatusSummaryUpdatedAt),
             building.Complaints,
-            string.IsNullOrWhiteSpace(building.PhotoUrls) ? Array.Empty<string>() : building.PhotoUrls.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+            ParsePhotoUrls(building.PhotoUrls),
             externalData,
             logs,
             fields);
@@ -492,6 +492,11 @@ public class BuildingsController : ApiControllerBase
     [Authorize(Policy = "Editor")]
     public async Task<ActionResult<BuildingSummaryDto>> CreateBuilding([FromBody] BuildingEditRequest request, CancellationToken cancellationToken)
     {
+        if (request.Photos is { Length: > 1 })
+        {
+            return BadRequest("Only one image per building is supported.");
+        }
+
         var houseNumber = request.HouseNumber?.Trim() ?? string.Empty;
         var building = new Building
         {
@@ -598,6 +603,11 @@ public class BuildingsController : ApiControllerBase
     [Authorize(Policy = "Editor")]
     public async Task<ActionResult> UpdateBuilding(int id, [FromBody] BuildingEditRequest request, CancellationToken cancellationToken)
     {
+        if (request.Photos is { Length: > 1 })
+        {
+            return BadRequest("Only one image per building is supported.");
+        }
+
         var building = await _context.Buildings.FindAsync(new object[] { id }, cancellationToken);
         if (building is null)
         {
@@ -1187,6 +1197,12 @@ public class BuildingsController : ApiControllerBase
             return null;
         }
 
+        if (property.Name == nameof(Building.PhotoUrls))
+        {
+            var raw = value as string;
+            return string.IsNullOrWhiteSpace(raw) ? null : "קיים";
+        }
+
         var fieldSpec = property.GetCustomAttribute<FieldSpecAttribute>();
         var selectTableName = fieldSpec?.SelectTableName?.Trim();
         int? rawInt = value switch
@@ -1757,6 +1773,22 @@ public class BuildingsController : ApiControllerBase
     private static string ValueOrDash(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+    }
+
+    private static string[] ParsePhotoUrls(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return Array.Empty<string>();
+        }
+
+        var trimmed = raw.Trim();
+        if (trimmed.StartsWith("data:image", StringComparison.OrdinalIgnoreCase))
+        {
+            return new[] { trimmed };
+        }
+
+        return trimmed.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
     }
 
     private static string ValueOrDash(int? value)
