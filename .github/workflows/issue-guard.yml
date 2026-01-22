@@ -198,6 +198,43 @@ jobs:
               });
               console.warn('Child issue check failed:', error);
             }
+      - name: Comment when a non-User Story is closed without assignee
+        if: ${{ github.event.action == 'closed' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (!issue) return;
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = issue.number;
+
+            const labelNames = Array.isArray(issue.labels)
+              ? issue.labels.map((label) => (label.name || label)).filter(Boolean)
+              : [];
+            const isUserStory = labelNames.includes('User Story');
+            if (isUserStory) return;
+
+            // Treat state_reason = not_planned as Canceled
+            const reason = issue.state_reason || '';
+            if (reason === 'not_planned') return;
+
+            const assignees = Array.isArray(issue.assignees) ? issue.assignees : [];
+            if (assignees.length > 0) return;
+
+            const body = [
+              'This issue was closed without an assignee.',
+              'For non‑User Story issues closed as Done, an assignee is required.',
+              'Please assign someone and update if needed.'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body,
+            });
       - name: Comment when a child issue is reopened while parent User Story is closed
         if: ${{ github.event.action == 'reopened' }}
         uses: actions/github-script@v7
