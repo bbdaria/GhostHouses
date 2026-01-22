@@ -49,6 +49,32 @@ jobs:
               missing.push('- User Story issues must have only the "User Story" label (remove extra labels).');
             }
 
+            if (isUserStory) {
+              try {
+                const branchQuery = `query($owner:String!, $repo:String!, $number:Int!) {
+                  repository(owner:$owner, name:$repo) {
+                    issue(number:$number) {
+                      linkedBranches(first: 10) { nodes { ref { name } } }
+                    }
+                  }
+                }`;
+
+                const branchResult = await github.graphql(branchQuery, {
+                  owner,
+                  repo,
+                  number: issueNumber,
+                });
+
+                const linked = branchResult?.repository?.issue?.linkedBranches?.nodes || [];
+                if (linked.length > 0) {
+                  missing.push('- User Story issues must not have a Development branch linked (remove the branch).');
+                }
+              } catch (error) {
+                missing.push('- Could not verify linked branches for this User Story; please ensure no branch is linked.');
+                console.warn('Linked branch check failed:', error);
+              }
+            }
+
             if (!isUserStory) {
               try {
                 const query = `query($owner:String!, $repo:String!, $number:Int!) {
@@ -58,6 +84,7 @@ jobs:
                         number
                         labels(first:50) { nodes { name } }
                       }
+                      linkedBranches(first: 10) { nodes { ref { name } } }
                     }
                   }
                 }`;
@@ -69,6 +96,7 @@ jobs:
                 });
 
                 const parent = result?.repository?.issue?.parent;
+                const linkedBranches = result?.repository?.issue?.linkedBranches?.nodes || [];
 
                 if (!parent) {
                   missing.push('- Parent issue is missing (must be a User Story).');
@@ -80,6 +108,10 @@ jobs:
                   if (!parentIsUserStory) {
                     missing.push(`- Parent issue #${parent.number} is not labeled "User Story".`);
                   }
+                }
+
+                if (linkedBranches.length === 0) {
+                  missing.push('- Development branch is missing (link a branch for this issue).');
                 }
               } catch (error) {
                 missing.push('- Parent issue could not be verified; please ensure it is set to a User Story.');
