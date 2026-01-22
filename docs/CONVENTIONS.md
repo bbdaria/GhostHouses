@@ -46,6 +46,8 @@ It is written in English and kept in the repo to stay versioned with the code.
 - Do **not** set a parent issue (they are the parent).
 - Can have multiple implementation issues linked as sub-issues.
 - Must still include milestone, status, and time-tracked updates.
+- If **any** child issue is still open, the User Story must remain open (cannot be Done/Closed).
+- If **all** child issues are closed, the User Story **may** stay open if more work is expected.
 
 ### Implementation Issues (Non‑User Story)
 - Must have a **User Story** parent issue (and that parent must be labeled `User Story`).
