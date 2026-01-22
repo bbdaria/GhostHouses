@@ -317,6 +317,13 @@ const api = {
     }
     return requestBlob(`/buildings/${id}/card`);
   },
+  async exportBuildingCardsByIds(ids = []) {
+    return requestBlob('/buildings/export-cards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+  },
   async exportStreets() {
     return requestBlob('/streets/export');
   },

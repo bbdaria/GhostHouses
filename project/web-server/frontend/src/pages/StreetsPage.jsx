@@ -643,13 +643,37 @@ export default function StreetsPage() {
               placeholder="חפש רחוב..."
             />
           </label>
-          <div className="filters-actions">
+          <div className="filters-actions full-span align-right">
             <button type="submit" className="primary">
               חיפוש
             </button>
             <button type="button" onClick={handleReset} className="ghost">
               איפוס
             </button>
+            {canEdit && (
+              <button type="button" className="ghost" onClick={openCreateModal}>
+                הוסף רחוב
+              </button>
+            )}
+            {isAdmin && (
+              <button type="button" className="ghost" onClick={openImportModal} disabled={importBusy}>
+                {importBusy ? 'מייבא...' : 'יבוא רחובות'}
+              </button>
+            )}
+            {!exportMode ? (
+              <button type="button" className="ghost" onClick={handleExportAction}>
+                יצוא לאקסל
+              </button>
+            ) : (
+              <>
+                <button type="button" className="ghost" onClick={handleExportAction}>
+                  יצוא נבחרים
+                </button>
+                <button type="button" className="ghost" onClick={handleCancelExport}>
+                  ביטול
+                </button>
+              </>
+            )}
           </div>
         </form>
         {loading && <p className="muted">טוען רחובות…</p>}
@@ -664,32 +688,6 @@ export default function StreetsPage() {
             <div>
               <h2>רחובות ({streets.length})</h2>
               {exportMode && <p className="muted">נבחרו {exportSelection.size} רחובות לייצוא</p>}
-            </div>
-            <div className="filters-actions">
-              {canEdit && (
-                <button type="button" className="primary" onClick={openCreateModal}>
-                  הוסף רחוב
-                </button>
-              )}
-              {isAdmin && (
-                <button type="button" className="ghost" onClick={openImportModal} disabled={importBusy}>
-                  {importBusy ? 'מייבא...' : 'יבוא רחובות'}
-                </button>
-              )}
-              {!exportMode ? (
-                <button type="button" className="ghost" onClick={handleExportAction}>
-                  יצוא לאקסל
-                </button>
-              ) : (
-                <>
-                  <button type="button" className="primary" onClick={handleExportAction}>
-                    יצוא נבחרים
-                  </button>
-                  <button type="button" className="ghost" onClick={handleCancelExport}>
-                    ביטול
-                  </button>
-                </>
-              )}
             </div>
           </div>
           <div className="table-wrapper">
@@ -753,7 +751,7 @@ export default function StreetsPage() {
                     )}
                     <td>{street.streetId}</td>
                     <td>{street.name}</td>
-                    <td>
+                    <td className="table-actions">
                       {canEdit && (
                         <button
                           type="button"

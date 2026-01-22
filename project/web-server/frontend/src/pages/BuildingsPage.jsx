@@ -72,6 +72,8 @@ export default function BuildingsPage() {
   const [exportError, setExportError] = useState('');
   const [exportSelection, setExportSelection] = useState(() => new Set());
   const [exportMode, setExportMode] = useState(false);
+  const [cardExportMode, setCardExportMode] = useState(false);
+  const [cardExportSelection, setCardExportSelection] = useState(() => new Set());
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreviewing, setImportPreviewing] = useState(false);
   const [importApplying, setImportApplying] = useState(false);
@@ -202,6 +204,9 @@ export default function BuildingsPage() {
       });
       if (!Object.prototype.hasOwnProperty.call(nextValues, 'StreetId')) {
         nextValues.StreetId = '';
+      }
+      if (!Object.prototype.hasOwnProperty.call(nextValues, 'PhotoUrls')) {
+        nextValues.PhotoUrls = '';
       }
       setCreateFieldValues(nextValues);
     } catch {
@@ -428,6 +433,8 @@ export default function BuildingsPage() {
       nextValues.StreetId = String(NO_STREET_OPTION.streetId);
     }
 
+    nextValues.PhotoUrls = selectedBuilding.photos?.[0] ?? '';
+
     setEditFieldValues(nextValues);
     setPhotoError('');
     setPhotoLoading(false);
@@ -578,6 +585,18 @@ export default function BuildingsPage() {
     window.URL.revokeObjectURL(url);
   };
 
+  const downloadPptxFile = (blob, prefix = 'building-cards') => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `${prefix}-${dateStamp}.pptx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   const handleToggleExportAll = () => {
     if (!exportMode) return;
     if (allSelected) {
@@ -618,6 +637,8 @@ export default function BuildingsPage() {
 
   const handleExportAction = () => {
     if (!exportMode) {
+      setCardExportMode(false);
+      setCardExportSelection(new Set());
       setExportMode(true);
     }
   };
@@ -625,6 +646,60 @@ export default function BuildingsPage() {
   const handleCancelExportMode = () => {
     setExportMode(false);
     setExportSelection(new Set());
+  };
+
+  const handleToggleCardExportAll = () => {
+    if (!cardExportMode) return;
+    if (allSelected) {
+      setCardExportSelection(new Set());
+      return;
+    }
+    setCardExportSelection(new Set(buildings.map((b) => b.id)));
+  };
+
+  const handleToggleCardExportBuilding = (id) => {
+    if (!cardExportMode) return;
+    setCardExportSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleExportCardsSelected = async () => {
+    if (cardExporting) return;
+    setCardExportError('');
+    setCardExporting(true);
+    try {
+      const orderedIds = sortedBuildings
+        .filter((building) => cardExportSelection.has(building.id))
+        .map((building) => building.id);
+      const blob = await api.exportBuildingCardsByIds(orderedIds);
+      downloadPptxFile(blob);
+      setCardExportMode(false);
+      setCardExportSelection(new Set());
+    } catch (err) {
+      setCardExportError(err.message || 'שגיאה בייצוא כרטיסי מבנה.');
+    } finally {
+      setCardExporting(false);
+    }
+  };
+
+  const handleCardExportAction = () => {
+    if (!cardExportMode) {
+      setExportMode(false);
+      setExportSelection(new Set());
+      setCardExportMode(true);
+    }
+  };
+
+  const handleCancelCardExportMode = () => {
+    setCardExportMode(false);
+    setCardExportSelection(new Set());
   };
 
   const openImportModal = () => {
@@ -1253,7 +1328,7 @@ export default function BuildingsPage() {
     });
 
   const handlePhotoUpload = async (file) => {
-    if (!selectedBuilding || !file) return;
+    if (!file) return;
     setPhotoError('');
     setActionMessage('');
     if (!file.type.startsWith('image/')) {
@@ -1265,16 +1340,23 @@ export default function BuildingsPage() {
       setPhotoError(`גודל התמונה חייב להיות עד ${maxSizeMb}MB.`);
       return;
     }
-    if (selectedBuilding.photos?.length) {
+    const existingPhoto =
+      modalMode === 'create'
+        ? createFieldValues.PhotoUrls
+        : editFieldValues.PhotoUrls ?? selectedBuilding?.photos?.[0];
+    if (existingPhoto) {
       setPhotoError('ניתן לשמור תמונה אחת בלבד.');
       return;
     }
     try {
       setPhotoLoading(true);
       const dataUrl = await readFileAsDataUrl(file);
-      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: dataUrl }, true);
-      setSelectedBuilding(updated);
-      setActionMessage('התמונה נשמרה.');
+      if (modalMode === 'create') {
+        setCreateFieldValues((prev) => ({ ...prev, PhotoUrls: dataUrl }));
+      } else if (selectedBuilding) {
+        setEditFieldValues((prev) => ({ ...prev, PhotoUrls: dataUrl }));
+        setUnsavedChanges(true);
+      }
     } catch (err) {
       setPhotoError(err.message || 'שגיאה בהעלאת התמונה.');
     } finally {
@@ -1283,14 +1365,17 @@ export default function BuildingsPage() {
   };
 
   const handlePhotoDelete = async () => {
-    if (!selectedBuilding) return;
+    if (modalMode !== 'create' && !selectedBuilding) return;
     setPhotoError('');
     setActionMessage('');
     try {
       setPhotoLoading(true);
-      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: '' }, true);
-      setSelectedBuilding(updated);
-      setActionMessage('התמונה נמחקה.');
+      if (modalMode === 'create') {
+        setCreateFieldValues((prev) => ({ ...prev, PhotoUrls: '' }));
+      } else if (selectedBuilding) {
+        setEditFieldValues((prev) => ({ ...prev, PhotoUrls: '' }));
+        setUnsavedChanges(true);
+      }
     } catch (err) {
       setPhotoError(err.message || 'שגיאה במחיקת התמונה.');
     } finally {
@@ -1314,12 +1399,14 @@ export default function BuildingsPage() {
   };
 
   const statuses = useMemo(() => statusOptions, [statusOptions]);
+  const selectionMode = exportMode || cardExportMode;
+  const activeSelection = exportMode ? exportSelection : cardExportSelection;
   const allSelected = useMemo(
     () =>
-      exportMode &&
+      selectionMode &&
       buildings.length > 0 &&
-      buildings.every((building) => exportSelection.has(building.id)),
-    [buildings, exportSelection, exportMode]
+      buildings.every((building) => activeSelection.has(building.id)),
+    [activeSelection, buildings, selectionMode]
   );
   const importStats = useMemo(() => {
     return importRows.reduce(
@@ -1852,6 +1939,21 @@ export default function BuildingsPage() {
                 הוסף מבנה
               </button>
             )}
+            {!cardExportMode && (
+              <button type="button" className="ghost" onClick={handleCardExportAction} disabled={cardExporting}>
+                {cardExporting ? 'מייצא...' : 'בחירת מבנים לכרטיסי מבנה'}
+              </button>
+            )}
+            {cardExportMode && (
+              <>
+                <button type="button" className="ghost" onClick={handleExportCardsSelected} disabled={cardExporting}>
+                  {cardExporting ? 'מייצא...' : 'יצוא כרטיסים (PPTX)'}
+                </button>
+                <button type="button" className="ghost" onClick={handleCancelCardExportMode} disabled={cardExporting}>
+                  ביטול בחירה
+                </button>
+              </>
+            )}
             {isAdmin && (
               <>
                 {!exportMode && (
@@ -1902,19 +2004,20 @@ export default function BuildingsPage() {
             <div>
               <h2>תוצאות ({buildings.length})</h2>
               {exportMode && <p className="muted">נבחרו {exportSelection.size} מבנים לייצוא</p>}
+              {cardExportMode && <p className="muted">נבחרו {cardExportSelection.size} מבנים לכרטיסים</p>}
             </div>
           </div>
           <div className="table-wrapper">
-            <table className={exportMode ? 'export-table' : ''}>
+            <table className={selectionMode ? 'export-table' : ''}>
               <thead>
                 <tr>
-                  {exportMode && (
+                  {selectionMode && (
                     <th>
                       <input
                         type="checkbox"
                         aria-label="בחר הכל"
                         checked={allSelected}
-                        onChange={handleToggleExportAll}
+                        onChange={exportMode ? handleToggleExportAll : handleToggleCardExportAll}
                       />
                     </th>
                   )}
@@ -2026,7 +2129,7 @@ export default function BuildingsPage() {
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
                   const sivugLabel = getSivugLabel(building.bldSivug);
                   const ownershipLabel = getOwnershipLabel(building.sugBaalut);
-                  const isSelected = exportSelection.has(building.id);
+                  const isSelected = selectionMode && activeSelection.has(building.id);
                   return (
                     <Fragment key={building.id}>
                       <tr
@@ -2034,18 +2137,24 @@ export default function BuildingsPage() {
                         onClick={() => {
                           if (exportMode) {
                             handleToggleExportBuilding(building.id);
+                          } else if (cardExportMode) {
+                            handleToggleCardExportBuilding(building.id);
                           } else {
                             openBuildingModal(building.id, 'view');
                           }
                         }}
                         onDoubleClick={() => openBuildingModal(building.id, 'view')}
                       >
-                        {exportMode && (
+                        {selectionMode && (
                           <td>
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              onChange={() => handleToggleExportBuilding(building.id)}
+                              onChange={() =>
+                                exportMode
+                                  ? handleToggleExportBuilding(building.id)
+                                  : handleToggleCardExportBuilding(building.id)
+                              }
                               onClick={(event) => event.stopPropagation()}
                             />
                           </td>
@@ -2067,7 +2176,7 @@ export default function BuildingsPage() {
                         <td>{building.statisticalArea || '—'}</td>
                         <td>{formatLogDate(building.updatedAt)}</td>
                         <td>{building.statusSummary || '—'}</td>
-                        <td>
+                        <td className="table-actions">
                           {canEdit && (
                             <button
                               type="button"
@@ -2120,7 +2229,7 @@ export default function BuildingsPage() {
                 })}
                 {buildings.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={exportMode ? 13 : 12} className="muted">
+                    <td colSpan={selectionMode ? 13 : 12} className="muted">
                       אין מבנים שעונים על הסינון.
                     </td>
                   </tr>
@@ -2643,10 +2752,12 @@ export default function BuildingsPage() {
         mode={modalMode}
         building={selectedBuilding}
         createFieldValues={createFieldValues}
+        createPhotoValue={createFieldValues.PhotoUrls ?? ''}
         createFieldGroups={createOrderedFieldGroups}
         createTemplateLoading={createTemplateLoading}
         createSelectTablesLoading={createSelectTablesLoading}
         editFieldValues={editFieldValues}
+        editPhotoValue={editFieldValues.PhotoUrls ?? selectedBuilding?.photos?.[0] ?? ''}
         streets={streets}
         selectTablesByName={selectTablesByName}
         selectTablesLoading={selectTablesLoading}
