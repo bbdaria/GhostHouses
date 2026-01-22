@@ -208,6 +208,17 @@ pre {
   justify-content: flex-end;
 }
 
+.user-actions {
+  flex-wrap: wrap;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .filters-actions.align-right {
   justify-content: flex-start;
 }

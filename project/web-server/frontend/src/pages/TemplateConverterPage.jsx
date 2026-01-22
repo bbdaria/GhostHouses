@@ -88,7 +88,7 @@ export default function TemplateConverterPage() {
               </span>
             </div>
           </label>
-          <div className="filters-actions">
+          <div className="filters-actions full-span align-right">
             <button
               type="button"
               className="primary"
@@ -129,7 +129,7 @@ export default function TemplateConverterPage() {
               </span>
             </div>
           </label>
-          <div className="filters-actions">
+          <div className="filters-actions full-span align-right">
             <button
               type="button"
               className="primary"

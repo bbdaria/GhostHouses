@@ -68,7 +68,7 @@ export default function SettingsPage() {
               placeholder="user@example.com"
             />
           </label>
-          <div className="filters-actions full-span">
+          <div className="filters-actions full-span align-right">
             <button type="submit" className="primary">
               שמירת פרטים
             </button>
@@ -114,7 +114,7 @@ export default function SettingsPage() {
               placeholder="••••••••"
             />
           </label>
-          <div className="filters-actions full-span">
+          <div className="filters-actions full-span align-right">
             <button type="submit" className="primary">
               עדכון סיסמה
             </button>

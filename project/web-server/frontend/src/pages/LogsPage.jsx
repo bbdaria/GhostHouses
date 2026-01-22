@@ -519,7 +519,7 @@ export default function LogsPage() {
               <option value="created">נוצרו</option>
             </select>
           </label>
-          <div className="filters-actions">
+          <div className="filters-actions full-span align-right">
             <button type="submit" className="primary">
               חיפוש
             </button>
