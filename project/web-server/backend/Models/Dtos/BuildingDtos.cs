@@ -24,7 +24,6 @@ public record BuildingFilterParameters(
 
 public record BuildingSummaryDto(
     int Id,
-    int? FldId,
     int? StreetId,
     string BuildingName,
     string StreetName,
@@ -73,7 +72,7 @@ public record ExternalSystemSnapshotDto(
 public record BuildingEditRequest
 {
     [Required]
-    public int FldId { get; set; }
+    public int Id { get; set; }
 
     [Required]
     public int StreetId { get; set; }
@@ -90,6 +89,7 @@ public record BuildingEditRequest
     public string? StatusSummary { get; set; }
     public string? Complaints { get; set; }
     public string[]? Photos { get; set; }
+    public bool AllowDuplicate { get; set; }
 }
 
 public record DeleteBuildingRequest(
@@ -97,6 +97,7 @@ public record DeleteBuildingRequest(
     bool Confirm);
 
 public record BuildingFieldsUpdateRequest(
-    IDictionary<string, string?> Fields);
+    IDictionary<string, string?> Fields,
+    bool AllowDuplicate = false);
 
 public record PaginatedResult<T>(IEnumerable<T> Items, int Total, int Page, int PageSize);

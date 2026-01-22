@@ -11,7 +11,7 @@ public static class IsraelTime
 
     private static TimeZoneInfo ResolveTimeZone()
     {
-        try
+        try   
         {
             return TimeZoneInfo.FindSystemTimeZoneById("Asia/Jerusalem");
         }

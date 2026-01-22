@@ -10,11 +10,6 @@ const toOptionalInt = (value) => {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
 };
 
-const generateFieldId = () => {
-  const candidate = Math.trunc(Date.now() % 2000000000);
-  return candidate <= 0 ? 1 : candidate;
-};
-
 const normalizeSnapshot = (value) => {
   if (value === null || typeof value !== 'object') {
     return value;
@@ -81,7 +76,10 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const message = payload && payload.error ? payload.error : response.statusText;
-    throw new Error(message || 'Request failed');
+    const error = new Error(message || 'Request failed');
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
 
   return payload;
@@ -118,7 +116,6 @@ async function requestBlob(path, options = {}) {
 
 const mapBuildingSummary = (item) => ({
   id: item.id,
-  fldId: item.fldId,
   streetId: item.streetId,
   street: item.streetName,
   houseNumber: item.houseNumber,
@@ -165,9 +162,18 @@ const mapLog = (log) => ({
   buildingStatisticalArea: log.buildingStatisticalArea
 });
 
+const mapBuildingField = (field) => ({
+  category: field.category,
+  fieldName: field.fieldName,
+  columnName: field.columnName,
+  selectTableName: field.selectTableName,
+  includeInEventLog: field.includeInEventLog,
+  value: field.value,
+  rawValue: field.rawValue
+});
+
 const mapBuildingDetail = (data) => ({
   id: data.summary.id,
-  fldId: data.summary.fldId,
   streetId: data.summary.streetId,
   street: data.summary.streetName,
   houseNumber: data.summary.houseNumber,
@@ -185,15 +191,7 @@ const mapBuildingDetail = (data) => ({
   photos: data.photos || [],
   external: data.externalData || {},
   fields: Array.isArray(data.fields)
-    ? data.fields.map((field) => ({
-        category: field.category,
-        fieldName: field.fieldName,
-        columnName: field.columnName,
-        selectTableName: field.selectTableName,
-        includeInEventLog: field.includeInEventLog,
-        value: field.value,
-        rawValue: field.rawValue
-      }))
+    ? data.fields.map((field) => mapBuildingField(field))
     : [],
   logs: (data.recentLogs || []).map((log) => mapLog(log))
 });
@@ -256,7 +254,7 @@ const api = {
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
     return (data.items || []).map(mapBuildingSummary);
   },
-  async exportBuildings(filters = {}) {
+  async exportBuildings(filters = {}, includeImages = false) {
     const params = new URLSearchParams();
     if (filters.street) params.append('street', filters.street);
     if (filters.streetId) params.append('streetId', filters.streetId);
@@ -272,9 +270,46 @@ const api = {
     if (filters.updatedTo) params.append('updatedTo', filters.updatedTo);
     if (filters.statusSummary) params.append('statusSummary', filters.statusSummary);
 
+    if (includeImages) params.append('includeImages', 'true');
     const query = params.toString();
     const path = query ? `/buildings/export?${query}` : '/buildings/export';
     return requestBlob(path);
+  },
+  async exportBuildingsByIds(ids = [], includeImages = false) {
+    const query = includeImages ? '?includeImages=true' : '';
+    return requestBlob(`/buildings/export${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+  },
+  async convertBuildingsTemplate(file) {
+    if (!file) {
+      throw new Error('excel file is required');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    return requestBlob('/buildings/convert-template', { method: 'POST', body: formData });
+  },
+  async previewImportBuildings(file) {
+    if (!file) {
+      throw new Error('excel file is required');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    return request('/buildings/import/preview', { method: 'POST', body: formData });
+  },
+  async applyImportBuildings(rows = []) {
+    return request('/buildings/import/apply', {
+      method: 'POST',
+      body: { rows }
+    });
+  },
+  async validateImportRow(values = {}) {
+    return request('/buildings/import/validate', {
+      method: 'POST',
+      body: { values }
+    });
   },
   async exportBuildingCard(id) {
     if (!id && id !== 0) {
@@ -282,15 +317,62 @@ const api = {
     }
     return requestBlob(`/buildings/${id}/card`);
   },
+  async exportBuildingCardsByIds(ids = []) {
+    return requestBlob('/buildings/export-cards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+  },
+  async exportStreets() {
+    return requestBlob('/streets/export');
+  },
+  async exportStreetsSelection(ids = []) {
+    return requestBlob('/streets/export', {
+      method: 'POST',
+      body: { streetIds: ids }
+    });
+  },
+  async previewImportStreets(file) {
+    if (!file) {
+      throw new Error('excel file is required');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    return request('/streets/import/preview', { method: 'POST', body: formData });
+  },
+  async validateImportStreet(values = {}) {
+    return request('/streets/import/validate', {
+      method: 'POST',
+      body: { values }
+    });
+  },
+  async applyImportStreets(rows = []) {
+    return request('/streets/import/apply', {
+      method: 'POST',
+      body: { rows }
+    });
+  },
+  async convertStreetsTemplate(file) {
+    if (!file) {
+      throw new Error('excel file is required');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    return requestBlob('/streets/convert-template', { method: 'POST', body: formData });
+  },
   async fetchBuilding(id) {
     const data = await request(`/buildings/${id}`);
     return mapBuildingDetail(data);
   },
+  async fetchBuildingFieldTemplate() {
+    const data = await request('/buildings/template');
+    return Array.isArray(data) ? data.map((field) => mapBuildingField(field)) : [];
+  },
   async createBuilding(form) {
-    const fldId = toOptionalInt(form.fldId) ?? generateFieldId();
+    const id = toOptionalInt(form.id ?? form.Id);
     const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
-      fldId,
       streetId: toOptionalInt(form.streetId),
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || form.streetName || 'מבנה',
@@ -298,16 +380,20 @@ const api = {
       bldSivug,
       shikumStatus: form.status || form.shikumStatus || 'Unknown',
       statusSummary: form.statusSummary || '',
-      complaints: form.complaints || ''
+      complaints: form.complaints || '',
+      allowDuplicate: Boolean(form.allowDuplicate)
     };
+    if (id !== null && id !== undefined) {
+      payload.id = id;
+    }
     const created = await request('/buildings', { method: 'POST', body: payload });
     return mapBuildingSummary(created);
   },
   async updateBuilding(id, form) {
-    const fldId = toOptionalInt(form.fldId) ?? generateFieldId();
+    const nextId = toOptionalInt(form.id ?? form.Id);
     const bldSivug = toOptionalInt(form.category ?? form.bldSivug);
     const payload = {
-      fldId,
+      id: nextId ?? id,
       streetId: toOptionalInt(form.streetId) ?? toOptionalInt(form.street),
       houseNumber: form.bldNum || form.houseNumber || '',
       buildingName: form.bldName || form.nickname || '',
@@ -320,8 +406,8 @@ const api = {
     await request(`/buildings/${id}`, { method: 'PUT', body: payload });
     return this.fetchBuilding(id);
   },
-  async updateBuildingFields(id, fields) {
-    const payload = { fields };
+  async updateBuildingFields(id, fields, allowDuplicate = false) {
+    const payload = { fields, allowDuplicate };
     const data = await request(`/buildings/${id}/fields`, { method: 'PUT', body: payload });
     return mapBuildingDetail(data);
   },

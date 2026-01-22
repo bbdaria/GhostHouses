@@ -15,7 +15,6 @@ public static class SeedData
     {
         using var scope = services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var hostEnvironment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
 
         await context.Database.MigrateAsync(cancellationToken);
 
@@ -58,44 +57,14 @@ public static class SeedData
             await context.SaveChangesAsync(cancellationToken);
         }
 
-        var seedFilePath = Path.Combine(hostEnvironment.ContentRootPath, "Data", "BuildingsSeedData.xlsx");
-
-        if (!await context.Streets.AnyAsync(cancellationToken))
+        var hasNoStreet = await context.Streets.AnyAsync(
+            s => s.StreetId == NoStreetId,
+            cancellationToken);
+        if (!hasNoStreet)
         {
-            Console.WriteLine("[SeedData] Seeding streets from Excel...");
-            await StreetsExcelImporter.SeedFromFileAsync(context, seedFilePath, cancellationToken);
-        }
-        else
-        {
-            Console.WriteLine("[SeedData] Streets already present, skipping street seed.");
+            context.Streets.Add(new Street { StreetId = NoStreetId, Name = NoStreetName });
+            await context.SaveChangesAsync(cancellationToken);
         }
 
-        await EnsureNoStreetAsync(context, cancellationToken);
-
-        if (!await context.Buildings.AnyAsync(cancellationToken))
-        {
-            Console.WriteLine("[SeedData] Seeding buildings from Excel...");
-            await BuildingsExcelImporter.SeedFromFileAsync(context, seedFilePath, cancellationToken);
-        }
-        else
-        {
-            Console.WriteLine("[SeedData] Buildings already present, skipping building seed.");
-        }
-    }
-
-    private static async Task EnsureNoStreetAsync(AppDbContext context, CancellationToken cancellationToken)
-    {
-        if (await context.Streets.AnyAsync(s => s.StreetId == NoStreetId, cancellationToken))
-        {
-            return;
-        }
-
-        context.Streets.Add(new Street
-        {
-            StreetId = NoStreetId,
-            Name = NoStreetName
-        });
-        await context.SaveChangesAsync(cancellationToken);
-        Console.WriteLine("[SeedData] Added 'ללא שם רחוב' to streets list.");
     }
 }

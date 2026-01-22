@@ -25,15 +25,17 @@ const initialFilters = {
 
 const NO_STREET_OPTION = { streetId: -1, name: 'ללא שם רחוב' };
 const REQUIRED_EDIT_FIELDS = [
+  { key: 'Id', label: 'ID' },
   { key: 'StreetId', label: 'שם רחוב' },
   { key: 'BldNum', label: 'מספר בית' },
   { key: 'BldName', label: 'כינוי הבניין' },
-  { key: 'ShikumStatus', label: 'סטטוס שיקום' },
-  { key: 'BldSivug', label: 'סיווג' }
+  { key: 'BldSivug', label: 'סיווג' },
+  { key: 'ShikumStatus', label: 'סטטוס שיקום' }
 ];
 const REQUIRED_EDIT_COLUMNS = new Set(
   REQUIRED_EDIT_FIELDS.filter((field) => field.key !== 'StreetId').map((field) => field.key)
 );
+const REQUIRED_CREATE_COLUMNS = new Set(['BldNum', 'BldName', 'BldSivug', 'ShikumStatus']);
 
 const EXCEL_LABEL_OVERRIDES = {
   'ID נכס לצורך מערכת זו בלבד': 'ID',
@@ -68,44 +70,86 @@ export default function BuildingsPage() {
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [exportSelection, setExportSelection] = useState(() => new Set());
+  const [exportMode, setExportMode] = useState(false);
+  const [cardExportMode, setCardExportMode] = useState(false);
+  const [cardExportSelection, setCardExportSelection] = useState(() => new Set());
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreviewing, setImportPreviewing] = useState(false);
+  const [importApplying, setImportApplying] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importFile, setImportFile] = useState(null);
+  const [importRows, setImportRows] = useState([]);
+  const [importCompareRowId, setImportCompareRowId] = useState(null);
+  const [importCompareTargetId, setImportCompareTargetId] = useState(null);
+  const [importEditRowId, setImportEditRowId] = useState(null);
+  const [importEditValues, setImportEditValues] = useState(null);
+  const [importEditSaving, setImportEditSaving] = useState(false);
+  const [importEditError, setImportEditError] = useState('');
+  const [importSummary, setImportSummary] = useState('');
   const [cardExporting, setCardExporting] = useState(false);
   const [cardExportError, setCardExportError] = useState('');
-  const [createForm, setCreateForm] = useState({
-    fldId: '',
-    streetId: '',
-    bldNum: '',
-    bldName: '',
-    statusSummary: '',
-    shikumStatusId: '',
-    category: ''
-  });
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const [createFieldTemplate, setCreateFieldTemplate] = useState([]);
+  const [createFieldValues, setCreateFieldValues] = useState({});
+  const [createTemplateLoading, setCreateTemplateLoading] = useState(false);
+  const [createSelectTablesLoading, setCreateSelectTablesLoading] = useState(false);
   const [editFieldValues, setEditFieldValues] = useState({});
   const [selectTablesByName, setSelectTablesByName] = useState({});
   const [selectTablesLoading, setSelectTablesLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  const [duplicatePrompt, setDuplicatePrompt] = useState('');
+  const [editDuplicatePrompt, setEditDuplicatePrompt] = useState('');
   const [selectedView, setSelectedView] = useState('view');
   const [sortConfig, setSortConfig] = useState({ field: 'street', direction: 'asc' });
   const [openViewCategories, setOpenViewCategories] = useState(() => new Set());
   const [openEditCategories, setOpenEditCategories] = useState(() => new Set());
+  const [openCreateCategories, setOpenCreateCategories] = useState(() => new Set());
   const [isExternalOpen, setIsExternalOpen] = useState(false);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
 
+  const importBusy = importPreviewing || importApplying;
+  const importCompareRow = useMemo(
+    () => importRows.find((row) => row.rowNumber === importCompareRowId) || null,
+    [importRows, importCompareRowId]
+  );
+  const importEditRow = useMemo(
+    () => importRows.find((row) => row.rowNumber === importEditRowId) || null,
+    [importRows, importEditRowId]
+  );
+  const importCompareTarget = useMemo(() => {
+    if (!importCompareRow) return null;
+    const matches = importCompareRow.addressMatches || [];
+    if (importCompareTargetId) {
+      const found = matches.find((match) => match.id === importCompareTargetId);
+      if (found) return found;
+    }
+    return matches[0] || null;
+  }, [importCompareRow, importCompareTargetId]);
+
   const rehabSivugValue = useMemo(() => {
-    const match = sivugOptions.find((option) => option.label === 'ריק ובהליך שיקום');
-    return match ? String(match.value) : '3';
+    const match =
+      sivugOptions.find((option) => option.label === 'ריק ובהליך שיקום') ||
+      sivugOptions.find((option) => option.label && option.label.includes('שיקום'));
+    return match ? String(match.value) : null;
   }, [sivugOptions]);
 
+  const createSivugValue = createFieldValues.BldSivug ?? '';
   const isRehabStatusRequired = useMemo(() => {
-    if (!createForm.category) return false;
-    return String(createForm.category) === rehabSivugValue;
-  }, [createForm.category, rehabSivugValue]);
+    if (!rehabSivugValue || !createSivugValue) return false;
+    return String(createSivugValue) === rehabSivugValue;
+  }, [createSivugValue, rehabSivugValue]);
 
+  const editSivugValue = editFieldValues.BldSivug ?? selectedBuilding?.bldSivug ?? '';
   const isEditRehabStatusRequired = useMemo(() => {
-    if (!editFieldValues.BldSivug && editFieldValues.BldSivug !== 0) return false;
-    return String(editFieldValues.BldSivug) === rehabSivugValue;
-  }, [editFieldValues.BldSivug, rehabSivugValue]);
+    if (!rehabSivugValue) return false;
+    if (editSivugValue === '' || editSivugValue === null || editSivugValue === undefined) return false;
+    return String(editSivugValue) === rehabSivugValue;
+  }, [editSivugValue, rehabSivugValue]);
 
   const isFilterRehabStatusRequired = useMemo(() => {
+    if (!rehabSivugValue) return false;
     if (!filters.bldSivug && filters.bldSivug !== 0) return false;
     return String(filters.bldSivug) === rehabSivugValue;
   }, [filters.bldSivug, rehabSivugValue]);
@@ -128,9 +172,48 @@ export default function BuildingsPage() {
   const loadStreets = useCallback(async () => {
     try {
       const data = await api.fetchStreets();
-      setStreets(data || []);
+      const next = Array.isArray(data) ? data : [];
+      if (!next.find((street) => String(street.streetId) === String(NO_STREET_OPTION.streetId))) {
+        next.unshift(NO_STREET_OPTION);
+      }
+      setStreets(next);
     } catch {
       setStreets([]);
+    }
+  }, []);
+
+  const loadCreateTemplate = useCallback(async () => {
+    setCreateTemplateLoading(true);
+    try {
+      const fields = await api.fetchBuildingFieldTemplate();
+      setCreateFieldTemplate(fields || []);
+      const nextValues = {};
+      (fields || []).forEach((field) => {
+        if (!field?.columnName) return;
+        if (field.columnName.toLowerCase() === 'streetname') return;
+        if (field.selectTableName) {
+          const rawValue = field.rawValue;
+          nextValues[field.columnName] =
+            rawValue === null || rawValue === undefined || rawValue === 0 ? '' : String(rawValue);
+        } else {
+          nextValues[field.columnName] = field.value ?? '';
+        }
+        if (field.columnName.toLowerCase() === 'id' && nextValues[field.columnName] === '0') {
+          nextValues[field.columnName] = '';
+        }
+      });
+      if (!Object.prototype.hasOwnProperty.call(nextValues, 'StreetId')) {
+        nextValues.StreetId = '';
+      }
+      if (!Object.prototype.hasOwnProperty.call(nextValues, 'PhotoUrls')) {
+        nextValues.PhotoUrls = '';
+      }
+      setCreateFieldValues(nextValues);
+    } catch {
+      setCreateFieldTemplate([]);
+      setCreateFieldValues({});
+    } finally {
+      setCreateTemplateLoading(false);
     }
   }, []);
 
@@ -146,6 +229,15 @@ export default function BuildingsPage() {
   };
 
   const displayOrDash = (value) => (value === null || value === undefined || value === '' ? '—' : value);
+  const isDataImageValue = (value) =>
+    typeof value === 'string' && value.trim().startsWith('data:image');
+  const renderImportValue = (value) => {
+    const displayValue = displayOrDash(value);
+    if (isDataImageValue(displayValue)) {
+      return <img className="log-change-image" src={displayValue} alt="תמונה" />;
+    }
+    return displayValue;
+  };
   const getSivugLabel = (value) => {
     if (value === null || value === undefined || value === '') return '—';
     const match = sivugOptions.find((option) => String(option.value) === String(value));
@@ -167,6 +259,82 @@ export default function BuildingsPage() {
     return value;
   };
   const isRequiredEditColumn = (columnName) => REQUIRED_EDIT_COLUMNS.has(columnName);
+  const isRequiredCreateColumn = (columnName) => REQUIRED_CREATE_COLUMNS.has(columnName);
+  const requiredImportLabels = {
+    Id: 'ID',
+    StreetId: 'שם רחוב',
+    BldNum: 'מספר בית',
+    BldName: 'כינוי הבניין',
+    BldSivug: 'סיווג',
+    ShikumStatus: 'סטטוס שיקום'
+  };
+  const resolveSelectValue = (raw, options) => {
+    if (raw === null || raw === undefined) return null;
+    const text = String(raw).trim();
+    if (!text) return null;
+    const numeric = Number(text);
+    if (Number.isFinite(numeric)) return numeric;
+    const match = options.find((opt) => String(opt.label || '').trim() === text);
+    if (!match) return null;
+    const value = match.value ?? match.id;
+    return value === null || value === undefined ? null : Number(value);
+  };
+  const resolveSelectLabel = (raw, options) => {
+    if (raw === null || raw === undefined) return '';
+    const text = String(raw).trim();
+    if (!text) return '';
+    const numeric = Number(text);
+    if (Number.isFinite(numeric)) {
+      const match = options.find(
+        (opt) => String(opt.value ?? opt.id) === String(numeric)
+      );
+      return match?.label ?? text;
+    }
+    return text;
+  };
+  const getMissingImportRequired = useCallback(
+    (values) => {
+      const missing = [];
+      const getValue = (key) => (values?.[key] ?? '').toString().trim();
+
+      const idValue = getValue('Id');
+      if (idValue && (!Number.isFinite(Number(idValue)) || Number(idValue) <= 0)) {
+        missing.push('Id');
+      }
+
+      const streetIdValue = getValue('StreetId');
+      if (!streetIdValue || !Number.isFinite(Number(streetIdValue))) {
+        missing.push('StreetId');
+      }
+
+      if (!getValue('BldNum')) {
+        missing.push('BldNum');
+      }
+
+      if (!getValue('BldName')) {
+        missing.push('BldName');
+      }
+
+      const sivugRaw = getValue('BldSivug');
+      const sivugValue = resolveSelectValue(sivugRaw, sivugOptions);
+      if (!sivugRaw || sivugValue === null || Number.isNaN(sivugValue)) {
+        missing.push('BldSivug');
+      }
+
+      if (rehabSivugValue && sivugValue !== null && String(sivugValue) === String(rehabSivugValue)) {
+        const shikumRaw = getValue('ShikumStatus');
+        const shikumValue = resolveSelectValue(shikumRaw, statusOptions);
+        if (!shikumRaw || shikumValue === null || Number.isNaN(shikumValue)) {
+          missing.push('ShikumStatus');
+        }
+      }
+
+      return missing;
+    },
+    [rehabSivugValue, sivugOptions, statusOptions]
+  );
+  const getImportRequiredLabel = (columnName) =>
+    requiredImportLabels[columnName] || getExcelAwareLabel(columnName) || columnName;
 
   useEffect(() => {
     const loadStatusOptions = async () => {
@@ -219,14 +387,30 @@ export default function BuildingsPage() {
   }, [loadStreets]);
 
   useEffect(() => {
+    setExportSelection((prev) => {
+      const currentIds = new Set(buildings.map((building) => building.id));
+      const next = new Set();
+      prev.forEach((id) => {
+        if (currentIds.has(id)) {
+          next.add(id);
+        }
+      });
+      return next;
+    });
+  }, [buildings]);
+
+  useEffect(() => {
     if (showModal && modalMode === 'create') {
       loadStreets();
+      loadCreateTemplate();
     }
-  }, [loadStreets, showModal, modalMode]);
+  }, [loadStreets, loadCreateTemplate, showModal, modalMode]);
 
   useEffect(() => {
     if (!selectedBuilding) {
       setEditFieldValues({});
+      setPhotoError('');
+      setPhotoLoading(false);
       return;
     }
 
@@ -249,7 +433,11 @@ export default function BuildingsPage() {
       nextValues.StreetId = String(NO_STREET_OPTION.streetId);
     }
 
+    nextValues.PhotoUrls = selectedBuilding.photos?.[0] ?? '';
+
     setEditFieldValues(nextValues);
+    setPhotoError('');
+    setPhotoLoading(false);
   }, [selectedBuilding]);
 
   useEffect(() => {
@@ -289,6 +477,48 @@ export default function BuildingsPage() {
 
     loadSelectTables();
   }, [selectedBuilding, selectedView, selectTablesByName]);
+
+  useEffect(() => {
+    const loadCreateSelectTables = async () => {
+      if (!showModal || modalMode !== 'create') return;
+      if (!createFieldTemplate || createFieldTemplate.length === 0) return;
+      const tableNames = new Set(
+        createFieldTemplate
+          .map((field) => field.selectTableName)
+          .filter((name) => name && name.trim())
+      );
+      const missing = [...tableNames].filter((name) => !selectTablesByName[name]);
+      if (missing.length === 0) {
+        setCreateSelectTablesLoading(false);
+        return;
+      }
+
+      setCreateSelectTablesLoading(true);
+      try {
+        const results = await Promise.all(
+          missing.map(async (name) => {
+            try {
+              const options = await api.fetchSelectTable(name);
+              return [name, options];
+            } catch {
+              return [name, []];
+            }
+          })
+        );
+        setSelectTablesByName((prev) => {
+          const next = { ...prev };
+          results.forEach(([name, options]) => {
+            next[name] = options;
+          });
+          return next;
+        });
+      } finally {
+        setCreateSelectTablesLoading(false);
+      }
+    };
+
+    loadCreateSelectTables();
+  }, [showModal, modalMode, createFieldTemplate, selectTablesByName]);
 
   const loadBuildings = async (appliedFilters = filters) => {
     setLoading(true);
@@ -342,25 +572,497 @@ export default function BuildingsPage() {
     loadBuildings(initialFilters);
   };
 
-  const handleExport = async () => {
+  const downloadExportFile = (blob, prefix = 'buildings') => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const extension = blob?.type === 'application/zip' ? 'zip' : 'xlsx';
+    link.href = url;
+    link.download = `${prefix}-${dateStamp}.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const downloadPptxFile = (blob, prefix = 'building-cards') => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `${prefix}-${dateStamp}.pptx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleToggleExportAll = () => {
+    if (!exportMode) return;
+    if (allSelected) {
+      setExportSelection(new Set());
+      return;
+    }
+    setExportSelection(new Set(buildings.map((b) => b.id)));
+  };
+
+  const handleToggleExportBuilding = (id) => {
+    if (!exportMode) return;
+    setExportSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleExportSelected = async (includeImages) => {
     if (exporting) return;
     setExportError('');
     setExporting(true);
     try {
-      const blob = await api.exportBuildings(expandUpdatedRange(filters));
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      link.href = url;
-      link.download = `buildings-${dateStamp}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      const blob = await api.exportBuildingsByIds([...exportSelection], includeImages);
+      downloadExportFile(blob);
+      setExportMode(false);
+      setExportSelection(new Set());
     } catch (err) {
-      setExportError(err.message || 'שגיאה בייצוא קובץ האקסל.');
+      setExportError(err.message || 'שגיאה בייצוא קובץ הייצוא.');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleExportAction = () => {
+    if (!exportMode) {
+      setCardExportMode(false);
+      setCardExportSelection(new Set());
+      setExportMode(true);
+    }
+  };
+
+  const handleCancelExportMode = () => {
+    setExportMode(false);
+    setExportSelection(new Set());
+  };
+
+  const handleToggleCardExportAll = () => {
+    if (!cardExportMode) return;
+    if (allSelected) {
+      setCardExportSelection(new Set());
+      return;
+    }
+    setCardExportSelection(new Set(buildings.map((b) => b.id)));
+  };
+
+  const handleToggleCardExportBuilding = (id) => {
+    if (!cardExportMode) return;
+    setCardExportSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleExportCardsSelected = async () => {
+    if (cardExporting) return;
+    setCardExportError('');
+    setCardExporting(true);
+    try {
+      const orderedIds = sortedBuildings
+        .filter((building) => cardExportSelection.has(building.id))
+        .map((building) => building.id);
+      const blob = await api.exportBuildingCardsByIds(orderedIds);
+      downloadPptxFile(blob);
+      setCardExportMode(false);
+      setCardExportSelection(new Set());
+    } catch (err) {
+      setCardExportError(err.message || 'שגיאה בייצוא כרטיסי מבנה.');
+    } finally {
+      setCardExporting(false);
+    }
+  };
+
+  const handleCardExportAction = () => {
+    if (!cardExportMode) {
+      setExportMode(false);
+      setExportSelection(new Set());
+      setCardExportMode(true);
+    }
+  };
+
+  const handleCancelCardExportMode = () => {
+    setCardExportMode(false);
+    setCardExportSelection(new Set());
+  };
+
+  const openImportModal = () => {
+    setImportError('');
+    setImportSummary('');
+    setImportFile(null);
+    setImportRows([]);
+    setImportCompareRowId(null);
+    setImportCompareTargetId(null);
+    setImportEditRowId(null);
+    setImportEditValues(null);
+    setImportEditError('');
+    setImportPreviewing(false);
+    setImportApplying(false);
+    setShowImportModal(true);
+  };
+
+  const closeImportModal = () => {
+    setImportError('');
+    setImportSummary('');
+    setImportFile(null);
+    setImportRows([]);
+    setImportCompareRowId(null);
+    setImportCompareTargetId(null);
+    setImportEditRowId(null);
+    setImportEditValues(null);
+    setImportEditError('');
+    setImportPreviewing(false);
+    setImportApplying(false);
+    setShowImportModal(false);
+  };
+
+  const handleImportFileChange = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    setImportFile(file);
+    setImportError('');
+    setImportSummary('');
+    setImportRows([]);
+    setImportCompareRowId(null);
+    setImportCompareTargetId(null);
+    setImportEditRowId(null);
+    setImportEditValues(null);
+    setImportEditError('');
+  };
+
+  const triggerImportFileSelect = () => {
+    const input = document.getElementById('buildings-import-file');
+    if (input && !input.disabled) {
+      input.click();
+    }
+  };
+
+  const buildImportRows = (rows) =>
+    rows.map((row) => {
+      const missingRequired = Array.isArray(row.missingRequired)
+        ? row.missingRequired
+        : getMissingImportRequired(row.values);
+      const hasIdConflict = Boolean(row.hasIdConflict);
+      const invalidValues = Array.isArray(row.invalidValues) ? row.invalidValues : [];
+      return {
+        ...row,
+        missingRequired,
+        invalidValues,
+        hasIdConflict,
+        decision: row.decision ?? null,
+        replaceIds: Array.isArray(row.replaceIds) ? row.replaceIds : [],
+        allowDuplicate: false,
+        compareTargetId: row.addressMatches?.[0]?.id ?? null
+      };
+    });
+
+  const applyBatchIdConflicts = (rows) => {
+    const idCounts = rows.reduce((acc, row) => {
+      const rawId = row.values?.Id ?? '';
+      const idValue = String(rawId).trim();
+      if (!idValue) return acc;
+      const parsed = Number(idValue);
+      if (!Number.isInteger(parsed) || parsed <= 0) return acc;
+      acc[parsed] = (acc[parsed] || 0) + 1;
+      return acc;
+    }, {});
+
+    return rows.map((row) => {
+      const rawId = row.values?.Id ?? '';
+      const idValue = String(rawId).trim();
+      const parsed = Number(idValue);
+      const batchConflict = Number.isInteger(parsed) && parsed > 0 && idCounts[parsed] > 1;
+      let warnings = Array.isArray(row.warnings) ? [...row.warnings] : [];
+      if (batchConflict && !warnings.includes('ID מופיע יותר מפעם אחת בקובץ הייבוא.')) {
+        warnings.push('ID מופיע יותר מפעם אחת בקובץ הייבוא.');
+      }
+      if (!batchConflict) {
+        warnings = warnings.filter((warning) => warning !== 'ID מופיע יותר מפעם אחת בקובץ הייבוא.');
+      }
+      const dbConflict = Boolean(row.hasIdConflict);
+      return {
+        ...row,
+        batchIdConflict: batchConflict,
+        warnings,
+        hasIdConflict: dbConflict || batchConflict
+      };
+    });
+  };
+
+  const applyAutoDecisions = (rows) =>
+    rows.map((row) => (row.decision ? row : { ...row, decision: computeRowDecision(row) }));
+
+  const normalizeImportRows = (rows) => applyAutoDecisions(applyBatchIdConflicts(rows));
+
+  const updateImportRow = (rowNumber, updates) => {
+    setImportRows((prev) =>
+      normalizeImportRows(prev.map((row) => (row.rowNumber === rowNumber ? { ...row, ...updates } : row)))
+    );
+  };
+
+  const handlePreviewImport = async () => {
+    if (!importFile) {
+      setImportError('נא לבחור קובץ אקסל או ZIP.');
+      return;
+    }
+    setImportError('');
+    setImportSummary('');
+    setImportPreviewing(true);
+    try {
+      const result = await api.previewImportBuildings(importFile);
+      const rows = normalizeImportRows(buildImportRows(result.rows || []));
+      setImportRows(rows);
+      setImportSummary(`נטענו ${rows.length} שורות לייבוא.`);
+    } catch (err) {
+      setImportError(err.message || 'שגיאה בקריאת קובץ הייבוא.');
+    } finally {
+      setImportPreviewing(false);
+    }
+  };
+
+  const handleImportApply = async () => {
+    if (importRows.length === 0) {
+      setImportError('אין שורות לייבוא.');
+      return;
+    }
+    const invalidRows = importRows.filter(
+      (row) =>
+        row.decision === null &&
+        ((row.missingRequired?.length ?? 0) > 0 ||
+          (row.invalidValues?.length ?? 0) > 0 ||
+          row.hasIdConflict)
+    );
+    if (invalidRows.length > 0) {
+      setImportError('יש שורות שחובה לתקן לפני הייבוא.');
+      return;
+    }
+
+    const unresolvedConflicts = importRows.filter(
+      (row) =>
+        row.decision === null &&
+        (row.addressMatches?.length ?? 0) > 0 &&
+        !row.exactMatch
+    );
+    if (unresolvedConflicts.length > 0) {
+      setImportError('יש כפילויות שטרם טופלו.');
+      return;
+    }
+
+    const payloadRows = importRows
+      .filter((row) => row.decision)
+      .map((row) => ({
+        rowNumber: row.rowNumber,
+        action: row.decision,
+        values: row.values,
+        allowDuplicate: row.decision === 'add_anyway' || row.decision === 'replace',
+        replaceIds: row.decision === 'replace' ? row.replaceIds : null
+      }));
+
+    if (payloadRows.length === 0) {
+      setImportError('אין שורות לביצוע.');
+      return;
+    }
+
+    setImportError('');
+    setImportApplying(true);
+    try {
+      const result = await api.applyImportBuildings(payloadRows);
+      const summary = `הייבוא הושלם. נוספו ${result.created} מבנים, עודכנו ${result.updated}, דולגו ${result.skipped}.`;
+      setActionMessage(summary);
+      closeImportModal();
+      loadBuildings(filters);
+    } catch (err) {
+      setImportError(err.message || 'שגיאה בייבוא קובץ הייבוא.');
+    } finally {
+      setImportApplying(false);
+    }
+  };
+
+  const computeRowDecision = (row) => {
+    const missingRequired = row.missingRequired?.length ?? 0;
+    const invalidValues = row.invalidValues?.length ?? 0;
+    const hasAddressConflict = (row.addressMatches?.length ?? 0) > 0;
+    if (row.exactMatch) return 'skip';
+    if (!row.hasIdConflict && missingRequired === 0 && invalidValues === 0 && !hasAddressConflict) return 'create';
+    return null;
+  };
+
+  const handleResolveConflict = (rowNumber, decision, replaceIds = []) => {
+    updateImportRow(rowNumber, {
+      decision,
+      replaceIds,
+      allowDuplicate: decision === 'add_anyway' || decision === 'replace'
+    });
+  };
+
+  const handleImportSkipAll = () => {
+    setImportRows((prev) =>
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.decision) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || (row.invalidValues?.length ?? 0) > 0 || row.hasIdConflict)
+            return row;
+          if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
+          return { ...row, decision: 'skip' };
+        })
+      )
+    );
+  };
+
+  const handleImportSkipAllStage1 = () => {
+    setImportRows((prev) =>
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.decision) return row;
+          if (
+            (row.missingRequired?.length ?? 0) > 0 ||
+            (row.invalidValues?.length ?? 0) > 0 ||
+            row.hasIdConflict
+          ) {
+            return { ...row, decision: 'skip' };
+          }
+          return row;
+        })
+      )
+    );
+  };
+
+  const handleImportReplaceAll = () => {
+    setImportRows((prev) =>
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.decision) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || (row.invalidValues?.length ?? 0) > 0 || row.hasIdConflict)
+            return row;
+          if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
+          const allIds = row.addressMatches?.map((match) => match.id) ?? [];
+          return { ...row, decision: 'replace', replaceIds: allIds, allowDuplicate: true };
+        })
+      )
+    );
+  };
+
+  const handleImportAddAnywayAll = () => {
+    setImportRows((prev) =>
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.decision) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || (row.invalidValues?.length ?? 0) > 0 || row.hasIdConflict)
+            return row;
+          if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
+          return { ...row, decision: 'add_anyway', allowDuplicate: true };
+        })
+      )
+    );
+  };
+
+  const openImportCompare = (rowNumber) => {
+    const row = importRows.find((item) => item.rowNumber === rowNumber);
+    if (!row) return;
+    if ((row.replaceIds?.length ?? 0) === 0 && (row.addressMatches?.length ?? 0) > 0) {
+      updateImportRow(rowNumber, { replaceIds: row.addressMatches.map((match) => match.id) });
+    }
+    setImportCompareRowId(rowNumber);
+    const targetId = row.compareTargetId ?? row.addressMatches?.[0]?.id ?? null;
+    setImportCompareTargetId(targetId);
+  };
+
+  const closeImportCompare = () => {
+    setImportCompareRowId(null);
+    setImportCompareTargetId(null);
+  };
+
+  const handleSelectCompareTarget = (rowNumber, targetId) => {
+    setImportCompareTargetId(targetId);
+    updateImportRow(rowNumber, { compareTargetId: targetId });
+  };
+
+  const toggleReplaceSelection = (rowNumber, targetId) => {
+    setImportRows((prev) =>
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.rowNumber !== rowNumber) return row;
+          const current = Array.isArray(row.replaceIds) ? row.replaceIds : [];
+          const next = current.includes(targetId)
+            ? current.filter((id) => id !== targetId)
+            : [...current, targetId];
+          return { ...row, replaceIds: next };
+        })
+      )
+    );
+  };
+
+  const openImportEdit = (rowNumber) => {
+    const row = importRows.find((item) => item.rowNumber === rowNumber);
+    if (!row) return;
+    setImportEditRowId(rowNumber);
+    const nextValues = { ...(row.values || {}) };
+    nextValues.BldSivug = resolveSelectLabel(nextValues.BldSivug, sivugOptions);
+    nextValues.ShikumStatus = resolveSelectLabel(nextValues.ShikumStatus, statusOptions);
+    setImportEditValues(nextValues);
+    setImportEditError('');
+  };
+
+  const closeImportEdit = () => {
+    setImportEditRowId(null);
+    setImportEditValues(null);
+    setImportEditError('');
+  };
+
+  const handleImportEditValueChange = (field, value) => {
+    setImportEditValues((prev) => {
+      const next = { ...(prev || {}), [field]: value };
+      if (field === 'Id' && String(value ?? '').trim() === '0') {
+        next.Id = '';
+      }
+      if (field === 'BldSivug') {
+        const sivugValue = resolveSelectValue(value, sivugOptions);
+        if (rehabSivugValue && String(sivugValue) !== String(rehabSivugValue)) {
+          next.ShikumStatus = '';
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleImportEditSave = async () => {
+    if (!importEditRowId || !importEditValues) return;
+    setImportEditSaving(true);
+    setImportEditError('');
+    try {
+      const result = await api.validateImportRow(importEditValues);
+      updateImportRow(importEditRowId, {
+        values: result.values || importEditValues,
+        addressMatches: result.addressMatches || [],
+        idMatch: result.idMatch || null,
+        hasIdConflict: Boolean(result.hasIdConflict),
+        exactMatch: Boolean(result.exactMatch),
+        missingRequired: Array.isArray(result.missingRequired) ? result.missingRequired : [],
+        invalidValues: Array.isArray(result.invalidValues) ? result.invalidValues : [],
+        warnings: Array.isArray(result.warnings) ? result.warnings : [],
+        importFields: result.importFields || [],
+        compareTargetId: result.addressMatches?.[0]?.id ?? null
+      });
+      closeImportEdit();
+    } catch (err) {
+      setImportEditError(err.message || 'שגיאה בעדכון השורה.');
+    } finally {
+      setImportEditSaving(false);
     }
   };
 
@@ -385,15 +1087,15 @@ export default function BuildingsPage() {
     }
   };
 
-  const handleCreateChange = (event) => {
-    const { name, value } = event.target;
-    setCreateForm((form) => {
-      const next = { ...form, [name]: value };
-      if (name === 'category' && String(value) !== rehabSivugValue) {
-        next.shikumStatusId = '';
+  const handleCreateFieldChange = (columnName, value) => {
+    setCreateFieldValues((prev) => {
+      const next = { ...prev, [columnName]: value };
+      if (columnName === 'BldSivug' && String(value) !== rehabSivugValue) {
+        next.ShikumStatus = '';
       }
       return next;
     });
+    setDuplicatePrompt('');
     setUnsavedChanges(true);
   };
 
@@ -401,6 +1103,7 @@ export default function BuildingsPage() {
     setModalMode('create');
     setShowModal(true);
     setUnsavedChanges(false);
+    setDuplicatePrompt('');
   };
 
   const openBuildingModal = async (id, view = 'view') => {
@@ -423,72 +1126,135 @@ export default function BuildingsPage() {
     setModalMode('view');
     setUnsavedChanges(false);
     setSelectedBuilding(null);
+    setDuplicatePrompt('');
+    setEditDuplicatePrompt('');
   };
 
-  const handleCreateBuilding = async (event) => {
+  const handleOpenEditModal = () => {
+    if (!selectedBuilding) return;
+    openBuildingModal(selectedBuilding.id, 'edit');
+  };
+
+  const handleOpenLogsModal = () => {
+    if (!selectedBuilding) return;
+    navigate(`/logs?buildingId=${selectedBuilding.id}`);
+  };
+
+  const handleCreateBuilding = async (event, allowDuplicate = false) => {
     if (event && event.preventDefault) event.preventDefault();
     setActionMessage('');
+    if (!allowDuplicate) {
+      setDuplicatePrompt('');
+    }
     try {
-      if (!createForm.streetId) {
+      const getCreateValue = (key) => createFieldValues[key] ?? '';
+      const streetId = String(getCreateValue('StreetId'));
+      const houseNumber = String(getCreateValue('BldNum')).trim();
+      const buildingName = String(getCreateValue('BldName')).trim();
+      const bldSivug = String(getCreateValue('BldSivug'));
+      const shikumStatusId = String(getCreateValue('ShikumStatus'));
+      const statusSummary = getCreateValue('StatusSummary');
+      const idRaw = String(getCreateValue('Id')).trim();
+      const complaints = getCreateValue('complaints') || getCreateValue('Complaints');
+
+      const idNumber = idRaw ? Number(idRaw) : null;
+      if (idRaw && (!Number.isInteger(idNumber) || idNumber <= 0)) {
+        throw new Error('ID חייב להיות מספר חיובי');
+      }
+      if (!streetId) {
         throw new Error('יש לבחור רחוב מהרשימה');
       }
-      if (!createForm.bldNum.trim()) {
+      if (!houseNumber) {
         throw new Error('יש להזין מספר בית');
       }
-      if (!createForm.bldName.trim()) {
+      if (!buildingName) {
         throw new Error('יש להזין כינוי הבניין');
       }
-      if (isRehabStatusRequired && !createForm.shikumStatusId) {
-        throw new Error('יש לבחור סטטוס שיקום');
-      }
-      if (!createForm.category) {
+      if (!bldSivug) {
         throw new Error('יש לבחור סיווג');
+      }
+      if (isRehabStatusRequired && !shikumStatusId) {
+        throw new Error('יש לבחור סטטוס שיקום');
       }
       let statusOption = null;
       if (isRehabStatusRequired) {
         statusOption = statusOptions.find(
-          (option) => String(option.id) === createForm.shikumStatusId
+          (option) => String(option.id) === shikumStatusId
         );
         if (!statusOption) {
           throw new Error('סטטוס השיקום שבחרת אינו חוקי');
         }
       }
       const sivugOption = sivugOptions.find(
-        (option) => String(option.value) === createForm.category
+        (option) => String(option.value) === bldSivug
       );
       if (!sivugOption) {
         throw new Error('הסיווג שבחרת אינו חוקי');
       }
-      const streetOption = streets.find((street) => String(street.streetId) === createForm.streetId);
+      const streetOption = streets.find((street) => String(street.streetId) === streetId);
       if (!streetOption) {
         throw new Error('יש לבחור רחוב מהרשימה');
       }
-      await api.createBuilding({
-        fldId: createForm.fldId,
+      const created = await api.createBuilding({
+        id: idNumber ?? undefined,
         streetId: streetOption.streetId,
-        houseNumber: createForm.bldNum,
-        nickname: createForm.bldName,
-        bldSivug: createForm.category,
+        houseNumber,
+        nickname: buildingName,
+        bldSivug,
         status: statusOption ? statusOption.value : undefined,
-        statusSummary: createForm.statusSummary,
-        complaints: ''
+        statusSummary,
+        complaints,
+        allowDuplicate
       });
-      setCreateForm({
-        fldId: '',
-        streetId: '',
-        bldNum: '',
-        bldName: '',
-        statusSummary: '',
-        shikumStatusId: '',
-        category: ''
-      });
+      const coreColumns = new Set([
+        'Id',
+        'StreetId',
+        'StreetName',
+        'BldNum',
+        'BldName',
+        'BldSivug',
+        'ShikumStatus',
+        'StatusSummary',
+        'complaints',
+        'Complaints'
+      ]);
+      const extraFields = Object.entries(createFieldValues).reduce((acc, [column, value]) => {
+        if (!column) return acc;
+        if (coreColumns.has(column)) return acc;
+        if (column.toLowerCase() === 'streetname') return acc;
+        if (value === null || value === undefined) return acc;
+        if (typeof value === 'string' && value.trim() === '') return acc;
+        acc[column] = value;
+        return acc;
+      }, {});
+      if (Object.keys(extraFields).length > 0) {
+        await api.updateBuildingFields(created.id, extraFields, allowDuplicate);
+      }
+      setDuplicatePrompt('');
+      loadCreateTemplate();
       setShowModal(false);
       setUnsavedChanges(false);
       loadBuildings(filters);
       setActionMessage('המבנה נוסף בהצלחה.');
     } catch (err) {
+      if (err?.payload?.isIdDuplicate) {
+        setActionMessage(err?.payload?.error || 'קיים מבנה עם ID זה');
+        return;
+      }
+      if (err?.payload?.isDuplicate || err?.status === 409) {
+        setDuplicatePrompt(err?.payload?.error || 'נמצאה כפילות');
+        return;
+      }
       setActionMessage(err.message);
     }
+  };
+
+  const handleDuplicateConfirm = () => {
+    handleCreateBuilding(null, true);
+  };
+
+  const handleDuplicateCancel = () => {
+    setDuplicatePrompt('');
   };
 
   const handleEditFieldChange = (columnName, value) => {
@@ -499,13 +1265,17 @@ export default function BuildingsPage() {
       }
       return next;
     });
+    setEditDuplicatePrompt('');
     setUnsavedChanges(true);
   };
 
-  const handleUpdateBuildingFields = async (event) => {
+  const handleUpdateBuildingFields = async (event, allowDuplicate = false) => {
     if (event && event.preventDefault) event.preventDefault();
     if (!selectedBuilding) return;
     setActionMessage('');
+    if (!allowDuplicate) {
+      setEditDuplicatePrompt('');
+    }
     const isMissing = (value) =>
       value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
     const missingField = REQUIRED_EDIT_FIELDS.find((field) => {
@@ -522,13 +1292,94 @@ export default function BuildingsPage() {
         return acc;
       }, {});
 
-      const updated = await api.updateBuildingFields(selectedBuilding.id, cleaned);
+      const updated = await api.updateBuildingFields(selectedBuilding.id, cleaned, allowDuplicate);
       setSelectedBuilding(updated);
       loadBuildings(filters);
       setActionMessage('פרטי המבנה עודכנו.');
+      setEditDuplicatePrompt('');
       setUnsavedChanges(false);
     } catch (err) {
+      if (err?.payload?.isIdDuplicate) {
+        setActionMessage(err?.payload?.error || 'קיים מבנה עם ID זה');
+        return;
+      }
+      if (err?.payload?.isDuplicate || err?.status === 409) {
+        setEditDuplicatePrompt(err?.payload?.error || 'נמצאה כפילות');
+        return;
+      }
       setActionMessage(err.message);
+    }
+  };
+
+  const handleEditDuplicateConfirm = () => {
+    handleUpdateBuildingFields(null, true);
+  };
+
+  const handleEditDuplicateCancel = () => {
+    setEditDuplicatePrompt('');
+  };
+
+  const readFileAsDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('שגיאה בקריאת הקובץ.'));
+      reader.readAsDataURL(file);
+    });
+
+  const handlePhotoUpload = async (file) => {
+    if (!file) return;
+    setPhotoError('');
+    setActionMessage('');
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('נא לבחור קובץ תמונה.');
+      return;
+    }
+    const maxSizeMb = 5;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setPhotoError(`גודל התמונה חייב להיות עד ${maxSizeMb}MB.`);
+      return;
+    }
+    const existingPhoto =
+      modalMode === 'create'
+        ? createFieldValues.PhotoUrls
+        : editFieldValues.PhotoUrls ?? selectedBuilding?.photos?.[0];
+    if (existingPhoto) {
+      setPhotoError('ניתן לשמור תמונה אחת בלבד.');
+      return;
+    }
+    try {
+      setPhotoLoading(true);
+      const dataUrl = await readFileAsDataUrl(file);
+      if (modalMode === 'create') {
+        setCreateFieldValues((prev) => ({ ...prev, PhotoUrls: dataUrl }));
+      } else if (selectedBuilding) {
+        setEditFieldValues((prev) => ({ ...prev, PhotoUrls: dataUrl }));
+        setUnsavedChanges(true);
+      }
+    } catch (err) {
+      setPhotoError(err.message || 'שגיאה בהעלאת התמונה.');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
+    if (modalMode !== 'create' && !selectedBuilding) return;
+    setPhotoError('');
+    setActionMessage('');
+    try {
+      setPhotoLoading(true);
+      if (modalMode === 'create') {
+        setCreateFieldValues((prev) => ({ ...prev, PhotoUrls: '' }));
+      } else if (selectedBuilding) {
+        setEditFieldValues((prev) => ({ ...prev, PhotoUrls: '' }));
+        setUnsavedChanges(true);
+      }
+    } catch (err) {
+      setPhotoError(err.message || 'שגיאה במחיקת התמונה.');
+    } finally {
+      setPhotoLoading(false);
     }
   };
 
@@ -548,6 +1399,57 @@ export default function BuildingsPage() {
   };
 
   const statuses = useMemo(() => statusOptions, [statusOptions]);
+  const selectionMode = exportMode || cardExportMode;
+  const activeSelection = exportMode ? exportSelection : cardExportSelection;
+  const allSelected = useMemo(
+    () =>
+      selectionMode &&
+      buildings.length > 0 &&
+      buildings.every((building) => activeSelection.has(building.id)),
+    [activeSelection, buildings, selectionMode]
+  );
+  const importStats = useMemo(() => {
+    return importRows.reduce(
+      (acc, row) => {
+        const action = row.decision;
+        if (!action) {
+          acc.pending += 1;
+          return acc;
+        }
+        if (action === 'create') acc.create += 1;
+        else if (action === 'replace') acc.replace += 1;
+        else if (action === 'add_anyway') acc.addAnyway += 1;
+        else acc.skip += 1;
+        return acc;
+      },
+      { create: 0, replace: 0, addAnyway: 0, skip: 0, pending: 0 }
+    );
+  }, [importRows]);
+  const importStage1Rows = useMemo(
+    () =>
+      importRows.filter(
+        (row) =>
+          row.decision === null &&
+          ((row.missingRequired?.length ?? 0) > 0 ||
+            (row.invalidValues?.length ?? 0) > 0 ||
+            row.hasIdConflict)
+      ),
+    [importRows]
+  );
+  const importStage2Rows = useMemo(
+    () =>
+      importRows.filter(
+        (row) =>
+          row.decision === null &&
+          (row.missingRequired?.length ?? 0) === 0 &&
+          (row.invalidValues?.length ?? 0) === 0 &&
+          !row.hasIdConflict &&
+          (row.addressMatches?.length ?? 0) > 0 &&
+          !row.exactMatch
+      ),
+    [importRows]
+  );
+  const importReadyToApply = importRows.length > 0 && importStage1Rows.length === 0 && importStage2Rows.length === 0;
 
   const handleTabChange = (tab) => {
     setSelectedView(tab);
@@ -574,6 +1476,18 @@ export default function BuildingsPage() {
 
   const toggleEditCategory = (category) => {
     setOpenEditCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  const toggleCreateCategory = (category) => {
+    setOpenCreateCategories((prev) => {
       const next = new Set(prev);
       if (next.has(category)) {
         next.delete(category);
@@ -709,6 +1623,16 @@ export default function BuildingsPage() {
     }, {});
   }, [selectedBuilding]);
 
+  const createFieldsByCategory = useMemo(() => {
+    const fields = createFieldTemplate || [];
+    return fields.reduce((acc, field) => {
+      const category = field.category || 'כללי';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(field);
+      return acc;
+    }, {});
+  }, [createFieldTemplate]);
+
   const orderedFieldGroups = useMemo(() => {
     const entries = Object.entries(fieldsByCategory);
     if (entries.length === 0) return [];
@@ -728,12 +1652,38 @@ export default function BuildingsPage() {
       .map((item) => item.entry);
   }, [fieldsByCategory]);
 
+  const createOrderedFieldGroups = useMemo(() => {
+    const entries = Object.entries(createFieldsByCategory);
+    if (entries.length === 0) return [];
+    const priority = (category) => {
+      if (category === 'מידע כללי') return 0;
+      if (category === 'פרטים מזהים') return 1;
+      return 2;
+    };
+    return entries
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => {
+        const aPriority = priority(a.entry[0]);
+        const bPriority = priority(b.entry[0]);
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.index - b.index;
+      })
+      .map((item) => item.entry);
+  }, [createFieldsByCategory]);
+
   const defaultOpenCategories = useMemo(() => {
     if (orderedFieldGroups.length === 0) return [];
     const categories = orderedFieldGroups.map(([category]) => category);
     const defaultCategory = categories.includes('מידע כללי') ? 'מידע כללי' : categories[0];
     return defaultCategory ? [defaultCategory] : [];
   }, [orderedFieldGroups]);
+
+  const defaultCreateOpenCategories = useMemo(() => {
+    if (createOrderedFieldGroups.length === 0) return [];
+    const categories = createOrderedFieldGroups.map(([category]) => category);
+    const defaultCategory = categories.includes('מידע כללי') ? 'מידע כללי' : categories[0];
+    return defaultCategory ? [defaultCategory] : [];
+  }, [createOrderedFieldGroups]);
 
   useEffect(() => {
     if (!selectedBuilding) {
@@ -749,12 +1699,21 @@ export default function BuildingsPage() {
     setIsLogsOpen(false);
   }, [selectedBuilding, defaultOpenCategories]);
 
+  useEffect(() => {
+    if (showModal && modalMode === 'create') {
+      setOpenCreateCategories(new Set(defaultCreateOpenCategories));
+    }
+  }, [showModal, modalMode, defaultCreateOpenCategories]);
+
   const sortFieldsForDisplay = (fields) => {
     if (!Array.isArray(fields)) return [];
     const fieldPriority = (name) => {
-      if (name === 'סיווג') return 0;
-      if (name === 'סטטוס שיקום') return 1;
-      return 2;
+      if (name === 'שם רחוב') return 0;
+      if (name === 'מספר בית') return 1;
+      if (name === 'כינוי הבניין') return 2;
+      if (name === 'סיווג') return 3;
+      if (name === 'סטטוס שיקום') return 4;
+      return 5;
     };
     return fields
       .map((field, index) => ({ field, index }))
@@ -781,6 +1740,26 @@ export default function BuildingsPage() {
     return `${excelName} (${fieldName})`;
   };
 
+  const importCompareFields = useMemo(() => {
+    if (!importCompareRow || !importCompareTarget) return [];
+    const ordered = sortFieldsForDisplay(importCompareRow.importFields || []);
+    const existingByColumn = new Map(
+      (importCompareTarget.fields || [])
+        .filter((field) => field?.columnName)
+        .map((field) => [field.columnName.toLowerCase(), field])
+    );
+    return ordered.map((field) => {
+      const columnKey = field.columnName || field.fieldName;
+      const lookupKey = columnKey ? columnKey.toLowerCase() : '';
+      return {
+        columnName: columnKey,
+        label: getExcelAwareLabel(field.fieldName || field.columnName),
+        importValue: field.value,
+        existingValue: existingByColumn.get(lookupKey)?.value ?? null
+      };
+    });
+  }, [importCompareRow, importCompareTarget, sortFieldsForDisplay]);
+
   const shouldUseTextarea = (fieldName) => {
     if (!fieldName) return false;
     return (
@@ -802,6 +1781,10 @@ export default function BuildingsPage() {
     if (typeof field.value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(field.value)) return true;
     return false;
   };
+
+  const importEditSivugValue = resolveSelectValue(importEditValues?.BldSivug ?? '', sivugOptions);
+  const isImportEditRehabRequired =
+    rehabSivugValue && String(importEditSivugValue) === String(rehabSivugValue);
 
   return (
     <main className="app buildings-app">
@@ -956,16 +1939,61 @@ export default function BuildingsPage() {
                 הוסף מבנה
               </button>
             )}
-            {isAdmin && (
-              <button type="button" className="ghost" onClick={handleExport} disabled={exporting}>
-                {exporting ? 'מייצא...' : 'יצוא לאקסל'}
+            {!cardExportMode && (
+              <button type="button" className="ghost" onClick={handleCardExportAction} disabled={cardExporting}>
+                {cardExporting ? 'מייצא...' : 'בחירת מבנים לכרטיסי מבנה'}
               </button>
+            )}
+            {cardExportMode && (
+              <>
+                <button type="button" className="ghost" onClick={handleExportCardsSelected} disabled={cardExporting}>
+                  {cardExporting ? 'מייצא...' : 'יצוא כרטיסים (PPTX)'}
+                </button>
+                <button type="button" className="ghost" onClick={handleCancelCardExportMode} disabled={cardExporting}>
+                  ביטול בחירה
+                </button>
+              </>
+            )}
+            {isAdmin && (
+              <>
+                {!exportMode && (
+                  <button type="button" className="ghost" onClick={handleExportAction} disabled={exporting}>
+                    {exporting ? 'מייצא...' : 'יצוא לאקסל'}
+                  </button>
+                )}
+                {exportMode && (
+                  <>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => handleExportSelected(false)}
+                      disabled={exporting}
+                    >
+                      {exporting ? 'מייצא...' : 'יצוא ללא תמונות (Excel)'}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => handleExportSelected(true)}
+                      disabled={exporting}
+                    >
+                      {exporting ? 'מייצא...' : 'יצוא עם תמונות (ZIP)'}
+                    </button>
+                    <button type="button" className="ghost" onClick={handleCancelExportMode} disabled={exporting}>
+                      ביטול יצוא
+                    </button>
+                  </>
+                )}
+                <button type="button" className="ghost" onClick={openImportModal} disabled={importBusy}>
+                  {importBusy ? 'מייבא...' : 'יבוא קובץ'}
+                </button>
+              </>
             )}
           </div>
         </form>
         {loading && <p className="muted">טוען מבנים…</p>}
         {error && <p className="error">שגיאה בטעינת מבנים: {error}</p>}
-        {actionMessage && <p className="success">{actionMessage}</p>}
+        {actionMessage && !showModal && <p className="success">{actionMessage}</p>}
         {exportError && <p className="error">שגיאה בייצוא: {exportError}</p>}
         {cardExportError && <p className="error">שגיאה בייצוא כרטיס מבנה: {cardExportError}</p>}
       </section>
@@ -973,12 +2001,26 @@ export default function BuildingsPage() {
       <section className="content-layout">
         <div className="list-panel full-span">
           <div className="panel-header">
-            <h2>תוצאות ({buildings.length})</h2>
+            <div>
+              <h2>תוצאות ({buildings.length})</h2>
+              {exportMode && <p className="muted">נבחרו {exportSelection.size} מבנים לייצוא</p>}
+              {cardExportMode && <p className="muted">נבחרו {cardExportSelection.size} מבנים לכרטיסים</p>}
+            </div>
           </div>
           <div className="table-wrapper">
-            <table>
+            <table className={selectionMode ? 'export-table' : ''}>
               <thead>
                 <tr>
+                  {selectionMode && (
+                    <th>
+                      <input
+                        type="checkbox"
+                        aria-label="בחר הכל"
+                        checked={allSelected}
+                        onChange={exportMode ? handleToggleExportAll : handleToggleCardExportAll}
+                      />
+                    </th>
+                  )}
                   <th aria-sort={getAriaSort('street')}>
                     <button type="button" className="sort-button" onClick={() => handleSortClick('street')}>
                       שם רחוב
@@ -1087,18 +2129,36 @@ export default function BuildingsPage() {
                   const statusSlug = statusValue.toLowerCase().replace(/\s+/g, '-');
                   const sivugLabel = getSivugLabel(building.bldSivug);
                   const ownershipLabel = getOwnershipLabel(building.sugBaalut);
+                  const isSelected = selectionMode && activeSelection.has(building.id);
                   return (
                     <Fragment key={building.id}>
                       <tr
-                        className={isActive ? 'active' : ''}
+                        className={`${isActive ? 'active' : ''}${isSelected ? ' selected-row' : ''}`}
                         onClick={() => {
-                          if (isActive) {
-                            handleCloseModal();
-                            return;
+                          if (exportMode) {
+                            handleToggleExportBuilding(building.id);
+                          } else if (cardExportMode) {
+                            handleToggleCardExportBuilding(building.id);
+                          } else {
+                            openBuildingModal(building.id, 'view');
                           }
-                          openBuildingModal(building.id, 'view');
                         }}
+                        onDoubleClick={() => openBuildingModal(building.id, 'view')}
                       >
+                        {selectionMode && (
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() =>
+                                exportMode
+                                  ? handleToggleExportBuilding(building.id)
+                                  : handleToggleCardExportBuilding(building.id)
+                              }
+                              onClick={(event) => event.stopPropagation()}
+                            />
+                          </td>
+                        )}
                         <td>{building.street}</td>
                         <td>{building.houseNumber}</td>
                         <td>{building.nickname || '—'}</td>
@@ -1116,7 +2176,7 @@ export default function BuildingsPage() {
                         <td>{building.statisticalArea || '—'}</td>
                         <td>{formatLogDate(building.updatedAt)}</td>
                         <td>{building.statusSummary || '—'}</td>
-                        <td>
+                        <td className="table-actions">
                           {canEdit && (
                             <button
                               type="button"
@@ -1169,7 +2229,7 @@ export default function BuildingsPage() {
                 })}
                 {buildings.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="12" className="muted">
+                    <td colSpan={selectionMode ? 13 : 12} className="muted">
                       אין מבנים שעונים על הסינון.
                     </td>
                   </tr>
@@ -1180,28 +2240,552 @@ export default function BuildingsPage() {
         </div>
 
       </section>
+      {showImportModal && (
+        <div className="modal-overlay" onClick={closeImportModal}>
+          <div className="modal-window modal-large" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>יבוא מבנים</h3>
+              <button type="button" className="modal-close" onClick={closeImportModal}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="import-controls">
+                <div className="file-input">
+                  <input
+                    id="buildings-import-file"
+                    type="file"
+                    accept=".xlsx,.zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip"
+                    onChange={handleImportFileChange}
+                    disabled={importBusy}
+                  />
+                  <button
+                    type="button"
+                    className="ghost file-input__button"
+                    onClick={triggerImportFileSelect}
+                    disabled={importBusy}
+                  >
+                    בחר קובץ
+                  </button>
+                  <span className={`file-input__name ${importFile ? '' : 'muted'}`}>
+                    {importFile ? importFile.name : 'לא נבחר קובץ'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={handlePreviewImport}
+                  disabled={importPreviewing || !importFile}
+                >
+                  {importPreviewing ? 'טוען…' : 'טעינת קובץ'}
+                </button>
+              </div>
+              {importSummary && <p className="muted">{importSummary}</p>}
+              {importError && <p className="error">{importError}</p>}
+
+              {importRows.length > 0 && (
+                <>
+                  <div className="import-summary">
+                    <span className="muted">
+                      להוספה אוטומטית: {importStats.create} | להחלפה: {importStats.replace} | הוספה בכל זאת:{' '}
+                      {importStats.addAnyway} | דילוג: {importStats.skip} | לטיפול: {importStats.pending}
+                    </span>
+                  </div>
+                  {importStage1Rows.length > 0 && (
+                    <div className="import-stage">
+                      <h4>שלב 1: השלמת שדות חובה / מזהה</h4>
+                      <p className="muted">יש להשלים את השדות החסרים ולפתור כפילויות ID לפני מעבר לכפילויות.</p>
+                      <div className="import-actions">
+                        <button type="button" className="ghost" onClick={handleImportSkipAllStage1}>
+                          דלג על הכל
+                        </button>
+                      </div>
+                      <div className="table-wrapper">
+                        <table className="import-table">
+                          <thead>
+                            <tr>
+                              <th>שורה</th>
+                              <th>ID</th>
+                              <th>שם רחוב</th>
+                              <th>מספר בית</th>
+                              <th>כינוי הבניין</th>
+                              <th>בעיה</th>
+                              <th>פעולה</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importStage1Rows.map((row) => {
+                              const missingLabels = (row.missingRequired || [])
+                                .map((column) => getImportRequiredLabel(column))
+                                .join(', ');
+                              const invalidLabels = (row.invalidValues || [])
+                                .map((issue) => `${getImportRequiredLabel(issue.columnName)} (${issue.message})`)
+                                .join(', ');
+                              const flags = [];
+                              if (row.hasIdConflict) flags.push('כפילות ID');
+                              if (missingLabels) flags.push(`חסרים שדות: ${missingLabels}`);
+                              if (invalidLabels) flags.push(`ערכים שגויים: ${invalidLabels}`);
+                              if (row.warnings?.length) flags.push(`אזהרות: ${row.warnings.join(', ')}`);
+                              const statusText = flags.length > 0 ? flags.join(' | ') : '—';
+                              const rowStreetName =
+                                row.values?.StreetName ||
+                                streets.find((street) => String(street.streetId) === String(row.values?.StreetId))
+                                  ?.name ||
+                                '';
+                              return (
+                                <tr
+                                  key={row.rowNumber}
+                                  className="import-row import-row--needs"
+                                  onClick={() => openImportEdit(row.rowNumber)}
+                                >
+                                  <td>{row.rowNumber}</td>
+                                  <td>{displayOrDash(row.values?.Id)}</td>
+                                  <td>{displayOrDash(rowStreetName)}</td>
+                                  <td>{displayOrDash(row.values?.BldNum)}</td>
+                                  <td>{displayOrDash(row.values?.BldName)}</td>
+                                  <td>{statusText}</td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openImportEdit(row.rowNumber);
+                                      }}
+                                    >
+                                      עריכה
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleResolveConflict(row.rowNumber, 'skip');
+                                      }}
+                                    >
+                                      דלג
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {importStage1Rows.length === 0 && importStage2Rows.length > 0 && (
+                    <div className="import-stage">
+                      <h4>שלב 2: כפילויות כתובת</h4>
+                      <p className="muted">
+                        בחרו לכל שורה אם לדלג, להוסיף בכל זאת, או להחליף מבנים קיימים.
+                      </p>
+                      <div className="table-wrapper">
+                        <table className="import-table">
+                          <thead>
+                            <tr>
+                              <th>שורה</th>
+                              <th>ID</th>
+                              <th>שם רחוב</th>
+                              <th>מספר בית</th>
+                              <th>כינוי הבניין</th>
+                              <th>כפילויות קיימות</th>
+                              <th>פעולות</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importStage2Rows.map((row) => {
+                              const rowStreetName =
+                                row.values?.StreetName ||
+                                streets.find((street) => String(street.streetId) === String(row.values?.StreetId))
+                                  ?.name ||
+                                '';
+                              return (
+                                <tr
+                                  key={row.rowNumber}
+                                  className="import-row import-row--conflict"
+                                  onClick={() => openImportCompare(row.rowNumber)}
+                                >
+                                  <td>{row.rowNumber}</td>
+                                  <td>{displayOrDash(row.values?.Id)}</td>
+                                  <td>{displayOrDash(rowStreetName)}</td>
+                                  <td>{displayOrDash(row.values?.BldNum)}</td>
+                                  <td>{displayOrDash(row.values?.BldName)}</td>
+                                  <td>{row.addressMatches?.length ?? 0}</td>
+                                  <td>
+                                    <div className="import-actions">
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openImportCompare(row.rowNumber);
+                                        }}
+                                      >
+                                        השוואה / החלפה
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          handleResolveConflict(row.rowNumber, 'skip');
+                                        }}
+                                      >
+                                        דלג
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          handleResolveConflict(row.rowNumber, 'add_anyway');
+                                        }}
+                                      >
+                                        הוסף בכל זאת
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {importStage1Rows.length === 0 && importStage2Rows.length === 0 && (
+                    <p className="muted">אין שורות שדורשות טיפול נוסף. אפשר לבצע את הייבוא.</p>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <div className="footer-actions">
+                <button type="button" className="ghost" onClick={closeImportModal} disabled={importBusy}>
+                  סגירה
+                </button>
+                {importStage1Rows.length === 0 && importStage2Rows.length > 0 && (
+                  <>
+                    <button type="button" className="ghost" onClick={handleImportSkipAll} disabled={importBusy}>
+                      דלג הכל
+                    </button>
+                    <button type="button" className="ghost" onClick={handleImportReplaceAll} disabled={importBusy}>
+                      החלף הכל
+                    </button>
+                    <button type="button" className="ghost" onClick={handleImportAddAnywayAll} disabled={importBusy}>
+                      הוסף בכל זאת הכל
+                    </button>
+                  </>
+                )}
+                {importRows.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={handleImportApply}
+                      disabled={importApplying || importBusy || !importReadyToApply}
+                    >
+                      {importApplying ? 'מייבא...' : 'בצע ייבוא'}
+                    </button>
+                  </>
+                )}
+              </div>
+              {importStage1Rows.length > 0 && (
+                <p className="error">יש שורות שחובה להשלים לפני הייבוא.</p>
+              )}
+              {importStage1Rows.length === 0 && importStage2Rows.length > 0 && (
+                <p className="error">יש כפילויות שדורשות טיפול לפני הייבוא.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {importEditRow && (
+        <div className="modal-overlay" onClick={closeImportEdit}>
+          <div className="modal-window modal-large" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>תיקון שורה {importEditRow.rowNumber}</h3>
+              <button type="button" className="modal-close" onClick={closeImportEdit}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="muted">השלימו את שדות החובה. השאירו ID ריק ליצירה אוטומטית.</p>
+              {importEditRow.hasIdConflict && (
+                <p className="error">קיים מבנה עם ID זה או שה־ID מופיע יותר מפעם אחת בקובץ.</p>
+              )}
+              {(importEditRow.missingRequired?.length ?? 0) > 0 && (
+                <p className="error">
+                  חסרים שדות חובה:{' '}
+                  {importEditRow.missingRequired.map((column) => getImportRequiredLabel(column)).join(', ')}
+                </p>
+              )}
+              {(importEditRow.invalidValues?.length ?? 0) > 0 && (
+                <p className="error">
+                  ערכים שגויים:{' '}
+                  {importEditRow.invalidValues
+                    .map((issue) => `${getImportRequiredLabel(issue.columnName)} (${issue.message})`)
+                    .join(', ')}
+                </p>
+              )}
+              {importEditRow.warnings?.length > 0 && (
+                <p className="muted">אזהרות: {importEditRow.warnings.join(', ')}</p>
+              )}
+              {importEditError && <p className="error">{importEditError}</p>}
+              <div className="import-edit-grid">
+                <label>
+                  ID (אופציונלי)
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={importEditValues?.Id ?? ''}
+                    onChange={(event) => handleImportEditValueChange('Id', event.target.value)}
+                  />
+                </label>
+                <label className="required">
+                  <span className="label-title">
+                    שם רחוב <span className="required-mark">*</span>
+                  </span>
+                  <select
+                    value={importEditValues?.StreetId ?? ''}
+                    onChange={(event) => handleImportEditValueChange('StreetId', event.target.value)}
+                  >
+                    <option value="">בחר רחוב</option>
+                    {streets.map((street) => (
+                      <option key={street.streetId} value={street.streetId}>
+                        {street.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="required">
+                  <span className="label-title">
+                    מספר בית <span className="required-mark">*</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={importEditValues?.BldNum ?? ''}
+                    onChange={(event) => handleImportEditValueChange('BldNum', event.target.value)}
+                  />
+                </label>
+                <label className="required">
+                  <span className="label-title">
+                    כינוי הבניין <span className="required-mark">*</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={importEditValues?.BldName ?? ''}
+                    onChange={(event) => handleImportEditValueChange('BldName', event.target.value)}
+                  />
+                </label>
+                <label className="required">
+                  <span className="label-title">
+                    סיווג <span className="required-mark">*</span>
+                  </span>
+                  <select
+                    value={importEditValues?.BldSivug ?? ''}
+                    onChange={(event) => handleImportEditValueChange('BldSivug', event.target.value)}
+                  >
+                    <option value="">—</option>
+                    {sivugOptions.map((opt) => (
+                      <option key={opt.value} value={opt.label}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={isImportEditRehabRequired ? 'required' : ''}>
+                  <span className="label-title">
+                    סטטוס שיקום {isImportEditRehabRequired && <span className="required-mark">*</span>}
+                  </span>
+                  <select
+                    value={importEditValues?.ShikumStatus ?? ''}
+                    onChange={(event) => handleImportEditValueChange('ShikumStatus', event.target.value)}
+                    disabled={!isImportEditRehabRequired}
+                  >
+                    <option value="">—</option>
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value ?? opt.id} value={opt.label}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <div className="footer-actions">
+                <button type="button" className="ghost" onClick={closeImportEdit} disabled={importEditSaving}>
+                  סגירה
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={handleImportEditSave}
+                  disabled={importEditSaving}
+                >
+                  {importEditSaving ? 'שומר...' : 'שמירה'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {importCompareRow && (
+        <div className="modal-overlay" onClick={closeImportCompare}>
+          <div className="modal-window modal-large" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>השוואת שורה {importCompareRow.rowNumber}</h3>
+              <button type="button" className="modal-close" onClick={closeImportCompare}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              {importCompareRow.warnings?.length > 0 && (
+                <p className="muted">אזהרות: {importCompareRow.warnings.join(', ')}</p>
+              )}
+              <p className="muted">
+                נמצאו {importCompareRow.addressMatches?.length ?? 0} מבנים באותה כתובת. בחרו אילו למחוק והחליפו.
+              </p>
+              <div className="import-match-list">
+                {(importCompareRow.addressMatches || []).map((match) => {
+                  const isSelected = (importCompareRow.replaceIds || []).includes(match.id);
+                  const isActive = importCompareTarget?.id === match.id;
+                  return (
+                    <div key={match.id} className={`import-match ${isActive ? 'active' : ''}`}>
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => handleSelectCompareTarget(importCompareRow.rowNumber, match.id)}
+                      >
+                        {match.streetName} {match.houseNumber} · {match.buildingName} (ID {match.id})
+                      </button>
+                      <label className="import-match-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(event) => {
+                            event.stopPropagation();
+                            toggleReplaceSelection(importCompareRow.rowNumber, match.id);
+                          }}
+                        />
+                        להחלפה
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+              {!importCompareTarget && <p className="muted">בחרו מבנה להשוואה כדי לראות את ההבדלים.</p>}
+
+              <div className="table-wrapper">
+                <table className="import-compare-table">
+                  <thead>
+                    <tr>
+                      <th>שדה</th>
+                      <th>מיובא</th>
+                      <th>קיים במערכת</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importCompareFields.map((row) => (
+                      <tr key={row.columnName}>
+                        <td>{row.label}</td>
+                        <td>{renderImportValue(row.importValue)}</td>
+                        <td>{renderImportValue(row.existingValue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <div className="footer-actions">
+                <button type="button" className="ghost" onClick={closeImportCompare}>
+                  סגירה
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    handleResolveConflict(importCompareRow.rowNumber, 'skip');
+                    closeImportCompare();
+                  }}
+                >
+                  דלג
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    handleResolveConflict(importCompareRow.rowNumber, 'add_anyway');
+                    closeImportCompare();
+                  }}
+                >
+                  הוסף בכל זאת
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={(importCompareRow.replaceIds?.length ?? 0) === 0}
+                  onClick={() => {
+                    handleResolveConflict(
+                      importCompareRow.rowNumber,
+                      'replace',
+                      importCompareRow.replaceIds || []
+                    );
+                    closeImportCompare();
+                  }}
+                >
+                  החלף נבחרים
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <BuildingModal
         visible={showModal}
         mode={modalMode}
         building={selectedBuilding}
-        createForm={createForm}
+        createFieldValues={createFieldValues}
+        createPhotoValue={createFieldValues.PhotoUrls ?? ''}
+        createFieldGroups={createOrderedFieldGroups}
+        createTemplateLoading={createTemplateLoading}
+        createSelectTablesLoading={createSelectTablesLoading}
         editFieldValues={editFieldValues}
+        editPhotoValue={editFieldValues.PhotoUrls ?? selectedBuilding?.photos?.[0] ?? ''}
         streets={streets}
-        sivugOptions={sivugOptions}
-        statusOptions={statusOptions}
         selectTablesByName={selectTablesByName}
         selectTablesLoading={selectTablesLoading}
         orderedFieldGroups={orderedFieldGroups}
         externalEntries={externalEntries}
+        isRehabStatusRequired={isRehabStatusRequired}
         isEditRehabStatusRequired={isEditRehabStatusRequired}
+        isRequiredCreateColumn={isRequiredCreateColumn}
         canEdit={canEdit}
         actionMessage={actionMessage}
-        onCreateChange={handleCreateChange}
+        duplicatePrompt={duplicatePrompt}
+        editDuplicatePrompt={editDuplicatePrompt}
+        onCreateFieldChange={handleCreateFieldChange}
         onCreateSubmit={handleCreateBuilding}
+        onDuplicateConfirm={handleDuplicateConfirm}
+        onDuplicateCancel={handleDuplicateCancel}
         onEditChange={handleEditFieldChange}
         onEditSubmit={handleUpdateBuildingFields}
+        onEditDuplicateConfirm={handleEditDuplicateConfirm}
+        onEditDuplicateCancel={handleEditDuplicateCancel}
+        onOpenEdit={handleOpenEditModal}
+        onOpenLogs={handleOpenLogsModal}
         onDelete={handleDeleteBuilding}
         onExportCard={handleExportCard}
+        onPhotoUpload={handlePhotoUpload}
+        onPhotoDelete={handlePhotoDelete}
+        photoLoading={photoLoading}
+        photoError={photoError}
         onClose={handleCloseModal}
         detailError={detailError}
         loadStreets={loadStreets}
@@ -1217,6 +2801,8 @@ export default function BuildingsPage() {
         toggleViewCategory={toggleViewCategory}
         openEditCategories={openEditCategories}
         toggleEditCategory={toggleEditCategory}
+        openCreateCategories={openCreateCategories}
+        toggleCreateCategory={toggleCreateCategory}
         handleCategoryToggleKeyDown={handleCategoryToggleKeyDown}
       />
     </main>

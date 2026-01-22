@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import OtpPage from './pages/OtpPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import StreetsPage from './pages/StreetsPage.jsx';
+import TemplateConverterPage from './pages/TemplateConverterPage.jsx';
 import UserDetailsPage from './pages/UserDetailsPage.jsx';
 import UsersListPage from './pages/UsersListPage.jsx';
 
@@ -26,6 +27,7 @@ export default function App() {
           <Route element={<RoleGate minRole="Admin" />}>
             <Route path="users" element={<UsersListPage />} />
             <Route path="users/:id" element={<UsersListPage />} />
+            <Route path="converter" element={<TemplateConverterPage />} />
           </Route>
         </Route>
       </Route>

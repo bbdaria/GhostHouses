@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.user
+*.suo
+
+# .NET build outputs
+**/bin/
+**/obj/
+*.userosscache
+*.sln.docstates
+
+# Node/Vite
+**/node_modules/
+**/dist/
+**/.vite/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*

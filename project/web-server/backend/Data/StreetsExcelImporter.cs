@@ -11,6 +11,21 @@ namespace WebServer.Data;
 /// </summary>
 public static class StreetsExcelImporter
 {
+    public static IReadOnlyList<Street> ReadStreetsFromStream(Stream stream, out string? error)
+    {
+        error = null;
+        try
+        {
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            return ReadStreetsFromArchive(archive, ref error);
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to read streets Excel: {ex.Message}";
+            return Array.Empty<Street>();
+        }
+    }
+
     public static async Task SeedFromFileAsync(AppDbContext context, string filePath, CancellationToken cancellationToken = default)
     {
         try
@@ -21,7 +36,8 @@ public static class StreetsExcelImporter
                 return;
             }
 
-            var streets = ReadStreetsFromExcel(filePath);
+            using var stream = File.OpenRead(filePath);
+            var streets = ReadStreetsFromStream(stream, out _);
             if (streets.Count == 0)
             {
                 Console.WriteLine($"[StreetsExcelImporter] No streets found in '{filePath}', skipping street seeding.");
@@ -48,16 +64,13 @@ public static class StreetsExcelImporter
         }
     }
 
-    private static List<Street> ReadStreetsFromExcel(string filePath)
+    private static List<Street> ReadStreetsFromArchive(ZipArchive archive, ref string? error)
     {
-        using var stream = File.OpenRead(filePath);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
-
         var sharedStrings = ReadSharedStrings(archive);
         var sheetEntry = archive.GetEntry("xl/worksheets/sheet2.xml");
         if (sheetEntry == null)
         {
-            Console.WriteLine("[StreetsExcelImporter] Worksheet 'sheet2.xml' not found in Excel file.");
+            error = "Worksheet 'sheet2.xml' not found in Excel file.";
             return new List<Street>();
         }
 
@@ -68,14 +81,14 @@ public static class StreetsExcelImporter
         var sheetDataElement = sheetDoc.Root?.Element(ns + "sheetData");
         if (sheetDataElement == null)
         {
-            Console.WriteLine("[StreetsExcelImporter] <sheetData> not found in worksheet.");
+            error = "<sheetData> not found in worksheet.";
             return new List<Street>();
         }
 
         var rows = sheetDataElement.Elements(ns + "row").ToList();
         if (rows.Count == 0)
         {
-            Console.WriteLine("[StreetsExcelImporter] Worksheet has no rows.");
+            error = "Worksheet has no rows.";
             return new List<Street>();
         }
 
@@ -83,14 +96,14 @@ public static class StreetsExcelImporter
         var headerRow = rows.FirstOrDefault(r => (string?)r.Attribute("r") == "3");
         if (headerRow == null)
         {
-            Console.WriteLine("[StreetsExcelImporter] Header row (r=\"3\") not found.");
+            error = "Header row not found in client streets template.";
             return new List<Street>();
         }
 
         var headerMap = BuildHeaderMap(headerRow, sharedStrings, ns);
         if (!headerMap.ContainsValue("שם רחוב *") || !headerMap.ContainsValue("מזהה רחוב *"))
         {
-            Console.WriteLine("[StreetsExcelImporter] Expected headers not found in sheet2.");
+            error = "Client streets headers do not match the expected template.";
             return new List<Street>();
         }
 

@@ -44,19 +44,9 @@ public class LogsController : ApiControllerBase
 
         if (!string.IsNullOrWhiteSpace(filter.User))
         {
-            if (string.Equals(filter.User.Trim(), "אתחול מערכת", StringComparison.OrdinalIgnoreCase))
-            {
-                query = query.Where(x =>
-                    x.Log.CreatedByUser == null ||
-                    x.Log.Category == "Seed" ||
-                    x.Log.Title == "אתחול מערכת");
-            }
-            else
-            {
-                query = query.Where(x =>
-                    x.Log.CreatedByUser != null &&
-                    EF.Functions.ILike(x.Log.CreatedByUser.Username, $"%{filter.User}%"));
-            }
+            query = query.Where(x =>
+                x.Log.CreatedByUser != null &&
+                EF.Functions.ILike(x.Log.CreatedByUser.Username, $"%{filter.User}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.LogType))
@@ -72,10 +62,8 @@ public class LogsController : ApiControllerBase
             {
                 query = query.Where(x =>
                     x.Log.Category == "Create" ||
-                    x.Log.Category == "Seed" ||
                     x.Log.Category == "יצירה" ||
                     x.Log.Title == "יצירת מבנה" ||
-                    x.Log.Title == "אתחול מערכת" ||
                     x.Log.Title == "שחזור מבנה");
             }
         }
