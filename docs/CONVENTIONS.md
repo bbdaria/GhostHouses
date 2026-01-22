@@ -40,12 +40,20 @@ It is written in English and kept in the repo to stay versioned with the code.
 - If an issue is **Canceled**, close it and do not merge.
 
 ## 5) Issue Management
+### Automated checks (comment-only)
+- Issue guard comments when **Label** or **Milestone** is missing.
+- For **non‑User Story** issues, issue guard comments if **Parent** is missing or not a User Story.
+- For **User Story** issues, issue guard comments if extra labels are present.
+- On **User Story close**, issue guard comments if any child issues remain open.
+- On **child reopen**, issue guard comments on both child + parent if the parent User Story is closed.
+
 ### User Story Issues
-- Must be labeled `User Story`.
+- Must be labeled `User Story` **only** (no additional labels).
 - Describe the user value in plain language.
 - Do **not** set a parent issue (they are the parent).
 - Can have multiple implementation issues linked as sub-issues.
 - Must still include milestone, status, and time-tracked updates.
+- If a child issue is reopened, the User Story should be reopened.
 - If **any** child issue is still open, the User Story must remain open (cannot be Done/Closed).
 - If **all** child issues are closed, the User Story **may** stay open if more work is expected.
 

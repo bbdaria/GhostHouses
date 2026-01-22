@@ -8,6 +8,9 @@ on:
       - milestoned
       - demilestoned
       - reopened
+      - labeled
+      - unlabeled
+      - closed
 
 permissions:
   issues: write
@@ -37,8 +40,14 @@ jobs:
               missing.push('- Milestone is missing.');
             }
 
-            const isUserStory = Array.isArray(issue.labels)
-              && issue.labels.some((label) => (label.name || label) === 'User Story');
+            const labelNames = Array.isArray(issue.labels)
+              ? issue.labels.map((label) => (label.name || label)).filter(Boolean)
+              : [];
+            const isUserStory = labelNames.includes('User Story');
+
+            if (isUserStory && labelNames.length > 1) {
+              missing.push('- User Story issues must have only the "User Story" label (remove extra labels).');
+            }
 
             if (!isUserStory) {
               try {
@@ -93,3 +102,132 @@ jobs:
               issue_number: issueNumber,
               body,
             });
+      - name: Comment when a User Story is closed with open child issues
+        if: ${{ github.event.action == 'closed' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (!issue) return;
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = issue.number;
+
+            const labelNames = Array.isArray(issue.labels)
+              ? issue.labels.map((label) => (label.name || label)).filter(Boolean)
+              : [];
+
+            if (!labelNames.includes('User Story')) return;
+
+            try {
+              const query = `query($owner:String!, $repo:String!, $number:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  issue(number:$number) {
+                    subIssues(first: 100, states: OPEN) {
+                      nodes { number title state }
+                    }
+                  }
+                }
+              }`;
+
+              const result = await github.graphql(query, {
+                owner,
+                repo,
+                number: issueNumber,
+              });
+
+              const openChildren = result?.repository?.issue?.subIssues?.nodes || [];
+              if (openChildren.length === 0) return;
+
+              const list = openChildren
+                .map((child) => `- #${child.number} ${child.title}`)
+                .join('\n');
+
+              const body = [
+                'User Story was closed while child issues are still open:',
+                list,
+                '',
+                'Please keep the User Story open until all children are closed.'
+              ].join('\n');
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body,
+              });
+            } catch (error) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: 'Could not verify child issues for this User Story. Please ensure all children are closed before closing the User Story.',
+              });
+              console.warn('Child issue check failed:', error);
+            }
+      - name: Comment when a child issue is reopened while parent User Story is closed
+        if: ${{ github.event.action == 'reopened' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (!issue) return;
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = issue.number;
+
+            try {
+              const query = `query($owner:String!, $repo:String!, $number:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  issue(number:$number) {
+                    parent {
+                      number
+                      state
+                      labels(first: 50) { nodes { name } }
+                      title
+                    }
+                  }
+                }
+              }`;
+
+              const result = await github.graphql(query, {
+                owner,
+                repo,
+                number: issueNumber,
+              });
+
+              const parent = result?.repository?.issue?.parent;
+              if (!parent) return;
+
+              const parentIsUserStory = parent.labels?.nodes?.some(
+                (label) => label.name === 'User Story'
+              );
+              if (!parentIsUserStory) return;
+              if (parent.state !== 'CLOSED') return;
+
+              const childBody = `Parent User Story #${parent.number} is closed while this issue was reopened. Please reopen the User Story.`;
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: childBody,
+              });
+
+              const parentBody = `Child issue #${issueNumber} was reopened. Please reopen this User Story until all children are closed.`;
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: parent.number,
+                body: parentBody,
+              });
+            } catch (error) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: 'Could not verify parent User Story on reopen. Please ensure the parent is reopened if needed.',
+              });
+              console.warn('Parent reopen check failed:', error);
+            }
