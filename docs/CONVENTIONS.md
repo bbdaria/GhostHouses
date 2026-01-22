@@ -71,8 +71,8 @@ It is written in English and kept in the repo to stay versioned with the code.
 - **Current Sprint**: planned to be picked up this sprint.
 - **Doing**: actively being worked on.
 - **Candidate**: finished, waiting approval.
-- **Done**: finished and approved (merge to `dev`).
-- **Canceled**: canceled (close the issue).
+- **Done**: finished and approved (merge to `dev`). Non‑User Story issues moved to Done must have an assignee.
+- **Canceled**: canceled (close the issue). Assignee not required.
 
 ### Updates and Time Tracking
 - Every update comment must include time spent (e.g., “Time spent: ~2 hours”).
