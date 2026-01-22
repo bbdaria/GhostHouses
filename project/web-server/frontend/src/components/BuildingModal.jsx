@@ -5,10 +5,12 @@ export default function BuildingModal({
   mode,
   building,
   createFieldValues,
+  createPhotoValue,
   createFieldGroups,
   createTemplateLoading,
   createSelectTablesLoading,
   editFieldValues,
+  editPhotoValue,
   streets,
   selectTablesByName,
   selectTablesLoading,
@@ -60,7 +62,13 @@ export default function BuildingModal({
 
   const loadingBuilding = (mode !== 'create' && !building);
   const fileInputRef = useRef(null);
-  const photoValue = building?.photos?.[0] || '';
+  const resolvedPhotoValue =
+    mode === 'create'
+      ? createPhotoValue || ''
+      : mode === 'edit'
+        ? editPhotoValue || ''
+        : building?.photos?.[0] || '';
+  const photoValue = resolvedPhotoValue;
   const hasPhoto = Boolean(photoValue);
   const photoSrc = photoValue
     ? photoValue.startsWith('data:') || photoValue.startsWith('http')
@@ -85,6 +93,41 @@ export default function BuildingModal({
         </span>
       )}
     </span>
+  );
+
+  const renderPhotoEditor = (allowEdit) => (
+    <div className="full-span photo-editor">
+      <div className="photo-editor__label">תמונה</div>
+      {hasPhoto ? (
+        <>
+          <img className="photo-preview" src={photoSrc} alt="תמונת מבנה" />
+          {allowEdit && (
+            <button type="button" className="danger" onClick={onPhotoDelete} disabled={photoLoading}>
+              מחיקת תמונה
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="photos-placeholder">אין תמונה</div>
+          {allowEdit && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="photo-input"
+                onChange={handlePhotoChange}
+              />
+              <button type="button" className="ghost" onClick={triggerPhotoSelect} disabled={photoLoading}>
+                העלאת תמונה
+              </button>
+            </>
+          )}
+        </>
+      )}
+      {photoError && <p className="error">{photoError}</p>}
+    </div>
   );
 
   return (
@@ -129,6 +172,7 @@ export default function BuildingModal({
                     </div>
                     {isOpen && (
                       <div className="form-grid">
+                        {category === 'מידע כללי' && renderPhotoEditor(true)}
                         {sortFieldsForDisplay(fields).map((field) => {
                           const columnName = field.columnName;
                           const fieldName = field.fieldName;
@@ -259,50 +303,7 @@ export default function BuildingModal({
                     </div>
                     {isOpen && (
                       <div className="form-grid">
-                        {category === 'מידע כללי' && (
-                          <div className="full-span photo-editor">
-                            <div className="photo-editor__label">תמונה</div>
-                            {hasPhoto ? (
-                              <>
-                                <img className="photo-preview" src={photoSrc} alt="תמונת מבנה" />
-                                {canEdit && (
-                                  <button
-                                    type="button"
-                                    className="danger"
-                                    onClick={onPhotoDelete}
-                                    disabled={photoLoading}
-                                  >
-                                    מחיקת תמונה
-                                  </button>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <div className="photos-placeholder">אין תמונה</div>
-                                {canEdit && (
-                                  <>
-                                    <input
-                                      ref={fileInputRef}
-                                      type="file"
-                                      accept="image/*"
-                                      className="photo-input"
-                                      onChange={handlePhotoChange}
-                                    />
-                                    <button
-                                      type="button"
-                                      className="ghost"
-                                      onClick={triggerPhotoSelect}
-                                      disabled={photoLoading}
-                                    >
-                                      העלאת תמונה
-                                    </button>
-                                  </>
-                                )}
-                              </>
-                            )}
-                            {photoError && <p className="error">{photoError}</p>}
-                          </div>
-                        )}
+                        {category === 'מידע כללי' && renderPhotoEditor(canEdit)}
                         {sortFieldsForDisplay(fields).map((field) => {
                           const columnName = field.columnName;
                           const fieldName = field.fieldName;
@@ -553,6 +554,11 @@ export default function BuildingModal({
             {mode === 'create' && !duplicatePrompt && (
               <button type="button" className="primary" onClick={onCreateSubmit}>
                 שמירה
+              </button>
+            )}
+            {(mode === 'create' || mode === 'edit') && (
+              <button type="button" className="ghost" onClick={onClose}>
+                סגירה
               </button>
             )}
           </div>

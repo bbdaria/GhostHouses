@@ -203,6 +203,9 @@ export default function BuildingsPage() {
       if (!Object.prototype.hasOwnProperty.call(nextValues, 'StreetId')) {
         nextValues.StreetId = '';
       }
+      if (!Object.prototype.hasOwnProperty.call(nextValues, 'PhotoUrls')) {
+        nextValues.PhotoUrls = '';
+      }
       setCreateFieldValues(nextValues);
     } catch {
       setCreateFieldTemplate([]);
@@ -427,6 +430,8 @@ export default function BuildingsPage() {
     } else if (selectedBuilding.street === NO_STREET_OPTION.name) {
       nextValues.StreetId = String(NO_STREET_OPTION.streetId);
     }
+
+    nextValues.PhotoUrls = selectedBuilding.photos?.[0] ?? '';
 
     setEditFieldValues(nextValues);
     setPhotoError('');
@@ -1253,7 +1258,7 @@ export default function BuildingsPage() {
     });
 
   const handlePhotoUpload = async (file) => {
-    if (!selectedBuilding || !file) return;
+    if (!file) return;
     setPhotoError('');
     setActionMessage('');
     if (!file.type.startsWith('image/')) {
@@ -1265,16 +1270,23 @@ export default function BuildingsPage() {
       setPhotoError(`גודל התמונה חייב להיות עד ${maxSizeMb}MB.`);
       return;
     }
-    if (selectedBuilding.photos?.length) {
+    const existingPhoto =
+      modalMode === 'create'
+        ? createFieldValues.PhotoUrls
+        : editFieldValues.PhotoUrls ?? selectedBuilding?.photos?.[0];
+    if (existingPhoto) {
       setPhotoError('ניתן לשמור תמונה אחת בלבד.');
       return;
     }
     try {
       setPhotoLoading(true);
       const dataUrl = await readFileAsDataUrl(file);
-      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: dataUrl }, true);
-      setSelectedBuilding(updated);
-      setActionMessage('התמונה נשמרה.');
+      if (modalMode === 'create') {
+        setCreateFieldValues((prev) => ({ ...prev, PhotoUrls: dataUrl }));
+      } else if (selectedBuilding) {
+        setEditFieldValues((prev) => ({ ...prev, PhotoUrls: dataUrl }));
+        setUnsavedChanges(true);
+      }
     } catch (err) {
       setPhotoError(err.message || 'שגיאה בהעלאת התמונה.');
     } finally {
@@ -1283,14 +1295,17 @@ export default function BuildingsPage() {
   };
 
   const handlePhotoDelete = async () => {
-    if (!selectedBuilding) return;
+    if (modalMode !== 'create' && !selectedBuilding) return;
     setPhotoError('');
     setActionMessage('');
     try {
       setPhotoLoading(true);
-      const updated = await api.updateBuildingFields(selectedBuilding.id, { PhotoUrls: '' }, true);
-      setSelectedBuilding(updated);
-      setActionMessage('התמונה נמחקה.');
+      if (modalMode === 'create') {
+        setCreateFieldValues((prev) => ({ ...prev, PhotoUrls: '' }));
+      } else if (selectedBuilding) {
+        setEditFieldValues((prev) => ({ ...prev, PhotoUrls: '' }));
+        setUnsavedChanges(true);
+      }
     } catch (err) {
       setPhotoError(err.message || 'שגיאה במחיקת התמונה.');
     } finally {
@@ -2643,10 +2658,12 @@ export default function BuildingsPage() {
         mode={modalMode}
         building={selectedBuilding}
         createFieldValues={createFieldValues}
+        createPhotoValue={createFieldValues.PhotoUrls ?? ''}
         createFieldGroups={createOrderedFieldGroups}
         createTemplateLoading={createTemplateLoading}
         createSelectTablesLoading={createSelectTablesLoading}
         editFieldValues={editFieldValues}
+        editPhotoValue={editFieldValues.PhotoUrls ?? selectedBuilding?.photos?.[0] ?? ''}
         streets={streets}
         selectTablesByName={selectTablesByName}
         selectTablesLoading={selectTablesLoading}

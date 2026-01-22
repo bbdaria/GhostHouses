@@ -5,6 +5,11 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using ClosedXML.Excel;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -321,7 +326,21 @@ public class BuildingsController : ApiControllerBase
                 : "-"
         };
 
-        var pptxBytes = BuildCardPptx(templatePath, replacements);
+        var cardImage = ParsePhotoUrls(building.PhotoUrls).FirstOrDefault();
+        byte[]? imageBytes = null;
+        string? imageExtension = null;
+
+        if (!string.IsNullOrWhiteSpace(cardImage) &&
+            TryDecodeImageDataUrl(cardImage, out var decodedBytes, out var decodedExtension))
+        {
+            imageExtension = NormalizeCardImageExtension(decodedExtension);
+            if (imageExtension is not null)
+            {
+                imageBytes = decodedBytes;
+            }
+        }
+
+        var pptxBytes = BuildCardPptx(templatePath, replacements, imageBytes, imageExtension);
         var fileName = $"building-card-{id}.pptx";
 
         return File(
@@ -2854,15 +2873,74 @@ public class BuildingsController : ApiControllerBase
 
     private static byte[] BuildCardPptx(
         string templatePath,
-        IReadOnlyDictionary<string, string> replacements)
+        IReadOnlyDictionary<string, string> replacements,
+        byte[]? imageBytes,
+        string? imageExtension)
     {
+        const string imageRelId = "rId3";
+        const string templateImagePrefix = "ppt/media/image3.";
+        const string secondaryImageRelId = "rId2";
+        const string secondaryImagePath = "ppt/media/image2.png";
+        const string secondaryImageMarkerName = "אליפסה 31";
+        var normalizedImageExtension = NormalizeCardImageExtension(imageExtension);
+        var hasImage = imageBytes is { Length: > 0 } && !string.IsNullOrWhiteSpace(normalizedImageExtension);
+        var targetImagePath = normalizedImageExtension is null
+            ? null
+            : $"ppt/media/image3.{normalizedImageExtension}";
+        var targetRelPath = normalizedImageExtension is null
+            ? null
+            : $"../media/image3.{normalizedImageExtension}";
+
         using var templateStream = System.IO.File.OpenRead(templatePath);
         using var templateZip = new ZipArchive(templateStream, ZipArchiveMode.Read);
+        XDocument? slideDoc = null;
+        var slideEntry = templateZip.GetEntry("ppt/slides/slide1.xml");
+        var templateImageEntry = templateZip.Entries.FirstOrDefault(entry =>
+            entry.FullName.StartsWith(templateImagePrefix, StringComparison.OrdinalIgnoreCase));
+        var templateImagePath = templateImageEntry?.FullName;
+        if (slideEntry is not null)
+        {
+            using var slideStream = slideEntry.Open();
+            slideDoc = XDocument.Load(slideStream);
+        }
         using var outputStream = new MemoryStream();
         using (var outputZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true))
         {
             foreach (var entry in templateZip.Entries)
             {
+                if (!string.IsNullOrWhiteSpace(templateImagePath) &&
+                    string.Equals(entry.FullName, templateImagePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!hasImage || targetImagePath is null || imageBytes is null || normalizedImageExtension is null)
+                    {
+                        continue;
+                    }
+
+                    byte[] outputImageBytes;
+                    try
+                    {
+                        var templateImageBytes = ReadAllBytes(entry.Open());
+                        outputImageBytes = BuildLetterboxedImage(
+                            imageBytes,
+                            templateImageBytes,
+                            normalizedImageExtension);
+                    }
+                    catch
+                    {
+                        outputImageBytes = imageBytes;
+                    }
+
+                    var imageEntry = outputZip.CreateEntry(targetImagePath, CompressionLevel.Optimal);
+                    using var imageEntryStream = imageEntry.Open();
+                    imageEntryStream.Write(outputImageBytes, 0, outputImageBytes.Length);
+                    continue;
+                }
+
+                if (string.Equals(entry.FullName, secondaryImagePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 if (string.IsNullOrEmpty(entry.Name))
                 {
                     outputZip.CreateEntry(entry.FullName);
@@ -2875,9 +2953,26 @@ public class BuildingsController : ApiControllerBase
 
                 if (string.Equals(entry.FullName, "ppt/slides/slide1.xml", StringComparison.OrdinalIgnoreCase))
                 {
-                    var doc = XDocument.Load(entryStream);
+                    var doc = slideDoc ?? XDocument.Load(entryStream);
                     ReplaceText(doc, replacements);
+                    if (!hasImage)
+                    {
+                        RemovePictureByRelId(doc, imageRelId);
+                    }
+                    RemovePictureByRelId(doc, secondaryImageRelId);
+                    RemoveShapeByName(doc, secondaryImageMarkerName);
+                    if (hasImage)
+                    {
+                        RemovePictureCropByRelId(doc, imageRelId);
+                    }
                     doc.Save(newEntryStream, System.Xml.Linq.SaveOptions.DisableFormatting);
+                }
+                else if (string.Equals(entry.FullName, "ppt/slides/_rels/slide1.xml.rels", StringComparison.OrdinalIgnoreCase))
+                {
+                    var relDoc = XDocument.Load(entryStream);
+                    UpdateSlideRelationship(relDoc, imageRelId, hasImage ? targetRelPath : null);
+                    UpdateSlideRelationship(relDoc, secondaryImageRelId, null);
+                    relDoc.Save(newEntryStream, System.Xml.Linq.SaveOptions.DisableFormatting);
                 }
                 else
                 {
@@ -2912,6 +3007,145 @@ public class BuildingsController : ApiControllerBase
 
             textNode.Value = value;
         }
+    }
+
+    private static void RemovePictureByRelId(XDocument doc, string relId)
+    {
+        XNamespace p = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        XNamespace a = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        XNamespace r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+        var pictures = doc
+            .Descendants(p + "pic")
+            .Where(pic => pic.Descendants(a + "blip")
+                .Any(blip => string.Equals((string?)blip.Attribute(r + "embed"), relId, StringComparison.Ordinal)))
+            .ToList();
+
+        foreach (var picture in pictures)
+        {
+            picture.Remove();
+        }
+    }
+
+    private static void UpdateSlideRelationship(XDocument doc, string relId, string? target)
+    {
+        XNamespace rel = "http://schemas.openxmlformats.org/package/2006/relationships";
+        var relationship = doc.Root?
+            .Elements(rel + "Relationship")
+            .FirstOrDefault(node => string.Equals((string?)node.Attribute("Id"), relId, StringComparison.Ordinal));
+
+        if (relationship is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            relationship.Remove();
+        }
+        else
+        {
+            relationship.SetAttributeValue("Target", target);
+        }
+    }
+
+    private static void RemoveShapeByName(XDocument doc, string shapeName)
+    {
+        XNamespace p = "http://schemas.openxmlformats.org/presentationml/2006/main";
+
+        var shapes = doc
+            .Descendants(p + "sp")
+            .Where(shape =>
+            {
+                var cNvPr = shape.Descendants(p + "cNvPr").FirstOrDefault();
+                var name = (string?)cNvPr?.Attribute("name");
+                return string.Equals(name, shapeName, StringComparison.Ordinal);
+            })
+            .ToList();
+
+        foreach (var shape in shapes)
+        {
+            shape.Remove();
+        }
+    }
+
+    private static void RemovePictureCropByRelId(XDocument doc, string relId)
+    {
+        XNamespace p = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        XNamespace a = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        XNamespace r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+        var pictures = doc
+            .Descendants(p + "pic")
+            .Where(pic => pic.Descendants(a + "blip")
+                .Any(blip => string.Equals((string?)blip.Attribute(r + "embed"), relId, StringComparison.Ordinal)))
+            .ToList();
+
+        foreach (var picture in pictures)
+        {
+            var srcRect = picture.Descendants(a + "srcRect").FirstOrDefault();
+            srcRect?.Remove();
+        }
+    }
+
+    private static byte[] BuildLetterboxedImage(
+        byte[] sourceBytes,
+        byte[] templateBytes,
+        string outputExtension)
+    {
+        using var source = Image.Load<Rgba32>(sourceBytes);
+        source.Mutate(context => context.AutoOrient());
+        using var template = Image.Load<Rgba32>(templateBytes);
+
+        var targetWidth = template.Width;
+        var targetHeight = template.Height;
+
+        var scale = Math.Min(targetWidth / (double)source.Width, targetHeight / (double)source.Height);
+        var resizedWidth = Math.Max(1, (int)Math.Round(source.Width * scale));
+        var resizedHeight = Math.Max(1, (int)Math.Round(source.Height * scale));
+
+        using var resized = source.Clone(context => context.Resize(resizedWidth, resizedHeight));
+        using var canvas = new Image<Rgba32>(targetWidth, targetHeight, Color.Black);
+        var offsetX = (targetWidth - resizedWidth) / 2;
+        var offsetY = (targetHeight - resizedHeight) / 2;
+        canvas.Mutate(context => context.DrawImage(resized, new Point(offsetX, offsetY), 1f));
+
+        using var output = new MemoryStream();
+        if (string.Equals(outputExtension, "png", StringComparison.OrdinalIgnoreCase))
+        {
+            canvas.Save(output, new PngEncoder());
+        }
+        else
+        {
+            canvas.Save(output, new JpegEncoder { Quality = 100 });
+        }
+
+        return output.ToArray();
+    }
+
+
+    private static byte[] ReadAllBytes(Stream stream)
+    {
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
+    private static string? NormalizeCardImageExtension(string? extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return null;
+        }
+
+        var normalized = extension.Trim().TrimStart('.').ToLowerInvariant();
+        return normalized switch
+        {
+            "jpg" => "jpeg",
+            "jpeg" => "jpeg",
+            "png" => "png",
+            _ => null
+        };
     }
 
     private static string ValueOrDash(string? value)
