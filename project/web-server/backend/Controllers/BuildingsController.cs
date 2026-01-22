@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Hosting;
@@ -578,29 +579,36 @@ public class BuildingsController : ApiControllerBase
         public IFormFile? File { get; set; }
     }
 
+    public sealed record ImportExistingMatch(
+        int Id,
+        string StreetName,
+        string HouseNumber,
+        string BuildingName,
+        List<BuildingFieldDto> Fields);
+
     public sealed record ImportPreviewRow(
         int RowNumber,
         Dictionary<string, string?> Values,
-        int? ExistingId,
-        int? ExistingIdById,
-        bool HasAddressDuplicate,
+        List<ImportExistingMatch> AddressMatches,
+        ImportExistingMatch? IdMatch,
         bool HasIdConflict,
+        bool ExactMatch,
         List<string> MissingRequired,
         List<string> Warnings,
-        List<BuildingFieldDto> ImportFields,
-        List<BuildingFieldDto>? ExistingFields);
+        List<BuildingFieldDto> ImportFields);
 
     public sealed record ImportPreviewResponse(List<ImportPreviewRow> Rows);
 
     public sealed record ImportApplyRequest(List<ImportApplyRow> Rows);
 
+    public sealed record ImportValidateRequest(Dictionary<string, string?> Values);
+
     public sealed record ImportApplyRow(
         int RowNumber,
         string Action,
         Dictionary<string, string?> Values,
-        int? ExistingId,
-        string? IdMode,
-        int? OverrideId);
+        bool AllowDuplicate,
+        List<int>? ReplaceIds);
 
     private sealed record ImportDuplicateInfo(int RowNumber, int StreetId, string HouseNumber, int ExistingId);
     private sealed record ImportApplyResult(string? Error, List<FieldChange> Changes);
@@ -609,6 +617,7 @@ public class BuildingsController : ApiControllerBase
         Stream ExcelStream,
         Dictionary<int, string> ImagesById,
         Dictionary<int, string> ImageWarningsById);
+    private sealed record ImportHeaderMap(Dictionary<int, string> Columns, int HeaderRow);
 
     [HttpPost("import")]
     [Authorize(Policy = "Admin")]
@@ -644,32 +653,10 @@ public class BuildingsController : ApiControllerBase
             .ToDictionary(
                 field => GetExcelAwareLabel(field.FieldName),
                 field => field.ColumnName,
-                StringComparer.Ordinal);
+                StringComparer.OrdinalIgnoreCase);
 
-        var headerRow = worksheet.Row(2);
-        var lastHeaderCell = headerRow.LastCellUsed();
-        if (lastHeaderCell == null)
-        {
-            return BadRequest("Excel header row not found.");
-        }
-
-        var headerMap = new Dictionary<int, string>();
-        var lastHeaderColumn = lastHeaderCell.Address.ColumnNumber;
-        for (var col = 1; col <= lastHeaderColumn; col++)
-        {
-            var header = headerRow.Cell(col).GetString().Trim();
-            if (string.IsNullOrWhiteSpace(header))
-            {
-                continue;
-            }
-
-            if (labelToColumn.TryGetValue(header, out var columnName))
-            {
-                headerMap[col] = columnName;
-            }
-        }
-
-        if (headerMap.Count == 0)
+        var headerMap = BuildImportHeaderMap(worksheet, labelToColumn);
+        if (headerMap.Columns.Count == 0)
         {
             return BadRequest("Excel headers do not match the export format.");
         }
@@ -878,10 +865,10 @@ public class BuildingsController : ApiControllerBase
             .ToDictionary(
                 field => GetExcelAwareLabel(field.FieldName),
                 field => field.ColumnName,
-                StringComparer.Ordinal);
+                StringComparer.OrdinalIgnoreCase);
 
         var headerMap = BuildImportHeaderMap(worksheet, labelToColumn);
-        if (headerMap.Count == 0)
+        if (headerMap.Columns.Count == 0)
         {
             return BadRequest("Excel headers do not match the export format.");
         }
@@ -894,13 +881,18 @@ public class BuildingsController : ApiControllerBase
 
         var rehabSivugValue = ResolveRehabSivugValue();
 
-        var requestedIds = importRows
+        var normalizedRows = importRows
+            .Select(row => (row.RowNumber, Values: NormalizeImportValues(row.Values), row.Warnings))
+            .ToList();
+
+        var idCounts = normalizedRows
             .Select(row => TryParsePositiveInt(row.Values.TryGetValue("Id", out var raw) ? raw : null))
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
-            .Distinct()
-            .ToList();
+            .GroupBy(id => id)
+            .ToDictionary(group => group.Key, group => group.Count());
 
+        var requestedIds = idCounts.Keys.ToList();
         var existingById = requestedIds.Count == 0
             ? new Dictionary<int, Building>()
             : await _context.Buildings
@@ -908,58 +900,149 @@ public class BuildingsController : ApiControllerBase
                 .Where(b => requestedIds.Contains(b.Id))
                 .ToDictionaryAsync(b => b.Id, cancellationToken);
 
+        var addressStreetIds = normalizedRows
+            .Select(row => TryParseStreetId(row.Values.TryGetValue("StreetId", out var raw) ? raw : null))
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .Distinct()
+            .ToList();
+
+        var existingAddressCandidates = addressStreetIds.Count == 0
+            ? new List<Building>()
+            : await _context.Buildings
+                .Include(b => b.Street)
+                .Where(b => b.StreetCode.HasValue && addressStreetIds.Contains(b.StreetCode.Value))
+                .ToListAsync(cancellationToken);
+
+        var existingByAddress = existingAddressCandidates
+            .GroupBy(b => (StreetId: b.StreetCode!.Value, House: (b.HouseNumber ?? string.Empty).Trim()))
+            .ToDictionary(group => group.Key, group => group.ToList());
+
         var previewRows = new List<ImportPreviewRow>();
 
-        foreach (var row in importRows)
+        foreach (var row in normalizedRows)
         {
             var warnings = new List<string>(row.Warnings);
-            var values = NormalizeImportValues(row.Values);
-            var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings);
+            var values = row.Values;
+            var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings, requireId: false);
 
             var idValue = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
             var streetId = TryParseStreetId(values.TryGetValue("StreetId", out var streetRaw) ? streetRaw : null);
             var houseNumber = values.TryGetValue("BldNum", out var houseRaw) ? houseRaw?.Trim() ?? string.Empty : string.Empty;
 
-            Building? existingByAddress = null;
+            var addressMatches = new List<ImportExistingMatch>();
             if (streetId.HasValue && !string.IsNullOrWhiteSpace(houseNumber))
             {
-                existingByAddress = await _context.Buildings
-                    .Include(b => b.Street)
-                    .FirstOrDefaultAsync(
-                        b => b.StreetCode == streetId.Value && b.HouseNumber == houseNumber,
-                        cancellationToken);
+                var key = (StreetId: streetId.Value, House: houseNumber);
+                if (existingByAddress.TryGetValue(key, out var matches))
+                {
+                    addressMatches.AddRange(matches.Select(match => BuildExistingMatch(match, fieldDefinitions)));
+                }
             }
 
-            Building? existingIdMatch = null;
-            if (idValue.HasValue)
+            ImportExistingMatch? idMatch = null;
+            if (idValue.HasValue && existingById.TryGetValue(idValue.Value, out var existingIdMatch))
             {
-                existingById.TryGetValue(idValue.Value, out existingIdMatch);
+                idMatch = BuildExistingMatch(existingIdMatch, fieldDefinitions);
             }
-            var hasIdConflict = existingIdMatch != null &&
-                (existingByAddress == null || existingByAddress.Id != existingIdMatch.Id);
+
+            var hasIdConflict = idMatch != null;
+            if (idValue.HasValue && idCounts.TryGetValue(idValue.Value, out var count) && count > 1)
+            {
+                hasIdConflict = true;
+                warnings.Add("ID מופיע יותר מפעם אחת בקובץ הייבוא.");
+            }
 
             var importFields = BuildImportFields(fieldDefinitions, values);
-            var existingForCompare = existingByAddress ?? existingIdMatch;
-            var existingFields = existingForCompare != null
-                ? AlignFieldsToDefinitions(
-                    fieldDefinitions,
-                    BuildFieldsSnapshot(existingForCompare, includePhotos: true))
-                : null;
+            var exactMatch = false;
+            if (idMatch != null && IsExactMatch(fieldDefinitions, values, idMatch))
+            {
+                exactMatch = true;
+            }
+            else if (addressMatches.Count > 0 && addressMatches.Any(match => IsExactMatch(fieldDefinitions, values, match)))
+            {
+                exactMatch = true;
+            }
 
             previewRows.Add(new ImportPreviewRow(
                 row.RowNumber,
                 values,
-                existingByAddress?.Id,
-                existingIdMatch?.Id,
-                existingByAddress != null,
+                addressMatches,
+                idMatch,
                 hasIdConflict,
+                exactMatch,
                 missingRequired,
                 warnings,
-                importFields,
-                existingFields));
+                importFields));
         }
 
         return Ok(new ImportPreviewResponse(previewRows));
+    }
+
+    [HttpPost("import/validate")]
+    [Authorize(Policy = "Admin")]
+    public async Task<ActionResult<ImportPreviewRow>> ValidateImportRow(
+        [FromBody] ImportValidateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Values is null || request.Values.Count == 0)
+        {
+            return BadRequest("No values supplied.");
+        }
+
+        var fieldDefinitions = BuildFieldsSnapshot(new Building(), includePhotos: true);
+        var warnings = new List<string>();
+        var values = NormalizeImportValues(request.Values);
+        var rehabSivugValue = ResolveRehabSivugValue();
+        var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings, requireId: false);
+
+        var idValue = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
+        ImportExistingMatch? idMatch = null;
+        if (idValue.HasValue)
+        {
+            var existing = await _context.Buildings
+                .Include(b => b.Street)
+                .FirstOrDefaultAsync(b => b.Id == idValue.Value, cancellationToken);
+            if (existing != null)
+            {
+                idMatch = BuildExistingMatch(existing, fieldDefinitions);
+            }
+        }
+
+        var addressMatches = new List<ImportExistingMatch>();
+        var streetId = TryParseStreetId(values.TryGetValue("StreetId", out var streetRaw) ? streetRaw : null);
+        var houseNumber = values.TryGetValue("BldNum", out var houseRaw) ? houseRaw?.Trim() ?? string.Empty : string.Empty;
+        if (streetId.HasValue && !string.IsNullOrWhiteSpace(houseNumber))
+        {
+            var matches = await _context.Buildings
+                .Include(b => b.Street)
+                .Where(b => b.StreetCode == streetId.Value && b.HouseNumber == houseNumber)
+                .ToListAsync(cancellationToken);
+            addressMatches.AddRange(matches.Select(match => BuildExistingMatch(match, fieldDefinitions)));
+        }
+
+        var hasIdConflict = idMatch != null;
+        var importFields = BuildImportFields(fieldDefinitions, values);
+        var exactMatch = false;
+        if (idMatch != null && IsExactMatch(fieldDefinitions, values, idMatch))
+        {
+            exactMatch = true;
+        }
+        else if (addressMatches.Count > 0 && addressMatches.Any(match => IsExactMatch(fieldDefinitions, values, match)))
+        {
+            exactMatch = true;
+        }
+
+        return Ok(new ImportPreviewRow(
+            0,
+            values,
+            addressMatches,
+            idMatch,
+            hasIdConflict,
+            exactMatch,
+            missingRequired,
+            warnings,
+            importFields));
     }
 
     [HttpPost("import/apply")]
@@ -971,6 +1054,40 @@ public class BuildingsController : ApiControllerBase
         if (request.Rows is null || request.Rows.Count == 0)
         {
             return BadRequest("No import rows supplied.");
+        }
+
+        var duplicateManualIds = request.Rows
+            .Where(row => !string.Equals(row.Action?.Trim(), "skip", StringComparison.OrdinalIgnoreCase))
+            .Select(row =>
+            {
+                string? idRaw = null;
+                if (row.Values != null)
+                {
+                    row.Values.TryGetValue("Id", out idRaw);
+                }
+                return new
+                {
+                    row.RowNumber,
+                    Id = TryParsePositiveInt(idRaw)
+                };
+            })
+            .Where(entry => entry.Id.HasValue)
+            .GroupBy(entry => entry.Id!.Value)
+            .Where(group => group.Count() > 1)
+            .ToList();
+
+        if (duplicateManualIds.Count > 0)
+        {
+            return Conflict(new
+            {
+                error = "ID מופיע יותר מפעם אחת בקובץ הייבוא.",
+                isIdDuplicate = true,
+                duplicates = duplicateManualIds.Select(group => new
+                {
+                    Id = group.Key,
+                    Rows = group.Select(entry => entry.RowNumber).ToList()
+                })
+            });
         }
 
         var propertyByColumn = typeof(Building)
@@ -1008,20 +1125,14 @@ public class BuildingsController : ApiControllerBase
                 continue;
             }
 
-            if (action != "create" && action != "replace")
+            if (action != "create" && action != "replace" && action != "add_anyway")
             {
                 return BadRequest($"Row {row.RowNumber}: Unsupported action '{row.Action}'.");
             }
 
             var values = NormalizeImportValues(row.Values ?? new Dictionary<string, string?>());
             var warnings = new List<string>();
-            var idMode = row.IdMode?.Trim().ToLowerInvariant();
-            var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings);
-            if (idMode != "manual")
-            {
-                missingRequired.RemoveAll(column =>
-                    string.Equals(column, "Id", StringComparison.OrdinalIgnoreCase));
-            }
+            var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings, requireId: false);
             if (missingRequired.Count > 0)
             {
                 return BadRequest($"Row {row.RowNumber}: Missing required fields.");
@@ -1039,38 +1150,29 @@ public class BuildingsController : ApiControllerBase
                 return BadRequest($"Row {row.RowNumber}: House number is required.");
             }
 
-            var existingByAddress = await _context.Buildings
-                .Include(b => b.Street)
-                .FirstOrDefaultAsync(
-                    b => b.StreetCode == streetId.Value && b.HouseNumber == houseNumber,
-                    cancellationToken);
+            var manualId = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
+            var allowDuplicate = row.AllowDuplicate;
 
-            var manualId = row.OverrideId.HasValue
-                ? row.OverrideId
-                : TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
-
-            if (action == "create")
+            if (action == "replace")
             {
-                if (existingByAddress != null)
+                var replaceIds = row.ReplaceIds?.Distinct().ToList() ?? new List<int>();
+                if (replaceIds.Count == 0)
                 {
-                    return Conflict(new { error = "נמצאה כפילות", row.RowNumber, existingByAddress.Id });
+                    return BadRequest($"Row {row.RowNumber}: Replace requires at least one existing building.");
                 }
 
-                int? desiredId = null;
-                if (idMode != "auto")
+                var existingToDelete = await _context.Buildings
+                    .Where(b => replaceIds.Contains(b.Id))
+                    .ToListAsync(cancellationToken);
+                if (existingToDelete.Count == 0)
                 {
-                    if (!manualId.HasValue)
-                    {
-                        return BadRequest($"Row {row.RowNumber}: ID is required.");
-                    }
-
-                    desiredId = manualId.Value;
+                    return BadRequest($"Row {row.RowNumber}: Existing building not found for replace.");
                 }
 
-                if (desiredId.HasValue)
+                if (manualId.HasValue)
                 {
                     var idExists = await _context.Buildings.AnyAsync(
-                        b => b.Id == desiredId.Value,
+                        b => b.Id == manualId.Value && !replaceIds.Contains(b.Id),
                         cancellationToken);
                     if (idExists)
                     {
@@ -1078,68 +1180,94 @@ public class BuildingsController : ApiControllerBase
                     }
                 }
 
-                var building = new Building();
-                if (desiredId.HasValue)
+                foreach (var existing in existingToDelete)
                 {
-                    building.Id = desiredId.Value;
+                    var deleteSnapshot = BuildFieldsSnapshot(existing, includePhotos: true);
+                    var externalData = await _externalDataService.GetBuildingDataAsync(existing.Id, cancellationToken);
+                    _context.BuildingLogs.Add(new BuildingLog
+                    {
+                        BuildingId = existing.Id,
+                        Title = "מחיקת מבנה (ייבוא)",
+                        Message = JsonSerializer.Serialize(new
+                        {
+                            existing.Id,
+                            existing.StreetCode,
+                            existing.BuildingName,
+                            existing.StreetName,
+                            existing.HouseNumber,
+                            existing.Neighborhood,
+                            existing.BldSivug,
+                            existing.ShikumStatus,
+                            existing.StatusSummary,
+                            existing.StatusSummaryUpdatedAt,
+                            Changes = BuildDeleteChanges(deleteSnapshot),
+                            Fields = deleteSnapshot,
+                            ExternalData = externalData
+                        }),
+                        Category = "מחיקה",
+                        Severity = "warning",
+                        CreatedByUserId = actorId,
+                        CreatedAt = IsraelTime.NowUtc
+                    });
+
+                    _context.Buildings.Remove(existing);
                 }
 
-                var createResult = await ApplyImportRow(building, values, streetId.Value, propertyByColumn, cancellationToken);
+                var replacement = new Building();
+                if (manualId.HasValue)
+                {
+                    replacement.Id = manualId.Value;
+                }
+
+                var createResult = await ApplyImportRow(replacement, values, streetId.Value, propertyByColumn, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(createResult.Error))
                 {
                     return BadRequest($"Row {row.RowNumber}: {createResult.Error}");
                 }
 
-                _context.Buildings.Add(building);
-                importLogs.Add((building, BuildCreateChanges(building).ToList(), true));
-                createdCount++;
-            }
-            else
-            {
-                var existingId = row.ExistingId ?? existingByAddress?.Id;
-                if (!existingId.HasValue)
-                {
-                    return BadRequest($"Row {row.RowNumber}: Existing building not found for replace.");
-                }
-
-                var building = await _context.Buildings.FirstOrDefaultAsync(
-                    b => b.Id == existingId.Value,
-                    cancellationToken);
-                if (building == null)
-                {
-                    return BadRequest($"Row {row.RowNumber}: Existing building not found.");
-                }
-
-                var updateResult = await ApplyImportRow(building, values, streetId.Value, propertyByColumn, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(updateResult.Error))
-                {
-                    return BadRequest($"Row {row.RowNumber}: {updateResult.Error}");
-                }
-
-                var changes = updateResult.Changes;
-                if (idMode == "manual" && manualId.HasValue && manualId.Value != building.Id)
-                {
-                    var idExists = await _context.Buildings.AnyAsync(
-                        b => b.Id == manualId.Value && b.Id != building.Id,
-                        cancellationToken);
-                    if (idExists)
-                    {
-                        return Conflict(new { error = "קיים מבנה עם ID זה", row.RowNumber, isIdDuplicate = true });
-                    }
-
-                    var oldId = building.Id;
-                    building = await ReplaceBuildingIdAsync(building, manualId.Value, cancellationToken);
-                    var idProperty = typeof(Building).GetProperty(nameof(Building.Id));
-                    var idChange = BuildChange(idProperty, oldId, manualId.Value);
-                    if (idChange is not null)
-                    {
-                        changes.Add(idChange);
-                    }
-                }
-
-                importLogs.Add((building, changes, false));
+                _context.Buildings.Add(replacement);
+                importLogs.Add((replacement, BuildCreateChanges(replacement).ToList(), true));
                 updatedCount++;
+                continue;
             }
+
+            if (manualId.HasValue)
+            {
+                var idExists = await _context.Buildings.AnyAsync(
+                    b => b.Id == manualId.Value,
+                    cancellationToken);
+                if (idExists)
+                {
+                    return Conflict(new { error = "קיים מבנה עם ID זה", row.RowNumber, isIdDuplicate = true });
+                }
+            }
+
+            if (!allowDuplicate)
+            {
+                var duplicateExists = await _context.Buildings.AnyAsync(
+                    b => b.StreetCode == streetId.Value && b.HouseNumber == houseNumber,
+                    cancellationToken);
+                if (duplicateExists)
+                {
+                    return Conflict(new { error = "נמצאה כפילות", row.RowNumber, isDuplicate = true });
+                }
+            }
+
+            var building = new Building();
+            if (manualId.HasValue)
+            {
+                building.Id = manualId.Value;
+            }
+
+            var result = await ApplyImportRow(building, values, streetId.Value, propertyByColumn, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(result.Error))
+            {
+                return BadRequest($"Row {row.RowNumber}: {result.Error}");
+            }
+
+            _context.Buildings.Add(building);
+            importLogs.Add((building, BuildCreateChanges(building).ToList(), true));
+            createdCount++;
         }
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -2966,34 +3094,87 @@ public class BuildingsController : ApiControllerBase
             .ToList();
     }
 
-    private static Dictionary<int, string> BuildImportHeaderMap(
+    private static ImportHeaderMap BuildImportHeaderMap(
         IXLWorksheet worksheet,
         IReadOnlyDictionary<string, string> labelToColumn)
     {
-        var headerRow = worksheet.Row(2);
-        var lastHeaderCell = headerRow.LastCellUsed();
-        if (lastHeaderCell == null)
+        var normalizedLabelToColumn = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (label, columnName) in labelToColumn)
         {
-            return new Dictionary<int, string>();
+            var normalizedLabel = NormalizeExcelHeader(label);
+            if (!string.IsNullOrWhiteSpace(normalizedLabel))
+            {
+                normalizedLabelToColumn[normalizedLabel] = columnName;
+            }
+
+            var normalizedColumn = NormalizeExcelHeader(columnName);
+            if (!string.IsNullOrWhiteSpace(normalizedColumn))
+            {
+                normalizedLabelToColumn[normalizedColumn] = columnName;
+            }
         }
 
-        var headerMap = new Dictionary<int, string>();
-        var lastHeaderColumn = lastHeaderCell.Address.ColumnNumber;
-        for (var col = 1; col <= lastHeaderColumn; col++)
+        var bestMap = new Dictionary<int, string>();
+        var bestHeaderRow = 0;
+        var lastUsedRow = worksheet.LastRowUsed()?.RowNumber() ?? 0;
+        var scanRows = Math.Min(lastUsedRow, 10);
+
+        for (var rowIndex = 1; rowIndex <= scanRows; rowIndex++)
         {
-            var header = headerRow.Cell(col).GetString().Trim();
-            if (string.IsNullOrWhiteSpace(header))
+            var headerRow = worksheet.Row(rowIndex);
+            var lastHeaderCell = headerRow.LastCellUsed();
+            if (lastHeaderCell == null)
             {
                 continue;
             }
 
-            if (labelToColumn.TryGetValue(header, out var columnName))
+            var headerMap = new Dictionary<int, string>();
+            var usedColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var lastHeaderColumn = lastHeaderCell.Address.ColumnNumber;
+            for (var col = 1; col <= lastHeaderColumn; col++)
             {
-                headerMap[col] = columnName;
+                var rawHeader = headerRow.Cell(col).GetString();
+                var header = NormalizeExcelHeader(rawHeader);
+                if (string.IsNullOrWhiteSpace(header))
+                {
+                    continue;
+                }
+
+                if (normalizedLabelToColumn.TryGetValue(header, out var columnName) && usedColumns.Add(columnName))
+                {
+                    headerMap[col] = columnName;
+                }
+            }
+
+            if (headerMap.Count > bestMap.Count)
+            {
+                bestMap = headerMap;
+                bestHeaderRow = rowIndex;
             }
         }
 
-        return headerMap;
+        return new ImportHeaderMap(bestMap, bestHeaderRow);
+    }
+
+    private static string NormalizeExcelHeader(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var cleaned = value
+            .Replace("\u200f", string.Empty, StringComparison.Ordinal)
+            .Replace("\u200e", string.Empty, StringComparison.Ordinal)
+            .Replace("\u202a", string.Empty, StringComparison.Ordinal)
+            .Replace("\u202b", string.Empty, StringComparison.Ordinal)
+            .Replace("\u202c", string.Empty, StringComparison.Ordinal)
+            .Replace("\u00a0", " ", StringComparison.Ordinal)
+            .Trim();
+
+        cleaned = Regex.Replace(cleaned, "\\s+", " ");
+        cleaned = cleaned.Replace("\"\"", "\"", StringComparison.Ordinal);
+        return cleaned;
     }
 
     private static async Task<ImportPackage> ReadImportPackageAsync(IFormFile file, CancellationToken cancellationToken)
@@ -3078,21 +3259,26 @@ public class BuildingsController : ApiControllerBase
 
     private static List<ImportRowData> ReadImportRows(
         IXLWorksheet worksheet,
-        IReadOnlyDictionary<int, string> headerMap,
+        ImportHeaderMap headerMap,
         IReadOnlyDictionary<int, string>? imagesById = null,
         IReadOnlyDictionary<int, string>? imageWarningsById = null)
     {
         var rows = new List<ImportRowData>();
-        var lastRow = worksheet.LastRowUsed()?.RowNumber() ?? 2;
+        var lastRow = worksheet.LastRowUsed()?.RowNumber() ?? 0;
+        var startRow = headerMap.HeaderRow > 0 ? headerMap.HeaderRow + 1 : 3;
+        if (startRow <= 0)
+        {
+            startRow = 3;
+        }
 
-        for (var rowIndex = 3; rowIndex <= lastRow; rowIndex++)
+        for (var rowIndex = startRow; rowIndex <= lastRow; rowIndex++)
         {
             var row = worksheet.Row(rowIndex);
             var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             var warnings = new List<string>();
             var hasValue = false;
 
-            foreach (var (colIndex, columnName) in headerMap)
+            foreach (var (colIndex, columnName) in headerMap.Columns)
             {
                 var raw = row.Cell(colIndex).GetValue<string>();
                 var value = string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
@@ -3196,6 +3382,82 @@ public class BuildingsController : ApiControllerBase
             .ToList();
     }
 
+    private static ImportExistingMatch BuildExistingMatch(Building building, IReadOnlyList<BuildingFieldDto> definitions)
+    {
+        var fields = AlignFieldsToDefinitions(definitions, BuildFieldsSnapshot(building, includePhotos: true));
+        return new ImportExistingMatch(
+            building.Id,
+            building.StreetName,
+            building.HouseNumber ?? string.Empty,
+            building.BuildingName ?? string.Empty,
+            fields);
+    }
+
+    private static bool IsExactMatch(
+        IReadOnlyList<BuildingFieldDto> definitions,
+        IReadOnlyDictionary<string, string?> values,
+        ImportExistingMatch match)
+    {
+        var existingByColumn = match.Fields
+            .Where(field => !string.IsNullOrWhiteSpace(field.ColumnName))
+            .ToDictionary(field => field.ColumnName, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var definition in definitions)
+        {
+            if (string.IsNullOrWhiteSpace(definition.ColumnName))
+            {
+                continue;
+            }
+
+            if (string.Equals(definition.ColumnName, "StreetName", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var importValue = ResolveImportComparisonValue(definition, values);
+            existingByColumn.TryGetValue(definition.ColumnName, out var existingField);
+            var existingValue = NormalizeComparisonValue(existingField?.Value);
+
+            if (!string.Equals(importValue, existingValue, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string ResolveImportComparisonValue(
+        BuildingFieldDto definition,
+        IReadOnlyDictionary<string, string?> values)
+    {
+        values.TryGetValue(definition.ColumnName, out var rawValue);
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(definition.SelectTableName))
+        {
+            var resolved = TryResolveSelectValue(rawValue, definition.SelectTableName);
+            if (resolved.HasValue)
+            {
+                var label = SelectTables
+                    .GetOptions(definition.SelectTableName)
+                    .FirstOrDefault(option => option.Value == resolved.Value)
+                    ?.Label;
+                return NormalizeComparisonValue(label);
+            }
+        }
+
+        return NormalizeComparisonValue(rawValue);
+    }
+
+    private static string NormalizeComparisonValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+    }
+
     private static int? TryParsePositiveInt(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -3253,19 +3515,23 @@ public class BuildingsController : ApiControllerBase
     private static List<string> GetMissingRequiredColumns(
         IReadOnlyDictionary<string, string?> values,
         int? rehabSivugValue,
-        List<string> warnings)
+        List<string> warnings,
+        bool requireId)
     {
         var missing = new List<string>();
 
         values.TryGetValue("Id", out var idRaw);
-        if (string.IsNullOrWhiteSpace(idRaw))
+        if (!string.IsNullOrWhiteSpace(idRaw))
         {
-            missing.Add("Id");
+            if (!TryParsePositiveInt(idRaw).HasValue)
+            {
+                missing.Add("Id");
+                warnings.Add("ID חייב להיות מספר חיובי.");
+            }
         }
-        else if (!TryParsePositiveInt(idRaw).HasValue)
+        else if (requireId)
         {
             missing.Add("Id");
-            warnings.Add("ID חייב להיות מספר חיובי.");
         }
 
         values.TryGetValue("StreetId", out var streetRaw);

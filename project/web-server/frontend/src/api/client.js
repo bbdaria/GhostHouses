@@ -297,6 +297,12 @@ const api = {
       body: { rows }
     });
   },
+  async validateImportRow(values = {}) {
+    return request('/buildings/import/validate', {
+      method: 'POST',
+      body: { values }
+    });
+  },
   async exportBuildingCard(id) {
     if (!id && id !== 0) {
       throw new Error('building id is required');

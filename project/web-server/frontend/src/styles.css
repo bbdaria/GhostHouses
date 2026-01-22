@@ -521,11 +521,75 @@ tbody tr:hover {
   margin-bottom: 0.75rem;
 }
 
+.import-stage {
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.12);
+  margin-bottom: 1rem;
+}
+
 .import-table td,
 .import-table th,
 .import-compare-table td,
 .import-compare-table th {
   vertical-align: top;
+}
+
+.import-row--needs {
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.import-row--conflict {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.import-edit-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-top: 0.75rem;
+}
+
+.required-mark {
+  color: #f87171;
+  font-weight: 700;
+  margin-inline-start: 0.25rem;
+}
+
+.import-match-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.import-match {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.import-match.active {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.import-match-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
 }
 
 .import-row--create {

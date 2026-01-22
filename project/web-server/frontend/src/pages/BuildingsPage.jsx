@@ -79,6 +79,11 @@ export default function BuildingsPage() {
   const [importFile, setImportFile] = useState(null);
   const [importRows, setImportRows] = useState([]);
   const [importCompareRowId, setImportCompareRowId] = useState(null);
+  const [importCompareTargetId, setImportCompareTargetId] = useState(null);
+  const [importEditRowId, setImportEditRowId] = useState(null);
+  const [importEditValues, setImportEditValues] = useState(null);
+  const [importEditSaving, setImportEditSaving] = useState(false);
+  const [importEditError, setImportEditError] = useState('');
   const [importSummary, setImportSummary] = useState('');
   const [cardExporting, setCardExporting] = useState(false);
   const [cardExportError, setCardExportError] = useState('');
@@ -107,6 +112,19 @@ export default function BuildingsPage() {
     () => importRows.find((row) => row.rowNumber === importCompareRowId) || null,
     [importRows, importCompareRowId]
   );
+  const importEditRow = useMemo(
+    () => importRows.find((row) => row.rowNumber === importEditRowId) || null,
+    [importRows, importEditRowId]
+  );
+  const importCompareTarget = useMemo(() => {
+    if (!importCompareRow) return null;
+    const matches = importCompareRow.addressMatches || [];
+    if (importCompareTargetId) {
+      const found = matches.find((match) => match.id === importCompareTargetId);
+      if (found) return found;
+    }
+    return matches[0] || null;
+  }, [importCompareRow, importCompareTargetId]);
 
   const rehabSivugValue = useMemo(() => {
     const match =
@@ -252,16 +270,27 @@ export default function BuildingsPage() {
     const value = match.value ?? match.id;
     return value === null || value === undefined ? null : Number(value);
   };
+  const resolveSelectLabel = (raw, options) => {
+    if (raw === null || raw === undefined) return '';
+    const text = String(raw).trim();
+    if (!text) return '';
+    const numeric = Number(text);
+    if (Number.isFinite(numeric)) {
+      const match = options.find(
+        (opt) => String(opt.value ?? opt.id) === String(numeric)
+      );
+      return match?.label ?? text;
+    }
+    return text;
+  };
   const getMissingImportRequired = useCallback(
-    (values, idMode = 'manual') => {
+    (values) => {
       const missing = [];
       const getValue = (key) => (values?.[key] ?? '').toString().trim();
 
-      if (idMode !== 'auto') {
-        const idValue = getValue('Id');
-        if (!idValue || !Number.isFinite(Number(idValue)) || Number(idValue) <= 0) {
-          missing.push('Id');
-        }
+      const idValue = getValue('Id');
+      if (idValue && (!Number.isFinite(Number(idValue)) || Number(idValue) <= 0)) {
+        missing.push('Id');
       }
 
       const streetIdValue = getValue('StreetId');
@@ -600,6 +629,10 @@ export default function BuildingsPage() {
     setImportFile(null);
     setImportRows([]);
     setImportCompareRowId(null);
+    setImportCompareTargetId(null);
+    setImportEditRowId(null);
+    setImportEditValues(null);
+    setImportEditError('');
     setImportPreviewing(false);
     setImportApplying(false);
     setShowImportModal(true);
@@ -611,6 +644,10 @@ export default function BuildingsPage() {
     setImportFile(null);
     setImportRows([]);
     setImportCompareRowId(null);
+    setImportCompareTargetId(null);
+    setImportEditRowId(null);
+    setImportEditValues(null);
+    setImportEditError('');
     setImportPreviewing(false);
     setImportApplying(false);
     setShowImportModal(false);
@@ -623,28 +660,70 @@ export default function BuildingsPage() {
     setImportSummary('');
     setImportRows([]);
     setImportCompareRowId(null);
+    setImportCompareTargetId(null);
+    setImportEditRowId(null);
+    setImportEditValues(null);
+    setImportEditError('');
   };
 
   const buildImportRows = (rows) =>
     rows.map((row) => {
-      const idValue = row.values?.Id ? String(row.values.Id).trim() : '';
-      const hasIdValue = Boolean(idValue);
-      const idMode = row.hasIdConflict ? 'auto' : hasIdValue ? 'manual' : 'auto';
-      const missingRequired = getMissingImportRequired(row.values, idMode);
-      const action =
-        row.hasAddressDuplicate || missingRequired.length > 0 ? 'skip' : 'create';
+      const missingRequired = Array.isArray(row.missingRequired)
+        ? row.missingRequired
+        : getMissingImportRequired(row.values);
+      const hasIdConflict = Boolean(row.hasIdConflict);
       return {
         ...row,
-        action,
-        idMode,
-        overrideId: hasIdValue ? idValue : '',
-        missingRequired
+        missingRequired,
+        hasIdConflict,
+        decision: row.decision ?? null,
+        replaceIds: Array.isArray(row.replaceIds) ? row.replaceIds : [],
+        allowDuplicate: false,
+        compareTargetId: row.addressMatches?.[0]?.id ?? null
       };
     });
 
+  const applyBatchIdConflicts = (rows) => {
+    const idCounts = rows.reduce((acc, row) => {
+      const rawId = row.values?.Id ?? '';
+      const idValue = String(rawId).trim();
+      if (!idValue) return acc;
+      const parsed = Number(idValue);
+      if (!Number.isInteger(parsed) || parsed <= 0) return acc;
+      acc[parsed] = (acc[parsed] || 0) + 1;
+      return acc;
+    }, {});
+
+    return rows.map((row) => {
+      const rawId = row.values?.Id ?? '';
+      const idValue = String(rawId).trim();
+      const parsed = Number(idValue);
+      const batchConflict = Number.isInteger(parsed) && parsed > 0 && idCounts[parsed] > 1;
+      let warnings = Array.isArray(row.warnings) ? [...row.warnings] : [];
+      if (batchConflict && !warnings.includes('ID מופיע יותר מפעם אחת בקובץ הייבוא.')) {
+        warnings.push('ID מופיע יותר מפעם אחת בקובץ הייבוא.');
+      }
+      if (!batchConflict) {
+        warnings = warnings.filter((warning) => warning !== 'ID מופיע יותר מפעם אחת בקובץ הייבוא.');
+      }
+      const dbConflict = Boolean(row.hasIdConflict);
+      return {
+        ...row,
+        batchIdConflict: batchConflict,
+        warnings,
+        hasIdConflict: dbConflict || batchConflict
+      };
+    });
+  };
+
+  const applyAutoDecisions = (rows) =>
+    rows.map((row) => (row.decision ? row : { ...row, decision: computeRowDecision(row) }));
+
+  const normalizeImportRows = (rows) => applyAutoDecisions(applyBatchIdConflicts(rows));
+
   const updateImportRow = (rowNumber, updates) => {
     setImportRows((prev) =>
-      prev.map((row) => (row.rowNumber === rowNumber ? { ...row, ...updates } : row))
+      normalizeImportRows(prev.map((row) => (row.rowNumber === rowNumber ? { ...row, ...updates } : row)))
     );
   };
 
@@ -658,7 +737,7 @@ export default function BuildingsPage() {
     setImportPreviewing(true);
     try {
       const result = await api.previewImportBuildings(importFile);
-      const rows = buildImportRows(result.rows || []);
+      const rows = normalizeImportRows(buildImportRows(result.rows || []));
       setImportRows(rows);
       setImportSummary(`נטענו ${rows.length} שורות לייבוא.`);
     } catch (err) {
@@ -673,51 +752,43 @@ export default function BuildingsPage() {
       setImportError('אין שורות לייבוא.');
       return;
     }
-    const anyApply = importRows.some((row) => row.action !== 'skip');
-    if (!anyApply) {
-      setImportError('כל השורות מסומנות לדילוג.');
-      return;
-    }
-    const missingRequired = importRows.filter(
-      (row) => row.action !== 'skip' && (row.missingRequired?.length ?? 0) > 0
+    const invalidRows = importRows.filter(
+      (row) => row.decision === null && ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict)
     );
-    if (missingRequired.length > 0) {
-      setImportError('יש שורות עם שדות חובה חסרים או לא תקינים.');
+    if (invalidRows.length > 0) {
+      setImportError('יש שורות שחובה לתקן לפני הייבוא.');
       return;
     }
-    const invalidCreate = importRows.filter(
-      (row) => row.action === 'create' && row.hasAddressDuplicate
-    );
-    if (invalidCreate.length > 0) {
-      setImportError('יש שורות עם כפילות כתובת שסומנו להוספה. יש לבחור החלפה או דילוג.');
-      return;
-    }
-    const invalidReplace = importRows.filter(
+
+    const unresolvedConflicts = importRows.filter(
       (row) =>
-        row.action === 'replace' && !row.existingId && !row.existingIdById
+        row.decision === null &&
+        (row.addressMatches?.length ?? 0) > 0 &&
+        !row.exactMatch
     );
-    if (invalidReplace.length > 0) {
-      setImportError('יש שורות להחלפה ללא מבנה תואם במערכת.');
+    if (unresolvedConflicts.length > 0) {
+      setImportError('יש כפילויות שטרם טופלו.');
       return;
     }
+
+    const payloadRows = importRows
+      .filter((row) => row.decision)
+      .map((row) => ({
+        rowNumber: row.rowNumber,
+        action: row.decision,
+        values: row.values,
+        allowDuplicate: row.decision === 'add_anyway' || row.decision === 'replace',
+        replaceIds: row.decision === 'replace' ? row.replaceIds : null
+      }));
+
+    if (payloadRows.length === 0) {
+      setImportError('אין שורות לביצוע.');
+      return;
+    }
+
     setImportError('');
     setImportApplying(true);
     try {
-      const payloadRows = importRows.map((row) => {
-        const action = row.action || 'skip';
-        const idMode = row.idMode || 'manual';
-        const parsedOverrideId = Number(row.overrideId);
-        const overrideId =
-          idMode === 'manual' && Number.isFinite(parsedOverrideId) ? parsedOverrideId : undefined;
-        return {
-          rowNumber: row.rowNumber,
-          action,
-          values: row.values,
-          existingId: row.existingId ?? row.existingIdById ?? null,
-          idMode,
-          overrideId
-        };
-      });
       const result = await api.applyImportBuildings(payloadRows);
       const summary = `הייבוא הושלם. נוספו ${result.created} מבנים, עודכנו ${result.updated}, דולגו ${result.skipped}.`;
       setActionMessage(summary);
@@ -730,85 +801,154 @@ export default function BuildingsPage() {
     }
   };
 
-  const handleImportRowActionChange = (rowNumber, action) => {
-    updateImportRow(rowNumber, { action });
+  const computeRowDecision = (row) => {
+    const missingRequired = row.missingRequired?.length ?? 0;
+    const hasAddressConflict = (row.addressMatches?.length ?? 0) > 0;
+    if (row.exactMatch) return 'skip';
+    if (!row.hasIdConflict && missingRequired === 0 && !hasAddressConflict) return 'create';
+    return null;
   };
 
-  const handleImportValueChange = (rowNumber, columnName, value) => {
-    setImportRows((prev) =>
-      prev.map((row) => {
-        if (row.rowNumber !== rowNumber) return row;
-        const nextValues = { ...row.values, [columnName]: value };
-        const missingRequired = getMissingImportRequired(nextValues, row.idMode);
-        const nextImportFields = Array.isArray(row.importFields)
-          ? row.importFields.map((field) => {
-              const fieldColumn = field.columnName ? field.columnName.toLowerCase() : '';
-              const targetColumn = columnName.toLowerCase();
-              return fieldColumn === targetColumn ? { ...field, value } : field;
-            })
-          : row.importFields;
-        const nextRow = { ...row, values: nextValues, missingRequired, importFields: nextImportFields };
-        if (columnName === 'Id') {
-          nextRow.overrideId = value;
-        }
-        return nextRow;
-      })
-    );
-  };
-
-  const handleImportIdModeChange = (rowNumber, idMode) => {
-    setImportRows((prev) =>
-      prev.map((row) => {
-        if (row.rowNumber !== rowNumber) return row;
-        const nextValues =
-          idMode === 'auto' ? { ...row.values, Id: '' } : { ...row.values, Id: row.overrideId };
-        const missingRequired = getMissingImportRequired(nextValues, idMode);
-        const nextImportFields = Array.isArray(row.importFields)
-          ? row.importFields.map((field) =>
-              field.columnName?.toLowerCase() === 'id' ? { ...field, value: nextValues.Id } : field
-            )
-          : row.importFields;
-        return { ...row, idMode, values: nextValues, missingRequired, importFields: nextImportFields };
-      })
-    );
-  };
-
-  const handleImportOverrideIdChange = (rowNumber, value) => {
-    setImportRows((prev) =>
-      prev.map((row) => {
-        if (row.rowNumber !== rowNumber) return row;
-        const nextValues = { ...row.values, Id: value };
-        const missingRequired = getMissingImportRequired(nextValues, row.idMode);
-        const nextImportFields = Array.isArray(row.importFields)
-          ? row.importFields.map((field) =>
-              field.columnName?.toLowerCase() === 'id' ? { ...field, value } : field
-            )
-          : row.importFields;
-        return {
-          ...row,
-          overrideId: value,
-          values: nextValues,
-          missingRequired,
-          importFields: nextImportFields
-        };
-      })
-    );
+  const handleResolveConflict = (rowNumber, decision, replaceIds = []) => {
+    updateImportRow(rowNumber, {
+      decision,
+      replaceIds,
+      allowDuplicate: decision === 'add_anyway' || decision === 'replace'
+    });
   };
 
   const handleImportSkipAll = () => {
     setImportRows((prev) =>
-      prev.map((row) =>
-        row.hasAddressDuplicate || row.hasIdConflict ? { ...row, action: 'skip' } : row
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.decision) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict) return row;
+          if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
+          return { ...row, decision: 'skip' };
+        })
       )
     );
   };
 
   const handleImportReplaceAll = () => {
     setImportRows((prev) =>
-      prev.map((row) =>
-        row.hasAddressDuplicate || row.hasIdConflict ? { ...row, action: 'replace' } : row
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.decision) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict) return row;
+          if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
+          const allIds = row.addressMatches?.map((match) => match.id) ?? [];
+          return { ...row, decision: 'replace', replaceIds: allIds, allowDuplicate: true };
+        })
       )
     );
+  };
+
+  const handleImportAddAnywayAll = () => {
+    setImportRows((prev) =>
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.decision) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict) return row;
+          if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
+          return { ...row, decision: 'add_anyway', allowDuplicate: true };
+        })
+      )
+    );
+  };
+
+  const openImportCompare = (rowNumber) => {
+    const row = importRows.find((item) => item.rowNumber === rowNumber);
+    if (!row) return;
+    if ((row.replaceIds?.length ?? 0) === 0 && (row.addressMatches?.length ?? 0) > 0) {
+      updateImportRow(rowNumber, { replaceIds: row.addressMatches.map((match) => match.id) });
+    }
+    setImportCompareRowId(rowNumber);
+    const targetId = row.compareTargetId ?? row.addressMatches?.[0]?.id ?? null;
+    setImportCompareTargetId(targetId);
+  };
+
+  const closeImportCompare = () => {
+    setImportCompareRowId(null);
+    setImportCompareTargetId(null);
+  };
+
+  const handleSelectCompareTarget = (rowNumber, targetId) => {
+    setImportCompareTargetId(targetId);
+    updateImportRow(rowNumber, { compareTargetId: targetId });
+  };
+
+  const toggleReplaceSelection = (rowNumber, targetId) => {
+    setImportRows((prev) =>
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.rowNumber !== rowNumber) return row;
+          const current = Array.isArray(row.replaceIds) ? row.replaceIds : [];
+          const next = current.includes(targetId)
+            ? current.filter((id) => id !== targetId)
+            : [...current, targetId];
+          return { ...row, replaceIds: next };
+        })
+      )
+    );
+  };
+
+  const openImportEdit = (rowNumber) => {
+    const row = importRows.find((item) => item.rowNumber === rowNumber);
+    if (!row) return;
+    setImportEditRowId(rowNumber);
+    const nextValues = { ...(row.values || {}) };
+    nextValues.BldSivug = resolveSelectLabel(nextValues.BldSivug, sivugOptions);
+    nextValues.ShikumStatus = resolveSelectLabel(nextValues.ShikumStatus, statusOptions);
+    setImportEditValues(nextValues);
+    setImportEditError('');
+  };
+
+  const closeImportEdit = () => {
+    setImportEditRowId(null);
+    setImportEditValues(null);
+    setImportEditError('');
+  };
+
+  const handleImportEditValueChange = (field, value) => {
+    setImportEditValues((prev) => {
+      const next = { ...(prev || {}), [field]: value };
+      if (field === 'Id' && String(value ?? '').trim() === '0') {
+        next.Id = '';
+      }
+      if (field === 'BldSivug') {
+        const sivugValue = resolveSelectValue(value, sivugOptions);
+        if (rehabSivugValue && String(sivugValue) !== String(rehabSivugValue)) {
+          next.ShikumStatus = '';
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleImportEditSave = async () => {
+    if (!importEditRowId || !importEditValues) return;
+    setImportEditSaving(true);
+    setImportEditError('');
+    try {
+      const result = await api.validateImportRow(importEditValues);
+      updateImportRow(importEditRowId, {
+        values: result.values || importEditValues,
+        addressMatches: result.addressMatches || [],
+        idMatch: result.idMatch || null,
+        hasIdConflict: Boolean(result.hasIdConflict),
+        exactMatch: Boolean(result.exactMatch),
+        missingRequired: Array.isArray(result.missingRequired) ? result.missingRequired : [],
+        warnings: Array.isArray(result.warnings) ? result.warnings : [],
+        importFields: result.importFields || [],
+        compareTargetId: result.addressMatches?.[0]?.id ?? null
+      });
+      closeImportEdit();
+    } catch (err) {
+      setImportEditError(err.message || 'שגיאה בעדכון השורה.');
+    } finally {
+      setImportEditSaving(false);
+    }
   };
 
   const handleExportCard = async (building) => {
@@ -1144,19 +1284,40 @@ export default function BuildingsPage() {
   const importStats = useMemo(() => {
     return importRows.reduce(
       (acc, row) => {
-        const action = row.action || 'skip';
+        const action = row.decision;
+        if (!action) {
+          acc.pending += 1;
+          return acc;
+        }
         if (action === 'create') acc.create += 1;
         else if (action === 'replace') acc.replace += 1;
+        else if (action === 'add_anyway') acc.addAnyway += 1;
         else acc.skip += 1;
         return acc;
       },
-      { create: 0, replace: 0, skip: 0 }
+      { create: 0, replace: 0, addAnyway: 0, skip: 0, pending: 0 }
     );
   }, [importRows]);
-  const hasImportBlockingMissing = useMemo(
-    () => importRows.some((row) => row.action !== 'skip' && (row.missingRequired?.length ?? 0) > 0),
+  const importStage1Rows = useMemo(
+    () =>
+      importRows.filter(
+        (row) => row.decision === null && ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict)
+      ),
     [importRows]
   );
+  const importStage2Rows = useMemo(
+    () =>
+      importRows.filter(
+        (row) =>
+          row.decision === null &&
+          (row.missingRequired?.length ?? 0) === 0 &&
+          !row.hasIdConflict &&
+          (row.addressMatches?.length ?? 0) > 0 &&
+          !row.exactMatch
+      ),
+    [importRows]
+  );
+  const importReadyToApply = importRows.length > 0 && importStage1Rows.length === 0 && importStage2Rows.length === 0;
 
   const handleTabChange = (tab) => {
     setSelectedView(tab);
@@ -1448,10 +1609,10 @@ export default function BuildingsPage() {
   };
 
   const importCompareFields = useMemo(() => {
-    if (!importCompareRow) return [];
+    if (!importCompareRow || !importCompareTarget) return [];
     const ordered = sortFieldsForDisplay(importCompareRow.importFields || []);
     const existingByColumn = new Map(
-      (importCompareRow.existingFields || [])
+      (importCompareTarget.fields || [])
         .filter((field) => field?.columnName)
         .map((field) => [field.columnName.toLowerCase(), field])
     );
@@ -1465,7 +1626,7 @@ export default function BuildingsPage() {
         existingValue: existingByColumn.get(lookupKey)?.value ?? null
       };
     });
-  }, [importCompareRow, sortFieldsForDisplay]);
+  }, [importCompareRow, importCompareTarget, sortFieldsForDisplay]);
 
   const shouldUseTextarea = (fieldName) => {
     if (!fieldName) return false;
@@ -1488,6 +1649,10 @@ export default function BuildingsPage() {
     if (typeof field.value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(field.value)) return true;
     return false;
   };
+
+  const importEditSivugValue = resolveSelectValue(importEditValues?.BldSivug ?? '', sivugOptions);
+  const isImportEditRehabRequired =
+    rehabSivugValue && String(importEditSivugValue) === String(rehabSivugValue);
 
   return (
     <main className="app buildings-app">
@@ -1954,85 +2119,157 @@ export default function BuildingsPage() {
                 <>
                   <div className="import-summary">
                     <span className="muted">
-                      להוספה: {importStats.create} | להחלפה: {importStats.replace} | דילוג: {importStats.skip}
+                      להוספה אוטומטית: {importStats.create} | להחלפה: {importStats.replace} | הוספה בכל זאת:{' '}
+                      {importStats.addAnyway} | דילוג: {importStats.skip} | לטיפול: {importStats.pending}
                     </span>
                   </div>
-                  <div className="table-wrapper">
-                    <table className="import-table">
-                      <thead>
-                        <tr>
-                          <th>שורה</th>
-                          <th>ID</th>
-                          <th>שם רחוב</th>
-                          <th>מספר בית</th>
-                          <th>כינוי הבניין</th>
-                          <th>סטטוס</th>
-                          <th>פעולה</th>
-                          <th>השוואה</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {importRows.map((row) => {
-                          const missingLabels = (row.missingRequired || [])
-                            .map((column) => getImportRequiredLabel(column))
-                            .join(', ');
-                          const flags = [];
-                          if (row.hasAddressDuplicate) flags.push('כפילות כתובת');
-                          if (row.hasIdConflict) flags.push('כפילות ID');
-                          if (missingLabels) flags.push(`חסרים שדות: ${missingLabels}`);
-                          if (row.warnings?.length) flags.push(`אזהרות: ${row.warnings.join(', ')}`);
-                          const statusText = flags.length > 0 ? flags.join(' | ') : '—';
-                          const rowStreetName =
-                            row.values?.StreetName ||
-                            streets.find((street) => String(street.streetId) === String(row.values?.StreetId))
-                              ?.name ||
-                            '';
-                          const canReplace = Boolean(row.existingId || row.existingIdById);
-                          return (
-                            <tr
-                              key={row.rowNumber}
-                              className={`import-row import-row--${row.action || 'skip'}`}
-                              onClick={() => setImportCompareRowId(row.rowNumber)}
-                            >
-                              <td>{row.rowNumber}</td>
-                              <td>{displayOrDash(row.values?.Id)}</td>
-                              <td>{displayOrDash(rowStreetName)}</td>
-                              <td>{displayOrDash(row.values?.BldNum)}</td>
-                              <td>{displayOrDash(row.values?.BldName)}</td>
-                              <td>{statusText}</td>
-                              <td>
-                                <select
-                                  value={row.action}
-                                  onChange={(event) =>
-                                    handleImportRowActionChange(row.rowNumber, event.target.value)
-                                  }
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  <option value="create">הוסף</option>
-                                  <option value="replace" disabled={!canReplace}>
-                                    החלף
-                                  </option>
-                                  <option value="skip">דלג</option>
-                                </select>
-                              </td>
-                              <td>
-                                <button
-                                  type="button"
-                                  className="ghost"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setImportCompareRowId(row.rowNumber);
-                                  }}
-                                >
-                                  השוואה
-                                </button>
-                              </td>
+                  {importStage1Rows.length > 0 && (
+                    <div className="import-stage">
+                      <h4>שלב 1: השלמת שדות חובה / מזהה</h4>
+                      <p className="muted">יש להשלים את השדות החסרים ולפתור כפילויות ID לפני מעבר לכפילויות.</p>
+                      <div className="table-wrapper">
+                        <table className="import-table">
+                          <thead>
+                            <tr>
+                              <th>שורה</th>
+                              <th>ID</th>
+                              <th>שם רחוב</th>
+                              <th>מספר בית</th>
+                              <th>כינוי הבניין</th>
+                              <th>בעיה</th>
+                              <th>פעולה</th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody>
+                            {importStage1Rows.map((row) => {
+                              const missingLabels = (row.missingRequired || [])
+                                .map((column) => getImportRequiredLabel(column))
+                                .join(', ');
+                              const flags = [];
+                              if (row.hasIdConflict) flags.push('כפילות ID');
+                              if (missingLabels) flags.push(`חסרים שדות: ${missingLabels}`);
+                              if (row.warnings?.length) flags.push(`אזהרות: ${row.warnings.join(', ')}`);
+                              const statusText = flags.length > 0 ? flags.join(' | ') : '—';
+                              const rowStreetName =
+                                row.values?.StreetName ||
+                                streets.find((street) => String(street.streetId) === String(row.values?.StreetId))
+                                  ?.name ||
+                                '';
+                              return (
+                                <tr
+                                  key={row.rowNumber}
+                                  className="import-row import-row--needs"
+                                  onClick={() => openImportEdit(row.rowNumber)}
+                                >
+                                  <td>{row.rowNumber}</td>
+                                  <td>{displayOrDash(row.values?.Id)}</td>
+                                  <td>{displayOrDash(rowStreetName)}</td>
+                                  <td>{displayOrDash(row.values?.BldNum)}</td>
+                                  <td>{displayOrDash(row.values?.BldName)}</td>
+                                  <td>{statusText}</td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openImportEdit(row.rowNumber);
+                                      }}
+                                    >
+                                      עריכה
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {importStage1Rows.length === 0 && importStage2Rows.length > 0 && (
+                    <div className="import-stage">
+                      <h4>שלב 2: כפילויות כתובת</h4>
+                      <p className="muted">
+                        בחרו לכל שורה אם לדלג, להוסיף בכל זאת, או להחליף מבנים קיימים.
+                      </p>
+                      <div className="table-wrapper">
+                        <table className="import-table">
+                          <thead>
+                            <tr>
+                              <th>שורה</th>
+                              <th>ID</th>
+                              <th>שם רחוב</th>
+                              <th>מספר בית</th>
+                              <th>כינוי הבניין</th>
+                              <th>כפילויות קיימות</th>
+                              <th>פעולות</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importStage2Rows.map((row) => {
+                              const rowStreetName =
+                                row.values?.StreetName ||
+                                streets.find((street) => String(street.streetId) === String(row.values?.StreetId))
+                                  ?.name ||
+                                '';
+                              return (
+                                <tr
+                                  key={row.rowNumber}
+                                  className="import-row import-row--conflict"
+                                  onClick={() => openImportCompare(row.rowNumber)}
+                                >
+                                  <td>{row.rowNumber}</td>
+                                  <td>{displayOrDash(row.values?.Id)}</td>
+                                  <td>{displayOrDash(rowStreetName)}</td>
+                                  <td>{displayOrDash(row.values?.BldNum)}</td>
+                                  <td>{displayOrDash(row.values?.BldName)}</td>
+                                  <td>{row.addressMatches?.length ?? 0}</td>
+                                  <td className="import-actions">
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openImportCompare(row.rowNumber);
+                                      }}
+                                    >
+                                      השוואה / החלפה
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleResolveConflict(row.rowNumber, 'skip');
+                                      }}
+                                    >
+                                      דלג
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleResolveConflict(row.rowNumber, 'add_anyway');
+                                      }}
+                                    >
+                                      הוסף בכל זאת
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {importStage1Rows.length === 0 && importStage2Rows.length === 0 && (
+                    <p className="muted">אין שורות שדורשות טיפול נוסף. אפשר לבצע את הייבוא.</p>
+                  )}
                 </>
               )}
             </div>
@@ -2041,7 +2278,7 @@ export default function BuildingsPage() {
                 <button type="button" className="ghost" onClick={closeImportModal} disabled={importBusy}>
                   סגירה
                 </button>
-                {importRows.length > 0 && (
+                {importStage1Rows.length === 0 && importStage2Rows.length > 0 && (
                   <>
                     <button type="button" className="ghost" onClick={handleImportSkipAll} disabled={importBusy}>
                       דלג הכל
@@ -2049,30 +2286,154 @@ export default function BuildingsPage() {
                     <button type="button" className="ghost" onClick={handleImportReplaceAll} disabled={importBusy}>
                       החלף הכל
                     </button>
+                    <button type="button" className="ghost" onClick={handleImportAddAnywayAll} disabled={importBusy}>
+                      הוסף בכל זאת הכל
+                    </button>
+                  </>
+                )}
+                {importRows.length > 0 && (
+                  <>
                     <button
                       type="button"
                       className="primary"
                       onClick={handleImportApply}
-                      disabled={importApplying || importBusy || hasImportBlockingMissing}
+                      disabled={importApplying || importBusy || !importReadyToApply}
                     >
                       {importApplying ? 'מייבא...' : 'בצע ייבוא'}
                     </button>
                   </>
                 )}
               </div>
-              {hasImportBlockingMissing && (
-                <p className="error">יש שורות עם שדות חובה חסרים או לא תקינים.</p>
+              {importStage1Rows.length > 0 && (
+                <p className="error">יש שורות שחובה להשלים לפני הייבוא.</p>
+              )}
+              {importStage1Rows.length === 0 && importStage2Rows.length > 0 && (
+                <p className="error">יש כפילויות שדורשות טיפול לפני הייבוא.</p>
               )}
             </div>
           </div>
         </div>
       )}
+      {importEditRow && (
+        <div className="modal-overlay" onClick={closeImportEdit}>
+          <div className="modal-window modal-large" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>תיקון שורה {importEditRow.rowNumber}</h3>
+              <button type="button" className="modal-close" onClick={closeImportEdit}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="muted">השלימו את שדות החובה. השאירו ID ריק ליצירה אוטומטית.</p>
+              {importEditRow.hasIdConflict && (
+                <p className="error">קיים מבנה עם ID זה או שה־ID מופיע יותר מפעם אחת בקובץ.</p>
+              )}
+              {(importEditRow.missingRequired?.length ?? 0) > 0 && (
+                <p className="error">
+                  חסרים שדות חובה:{' '}
+                  {importEditRow.missingRequired.map((column) => getImportRequiredLabel(column)).join(', ')}
+                </p>
+              )}
+              {importEditRow.warnings?.length > 0 && (
+                <p className="muted">אזהרות: {importEditRow.warnings.join(', ')}</p>
+              )}
+              {importEditError && <p className="error">{importEditError}</p>}
+              <div className="import-edit-grid">
+                <label>
+                  ID (אופציונלי)
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={importEditValues?.Id ?? ''}
+                    onChange={(event) => handleImportEditValueChange('Id', event.target.value)}
+                  />
+                </label>
+                <label className="required">
+                  שם רחוב <span className="required-mark">*</span>
+                  <select
+                    value={importEditValues?.StreetId ?? ''}
+                    onChange={(event) => handleImportEditValueChange('StreetId', event.target.value)}
+                  >
+                    <option value="">בחר רחוב</option>
+                    {streets.map((street) => (
+                      <option key={street.streetId} value={street.streetId}>
+                        {street.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="required">
+                  מספר בית <span className="required-mark">*</span>
+                  <input
+                    type="text"
+                    value={importEditValues?.BldNum ?? ''}
+                    onChange={(event) => handleImportEditValueChange('BldNum', event.target.value)}
+                  />
+                </label>
+                <label className="required">
+                  כינוי הבניין <span className="required-mark">*</span>
+                  <input
+                    type="text"
+                    value={importEditValues?.BldName ?? ''}
+                    onChange={(event) => handleImportEditValueChange('BldName', event.target.value)}
+                  />
+                </label>
+                <label className="required">
+                  סיווג <span className="required-mark">*</span>
+                  <select
+                    value={importEditValues?.BldSivug ?? ''}
+                    onChange={(event) => handleImportEditValueChange('BldSivug', event.target.value)}
+                  >
+                    <option value="">—</option>
+                    {sivugOptions.map((opt) => (
+                      <option key={opt.value} value={opt.label}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={isImportEditRehabRequired ? 'required' : ''}>
+                  סטטוס שיקום {isImportEditRehabRequired && <span className="required-mark">*</span>}
+                  <select
+                    value={importEditValues?.ShikumStatus ?? ''}
+                    onChange={(event) => handleImportEditValueChange('ShikumStatus', event.target.value)}
+                    disabled={!isImportEditRehabRequired}
+                  >
+                    <option value="">—</option>
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value ?? opt.id} value={opt.label}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <div className="footer-actions">
+                <button type="button" className="ghost" onClick={closeImportEdit} disabled={importEditSaving}>
+                  סגירה
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={handleImportEditSave}
+                  disabled={importEditSaving}
+                >
+                  {importEditSaving ? 'שומר...' : 'שמירה'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {importCompareRow && (
-        <div className="modal-overlay" onClick={() => setImportCompareRowId(null)}>
+        <div className="modal-overlay" onClick={closeImportCompare}>
           <div className="modal-window modal-large" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h3>השוואת שורה {importCompareRow.rowNumber}</h3>
-              <button type="button" className="modal-close" onClick={() => setImportCompareRowId(null)}>
+              <button type="button" className="modal-close" onClick={closeImportCompare}>
                 ✕
               </button>
             </div>
@@ -2080,138 +2441,38 @@ export default function BuildingsPage() {
               {importCompareRow.warnings?.length > 0 && (
                 <p className="muted">אזהרות: {importCompareRow.warnings.join(', ')}</p>
               )}
-              {(importCompareRow.missingRequired?.length ?? 0) > 0 && (
-                <p className="error">
-                  חסרים שדות חובה:{' '}
-                  {importCompareRow.missingRequired.map((column) => getImportRequiredLabel(column)).join(', ')}
-                </p>
-              )}
-              <div className="import-compare-controls">
-                <label>
-                  פעולה
-                  <select
-                    value={importCompareRow.action}
-                    onChange={(event) =>
-                      handleImportRowActionChange(importCompareRow.rowNumber, event.target.value)
-                    }
-                  >
-                    <option value="create">הוסף</option>
-                    <option value="replace" disabled={!importCompareRow.existingId && !importCompareRow.existingIdById}>
-                      החלף
-                    </option>
-                    <option value="skip">דלג</option>
-                  </select>
-                </label>
-                <label>
-                  מצב ID
-                  <select
-                    value={importCompareRow.idMode}
-                    onChange={(event) =>
-                      handleImportIdModeChange(importCompareRow.rowNumber, event.target.value)
-                    }
-                  >
-                    <option value="auto">אוטומטי</option>
-                    <option value="manual">ידני</option>
-                  </select>
-                </label>
-                {importCompareRow.idMode === 'manual' && (
-                  <label>
-                    ID ידני
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={importCompareRow.overrideId || ''}
-                      onChange={(event) =>
-                        handleImportOverrideIdChange(importCompareRow.rowNumber, event.target.value)
-                      }
-                    />
-                  </label>
-                )}
-              </div>
-
-              {(importCompareRow.missingRequired?.length ?? 0) > 0 && (
-                <div className="import-missing-fields">
-                  {importCompareRow.missingRequired.map((column) => {
-                    const currentValue = importCompareRow.values?.[column] ?? '';
-                    const label = getImportRequiredLabel(column);
-                    if (column === 'StreetId') {
-                      return (
-                        <label key={column}>
-                          {label}
-                          <select
-                            value={currentValue}
-                            onChange={(event) =>
-                              handleImportValueChange(importCompareRow.rowNumber, column, event.target.value)
-                            }
-                          >
-                            <option value="">בחר רחוב</option>
-                            {streets.map((street) => (
-                              <option key={street.streetId} value={street.streetId}>
-                                {street.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      );
-                    }
-                    if (column === 'BldSivug') {
-                      return (
-                        <label key={column}>
-                          {label}
-                          <select
-                            value={currentValue}
-                            onChange={(event) =>
-                              handleImportValueChange(importCompareRow.rowNumber, column, event.target.value)
-                            }
-                          >
-                            <option value="">—</option>
-                            {sivugOptions.map((opt) => (
-                              <option key={opt.value} value={opt.label}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      );
-                    }
-                    if (column === 'ShikumStatus') {
-                      return (
-                        <label key={column}>
-                          {label}
-                          <select
-                            value={currentValue}
-                            onChange={(event) =>
-                              handleImportValueChange(importCompareRow.rowNumber, column, event.target.value)
-                            }
-                          >
-                            <option value="">—</option>
-                            {statuses.map((opt) => (
-                              <option key={opt.id} value={opt.label}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      );
-                    }
-                    return (
-                      <label key={column}>
-                        {label}
+              <p className="muted">
+                נמצאו {importCompareRow.addressMatches?.length ?? 0} מבנים באותה כתובת. בחרו אילו למחוק והחליפו.
+              </p>
+              <div className="import-match-list">
+                {(importCompareRow.addressMatches || []).map((match) => {
+                  const isSelected = (importCompareRow.replaceIds || []).includes(match.id);
+                  const isActive = importCompareTarget?.id === match.id;
+                  return (
+                    <div key={match.id} className={`import-match ${isActive ? 'active' : ''}`}>
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => handleSelectCompareTarget(importCompareRow.rowNumber, match.id)}
+                      >
+                        {match.streetName} {match.houseNumber} · {match.buildingName} (ID {match.id})
+                      </button>
+                      <label className="import-match-checkbox">
                         <input
-                          type={column === 'Id' ? 'number' : 'text'}
-                          min={column === 'Id' ? 1 : undefined}
-                          step={column === 'Id' ? 1 : undefined}
-                          value={currentValue}
-                          onChange={(event) =>
-                            handleImportValueChange(importCompareRow.rowNumber, column, event.target.value)
-                          }
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(event) => {
+                            event.stopPropagation();
+                            toggleReplaceSelection(importCompareRow.rowNumber, match.id);
+                          }}
                         />
+                        להחלפה
                       </label>
-                    );
-                  })}
-                </div>
-              )}
+                    </div>
+                  );
+                })}
+              </div>
+              {!importCompareTarget && <p className="muted">בחרו מבנה להשוואה כדי לראות את ההבדלים.</p>}
 
               <div className="table-wrapper">
                 <table className="import-compare-table">
@@ -2236,8 +2497,43 @@ export default function BuildingsPage() {
             </div>
             <div className="modal-footer">
               <div className="footer-actions">
-                <button type="button" className="ghost" onClick={() => setImportCompareRowId(null)}>
+                <button type="button" className="ghost" onClick={closeImportCompare}>
                   סגירה
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    handleResolveConflict(importCompareRow.rowNumber, 'skip');
+                    closeImportCompare();
+                  }}
+                >
+                  דלג
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    handleResolveConflict(importCompareRow.rowNumber, 'add_anyway');
+                    closeImportCompare();
+                  }}
+                >
+                  הוסף בכל זאת
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={(importCompareRow.replaceIds?.length ?? 0) === 0}
+                  onClick={() => {
+                    handleResolveConflict(
+                      importCompareRow.rowNumber,
+                      'replace',
+                      importCompareRow.replaceIds || []
+                    );
+                    closeImportCompare();
+                  }}
+                >
+                  החלף נבחרים
                 </button>
               </div>
             </div>
