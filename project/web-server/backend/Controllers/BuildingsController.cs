@@ -18,6 +18,7 @@ using WebServer.Models;
 using WebServer.Models.Dtos;
 using WebServer.Services;
 using WebServer.Utilities;
+using InvalidFieldValue = WebServer.Services.BuildingRules.InvalidFieldValue;
 
 namespace WebServer.Controllers;
 
@@ -586,6 +587,8 @@ public class BuildingsController : ApiControllerBase
         string BuildingName,
         List<BuildingFieldDto> Fields);
 
+    public sealed record ImportValidationIssue(string ColumnName, string Message);
+
     public sealed record ImportPreviewRow(
         int RowNumber,
         Dictionary<string, string?> Values,
@@ -594,6 +597,7 @@ public class BuildingsController : ApiControllerBase
         bool HasIdConflict,
         bool ExactMatch,
         List<string> MissingRequired,
+        List<ImportValidationIssue> InvalidValues,
         List<string> Warnings,
         List<BuildingFieldDto> ImportFields);
 
@@ -873,6 +877,20 @@ public class BuildingsController : ApiControllerBase
             return BadRequest("Excel headers do not match the export format.");
         }
 
+        var propertyByColumn = typeof(Building)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.CanWrite)
+            .Select(p => new
+            {
+                Property = p,
+                Column = p.GetCustomAttribute<ColumnAttribute>()
+            })
+            .Where(x => x.Column is not null)
+            .ToDictionary(
+                x => string.IsNullOrWhiteSpace(x.Column!.Name) ? x.Property.Name : x.Column!.Name!,
+                x => x.Property,
+                StringComparer.OrdinalIgnoreCase);
+
         var importRows = ReadImportRows(worksheet, headerMap, package.ImagesById, package.ImageWarningsById);
         if (importRows.Count == 0)
         {
@@ -925,6 +943,10 @@ public class BuildingsController : ApiControllerBase
             var warnings = new List<string>(row.Warnings);
             var values = row.Values;
             var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings, requireId: false);
+            var invalidValues = BuildingRules
+                .GetInvalidFieldValues(values, propertyByColumn)
+                .Select(issue => new ImportValidationIssue(issue.ColumnName, issue.Message))
+                .ToList();
 
             var idValue = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
             var streetId = TryParseStreetId(values.TryGetValue("StreetId", out var streetRaw) ? streetRaw : null);
@@ -972,6 +994,7 @@ public class BuildingsController : ApiControllerBase
                 hasIdConflict,
                 exactMatch,
                 missingRequired,
+                invalidValues,
                 warnings,
                 importFields));
         }
@@ -990,11 +1013,29 @@ public class BuildingsController : ApiControllerBase
             return BadRequest("No values supplied.");
         }
 
+        var propertyByColumn = typeof(Building)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.CanWrite)
+            .Select(p => new
+            {
+                Property = p,
+                Column = p.GetCustomAttribute<ColumnAttribute>()
+            })
+            .Where(x => x.Column is not null)
+            .ToDictionary(
+                x => string.IsNullOrWhiteSpace(x.Column!.Name) ? x.Property.Name : x.Column!.Name!,
+                x => x.Property,
+                StringComparer.OrdinalIgnoreCase);
+
         var fieldDefinitions = BuildFieldsSnapshot(new Building(), includePhotos: true);
         var warnings = new List<string>();
         var values = NormalizeImportValues(request.Values);
         var rehabSivugValue = ResolveRehabSivugValue();
         var missingRequired = GetMissingRequiredColumns(values, rehabSivugValue, warnings, requireId: false);
+        var invalidValues = BuildingRules
+            .GetInvalidFieldValues(values, propertyByColumn)
+            .Select(issue => new ImportValidationIssue(issue.ColumnName, issue.Message))
+            .ToList();
 
         var idValue = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
         ImportExistingMatch? idMatch = null;
@@ -1041,6 +1082,7 @@ public class BuildingsController : ApiControllerBase
             hasIdConflict,
             exactMatch,
             missingRequired,
+            invalidValues,
             warnings,
             importFields));
     }
@@ -1136,6 +1178,16 @@ public class BuildingsController : ApiControllerBase
             if (missingRequired.Count > 0)
             {
                 return BadRequest($"Row {row.RowNumber}: Missing required fields.");
+            }
+            var invalidValues = BuildingRules.GetInvalidFieldValues(values, propertyByColumn);
+            if (invalidValues.Count > 0)
+            {
+                return BadRequest(new
+                {
+                    error = "ערכים לא חוקיים בשורת הייבוא.",
+                    row.RowNumber,
+                    invalidValues = invalidValues.Select(issue => new ImportValidationIssue(issue.ColumnName, issue.Message)).ToList()
+                });
             }
 
             var streetId = TryParseStreetId(values.TryGetValue("StreetId", out var streetRaw) ? streetRaw : null);
@@ -1333,6 +1385,27 @@ public class BuildingsController : ApiControllerBase
         }
 
         var houseNumber = request.HouseNumber?.Trim() ?? string.Empty;
+        var requiredWarnings = new List<string>();
+        var requiredValues = new Dictionary<string, string?>
+        {
+            ["Id"] = request.Id > 0 ? request.Id.ToString(CultureInfo.InvariantCulture) : null,
+            ["StreetId"] = request.StreetId.ToString(CultureInfo.InvariantCulture),
+            ["BldNum"] = houseNumber,
+            ["BldName"] = request.BuildingName,
+            ["BldSivug"] = request.BldSivug?.ToString(CultureInfo.InvariantCulture),
+            ["ShikumStatus"] = request.ShikumStatus?.ToString()
+        };
+        var rehabSivugValue = ResolveRehabSivugValue();
+        var missingRequired = GetMissingRequiredColumns(requiredValues, rehabSivugValue, requiredWarnings, requireId: false);
+        if (missingRequired.Count > 0)
+        {
+            return BadRequest(new
+            {
+                error = "שדות חובה חסרים.",
+                missingRequired,
+                warnings = requiredWarnings
+            });
+        }
         if (request.Id > 0)
         {
             var idExists = await _context.Buildings.AnyAsync(b => b.Id == request.Id, cancellationToken);
@@ -1480,6 +1553,32 @@ public class BuildingsController : ApiControllerBase
             pendingIdChange = request.Id;
         }
 
+        var finalHouseNumber = request.HouseNumber?.Trim() ?? string.Empty;
+        var finalBuildingName = string.IsNullOrWhiteSpace(request.BuildingName) ? building.BuildingName : request.BuildingName;
+        var finalSivug = request.BldSivug ?? building.BldSivug;
+        var finalShikumStatus = request.ShikumStatus?.ToString() ?? ((int)building.ShikumStatus).ToString(CultureInfo.InvariantCulture);
+        var requiredWarnings = new List<string>();
+        var requiredValues = new Dictionary<string, string?>
+        {
+            ["Id"] = request.Id.ToString(CultureInfo.InvariantCulture),
+            ["StreetId"] = request.StreetId.ToString(CultureInfo.InvariantCulture),
+            ["BldNum"] = finalHouseNumber,
+            ["BldName"] = finalBuildingName,
+            ["BldSivug"] = finalSivug?.ToString(CultureInfo.InvariantCulture),
+            ["ShikumStatus"] = finalShikumStatus
+        };
+        var rehabSivugValue = ResolveRehabSivugValue();
+        var missingRequired = GetMissingRequiredColumns(requiredValues, rehabSivugValue, requiredWarnings, requireId: true);
+        if (missingRequired.Count > 0)
+        {
+            return BadRequest(new
+            {
+                error = "שדות חובה חסרים.",
+                missingRequired,
+                warnings = requiredWarnings
+            });
+        }
+
         var oldStreetName = building.StreetName;
         var oldHouseNumber = building.HouseNumber;
         var oldBuildingName = building.BuildingName;
@@ -1488,7 +1587,7 @@ public class BuildingsController : ApiControllerBase
         var oldStatusSummary = building.StatusSummary;
         var oldStatusSummaryUpdatedAt = building.StatusSummaryUpdatedAt;
 
-        building.HouseNumber = request.HouseNumber;
+        building.HouseNumber = finalHouseNumber;
         if (!string.IsNullOrWhiteSpace(request.BuildingName))
         {
             building.BuildingName = request.BuildingName;
@@ -1770,6 +1869,28 @@ public class BuildingsController : ApiControllerBase
             }
         }
 
+        var requiredWarnings = new List<string>();
+        var requiredValues = new Dictionary<string, string?>
+        {
+            ["Id"] = building.Id.ToString(CultureInfo.InvariantCulture),
+            ["StreetId"] = building.StreetCode?.ToString(CultureInfo.InvariantCulture),
+            ["BldNum"] = building.HouseNumber,
+            ["BldName"] = building.BuildingName,
+            ["BldSivug"] = building.BldSivug?.ToString(CultureInfo.InvariantCulture),
+            ["ShikumStatus"] = ((int)building.ShikumStatus).ToString(CultureInfo.InvariantCulture)
+        };
+        var rehabSivugValue = ResolveRehabSivugValue();
+        var missingRequired = GetMissingRequiredColumns(requiredValues, rehabSivugValue, requiredWarnings, requireId: true);
+        if (missingRequired.Count > 0)
+        {
+            return BadRequest(new
+            {
+                error = "שדות חובה חסרים.",
+                missingRequired,
+                warnings = requiredWarnings
+            });
+        }
+
         var hasChanges = changes.Count > 0 ||
             !string.Equals(originalStreetName, building.StreetName, StringComparison.Ordinal);
         if (hasChanges)
@@ -1843,7 +1964,6 @@ public class BuildingsController : ApiControllerBase
         return await GetBuilding(building.Id, cancellationToken);
     }
 
-    private sealed record InvalidFieldValue(string Message);
 
     private sealed record FieldChange(string ColumnName, string FieldName, string? OldValue, string? NewValue);
 
@@ -2199,146 +2319,7 @@ public class BuildingsController : ApiControllerBase
 
     private static object? ConvertFieldValue(string? raw, PropertyInfo property)
     {
-        var targetType = property.PropertyType;
-        var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
-
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            if (underlying == typeof(string))
-            {
-                return string.Empty;
-            }
-
-            if (targetType.IsValueType && Nullable.GetUnderlyingType(targetType) is null)
-            {
-                return Activator.CreateInstance(targetType);
-            }
-
-            return null;
-        }
-
-        raw = raw.Trim();
-
-        if (underlying == typeof(string))
-        {
-            return raw;
-        }
-
-        if (underlying == typeof(int))
-        {
-            if (int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var i))
-            {
-                return i;
-            }
-
-            var fieldSpec = property.GetCustomAttribute<FieldSpecAttribute>();
-            var selectTableName = fieldSpec?.SelectTableName?.Trim();
-            if (!string.IsNullOrWhiteSpace(selectTableName))
-            {
-                var normalizedRaw = raw.Replace("\"\"", "\"");
-                var option = SelectTables
-                    .GetOptions(selectTableName)
-                    .FirstOrDefault(o => string.Equals(o.Label?.Trim().Replace("\"\"", "\""), normalizedRaw, StringComparison.Ordinal));
-                if (option != null)
-                {
-                    return option.Value;
-                }
-            }
-
-            return new InvalidFieldValue("expected integer.");
-        }
-
-        if (underlying == typeof(double))
-        {
-            if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
-            {
-                return d;
-            }
-
-            return new InvalidFieldValue("expected number.");
-        }
-
-        if (underlying == typeof(decimal))
-        {
-            if (decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var dec))
-            {
-                return dec;
-            }
-
-            return new InvalidFieldValue("expected decimal.");
-        }
-
-        if (underlying == typeof(Money))
-        {
-            if (decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var amount))
-            {
-                return new Money(amount);
-            }
-
-            return new InvalidFieldValue("expected money decimal.");
-        }
-
-        if (underlying == typeof(DateTime))
-        {
-            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
-            {
-                return dt.Date;
-            }
-
-            if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var oa))
-            {
-                try
-                {
-                    return DateTime.FromOADate(oa).Date;
-                }
-                catch
-                {
-                    // ignored
-                }
-            }
-
-            return new InvalidFieldValue("expected date.");
-        }
-
-        if (underlying.IsEnum)
-        {
-            if (int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var enumInt))
-            {
-                try
-                {
-                    return Enum.ToObject(underlying, enumInt);
-                }
-                catch
-                {
-                    return new InvalidFieldValue("invalid enum integer.");
-                }
-            }
-
-            var fieldSpec = property.GetCustomAttribute<FieldSpecAttribute>();
-            var selectTableName = fieldSpec?.SelectTableName?.Trim();
-            if (!string.IsNullOrWhiteSpace(selectTableName))
-            {
-                var normalizedRaw = raw.Replace("\"\"", "\"");
-                var option = SelectTables
-                    .GetOptions(selectTableName)
-                    .FirstOrDefault(o => string.Equals(o.Label?.Trim().Replace("\"\"", "\""), normalizedRaw, StringComparison.Ordinal));
-                if (option != null)
-                {
-                    return Enum.ToObject(underlying, option.Value);
-                }
-            }
-
-            try
-            {
-                return Enum.Parse(underlying, raw, ignoreCase: true);
-            }
-            catch
-            {
-                return new InvalidFieldValue("expected enum value.");
-            }
-        }
-
-        return new InvalidFieldValue("unsupported field type.");
+        return BuildingRules.ConvertFieldValue(raw, property);
     }
 
     private async Task<ImportApplyResult> ApplyImportRow(
@@ -3460,56 +3441,22 @@ public class BuildingsController : ApiControllerBase
 
     private static int? TryParsePositiveInt(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return null;
-        }
-
-        return int.TryParse(raw.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var value) && value > 0
-            ? value
-            : null;
+        return BuildingRules.TryParsePositiveInt(raw);
     }
 
     private static int? TryParseStreetId(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return null;
-        }
-
-        return int.TryParse(raw.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var value)
-            ? value
-            : null;
+        return BuildingRules.TryParseStreetId(raw);
     }
 
     private static int? ResolveRehabSivugValue()
     {
-        return SelectTables
-            .GetOptions("Tbl_Sivug")
-            .FirstOrDefault(option =>
-                string.Equals(option.Label, "ריק ובהליך שיקום", StringComparison.Ordinal) ||
-                (option.Label?.Contains("שיקום", StringComparison.Ordinal) ?? false))
-            ?.Value;
+        return BuildingRules.ResolveRehabSivugValue();
     }
 
     private static int? TryResolveSelectValue(string? raw, string tableName)
     {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return null;
-        }
-
-        if (int.TryParse(raw.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
-        {
-            return value;
-        }
-
-        var normalizedRaw = raw.Trim().Replace("\"\"", "\"");
-        return SelectTables
-            .GetOptions(tableName)
-            .FirstOrDefault(option =>
-                string.Equals(option.Label?.Trim().Replace("\"\"", "\""), normalizedRaw, StringComparison.Ordinal))
-            ?.Value;
+        return BuildingRules.TryResolveSelectValue(raw, tableName);
     }
 
     private static List<string> GetMissingRequiredColumns(
@@ -3518,73 +3465,7 @@ public class BuildingsController : ApiControllerBase
         List<string> warnings,
         bool requireId)
     {
-        var missing = new List<string>();
-
-        values.TryGetValue("Id", out var idRaw);
-        if (!string.IsNullOrWhiteSpace(idRaw))
-        {
-            if (!TryParsePositiveInt(idRaw).HasValue)
-            {
-                missing.Add("Id");
-                warnings.Add("ID חייב להיות מספר חיובי.");
-            }
-        }
-        else if (requireId)
-        {
-            missing.Add("Id");
-        }
-
-        values.TryGetValue("StreetId", out var streetRaw);
-        if (string.IsNullOrWhiteSpace(streetRaw))
-        {
-            missing.Add("StreetId");
-        }
-        else if (!TryParseStreetId(streetRaw).HasValue)
-        {
-            missing.Add("StreetId");
-            warnings.Add("קוד רחוב חייב להיות מספר.");
-        }
-
-        values.TryGetValue("BldNum", out var houseRaw);
-        if (string.IsNullOrWhiteSpace(houseRaw))
-        {
-            missing.Add("BldNum");
-        }
-
-        values.TryGetValue("BldName", out var nameRaw);
-        if (string.IsNullOrWhiteSpace(nameRaw))
-        {
-            missing.Add("BldName");
-        }
-
-        values.TryGetValue("BldSivug", out var sivugRaw);
-        if (string.IsNullOrWhiteSpace(sivugRaw))
-        {
-            missing.Add("BldSivug");
-        }
-
-        var sivugValue = TryResolveSelectValue(sivugRaw, "Tbl_Sivug");
-        if (!string.IsNullOrWhiteSpace(sivugRaw) && !sivugValue.HasValue)
-        {
-            missing.Add("BldSivug");
-            warnings.Add("ערך סיווג אינו חוקי.");
-        }
-
-        if (rehabSivugValue.HasValue && sivugValue == rehabSivugValue.Value)
-        {
-            values.TryGetValue("ShikumStatus", out var shikumRaw);
-            if (string.IsNullOrWhiteSpace(shikumRaw))
-            {
-                missing.Add("ShikumStatus");
-            }
-            else if (!TryResolveSelectValue(shikumRaw, "Tbl_StatusShikum").HasValue)
-            {
-                missing.Add("ShikumStatus");
-                warnings.Add("ערך סטטוס שיקום אינו חוקי.");
-            }
-        }
-
-        return missing;
+        return BuildingRules.GetMissingRequiredColumns(values, rehabSivugValue, warnings, requireId);
     }
 
     private sealed record BuildingSnapshot(

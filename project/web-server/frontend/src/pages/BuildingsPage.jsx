@@ -672,9 +672,11 @@ export default function BuildingsPage() {
         ? row.missingRequired
         : getMissingImportRequired(row.values);
       const hasIdConflict = Boolean(row.hasIdConflict);
+      const invalidValues = Array.isArray(row.invalidValues) ? row.invalidValues : [];
       return {
         ...row,
         missingRequired,
+        invalidValues,
         hasIdConflict,
         decision: row.decision ?? null,
         replaceIds: Array.isArray(row.replaceIds) ? row.replaceIds : [],
@@ -753,7 +755,11 @@ export default function BuildingsPage() {
       return;
     }
     const invalidRows = importRows.filter(
-      (row) => row.decision === null && ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict)
+      (row) =>
+        row.decision === null &&
+        ((row.missingRequired?.length ?? 0) > 0 ||
+          (row.invalidValues?.length ?? 0) > 0 ||
+          row.hasIdConflict)
     );
     if (invalidRows.length > 0) {
       setImportError('יש שורות שחובה לתקן לפני הייבוא.');
@@ -803,9 +809,10 @@ export default function BuildingsPage() {
 
   const computeRowDecision = (row) => {
     const missingRequired = row.missingRequired?.length ?? 0;
+    const invalidValues = row.invalidValues?.length ?? 0;
     const hasAddressConflict = (row.addressMatches?.length ?? 0) > 0;
     if (row.exactMatch) return 'skip';
-    if (!row.hasIdConflict && missingRequired === 0 && !hasAddressConflict) return 'create';
+    if (!row.hasIdConflict && missingRequired === 0 && invalidValues === 0 && !hasAddressConflict) return 'create';
     return null;
   };
 
@@ -822,7 +829,8 @@ export default function BuildingsPage() {
       normalizeImportRows(
         prev.map((row) => {
           if (row.decision) return row;
-          if ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || (row.invalidValues?.length ?? 0) > 0 || row.hasIdConflict)
+            return row;
           if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
           return { ...row, decision: 'skip' };
         })
@@ -835,7 +843,8 @@ export default function BuildingsPage() {
       normalizeImportRows(
         prev.map((row) => {
           if (row.decision) return row;
-          if ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || (row.invalidValues?.length ?? 0) > 0 || row.hasIdConflict)
+            return row;
           if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
           const allIds = row.addressMatches?.map((match) => match.id) ?? [];
           return { ...row, decision: 'replace', replaceIds: allIds, allowDuplicate: true };
@@ -849,7 +858,8 @@ export default function BuildingsPage() {
       normalizeImportRows(
         prev.map((row) => {
           if (row.decision) return row;
-          if ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict) return row;
+          if ((row.missingRequired?.length ?? 0) > 0 || (row.invalidValues?.length ?? 0) > 0 || row.hasIdConflict)
+            return row;
           if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
           return { ...row, decision: 'add_anyway', allowDuplicate: true };
         })
@@ -939,6 +949,7 @@ export default function BuildingsPage() {
         hasIdConflict: Boolean(result.hasIdConflict),
         exactMatch: Boolean(result.exactMatch),
         missingRequired: Array.isArray(result.missingRequired) ? result.missingRequired : [],
+        invalidValues: Array.isArray(result.invalidValues) ? result.invalidValues : [],
         warnings: Array.isArray(result.warnings) ? result.warnings : [],
         importFields: result.importFields || [],
         compareTargetId: result.addressMatches?.[0]?.id ?? null
@@ -1301,7 +1312,11 @@ export default function BuildingsPage() {
   const importStage1Rows = useMemo(
     () =>
       importRows.filter(
-        (row) => row.decision === null && ((row.missingRequired?.length ?? 0) > 0 || row.hasIdConflict)
+        (row) =>
+          row.decision === null &&
+          ((row.missingRequired?.length ?? 0) > 0 ||
+            (row.invalidValues?.length ?? 0) > 0 ||
+            row.hasIdConflict)
       ),
     [importRows]
   );
@@ -1311,6 +1326,7 @@ export default function BuildingsPage() {
         (row) =>
           row.decision === null &&
           (row.missingRequired?.length ?? 0) === 0 &&
+          (row.invalidValues?.length ?? 0) === 0 &&
           !row.hasIdConflict &&
           (row.addressMatches?.length ?? 0) > 0 &&
           !row.exactMatch
@@ -2145,9 +2161,13 @@ export default function BuildingsPage() {
                               const missingLabels = (row.missingRequired || [])
                                 .map((column) => getImportRequiredLabel(column))
                                 .join(', ');
+                              const invalidLabels = (row.invalidValues || [])
+                                .map((issue) => `${getImportRequiredLabel(issue.columnName)} (${issue.message})`)
+                                .join(', ');
                               const flags = [];
                               if (row.hasIdConflict) flags.push('כפילות ID');
                               if (missingLabels) flags.push(`חסרים שדות: ${missingLabels}`);
+                              if (invalidLabels) flags.push(`ערכים שגויים: ${invalidLabels}`);
                               if (row.warnings?.length) flags.push(`אזהרות: ${row.warnings.join(', ')}`);
                               const statusText = flags.length > 0 ? flags.join(' | ') : '—';
                               const rowStreetName =
@@ -2177,6 +2197,16 @@ export default function BuildingsPage() {
                                       }}
                                     >
                                       עריכה
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleResolveConflict(row.rowNumber, 'skip');
+                                      }}
+                                    >
+                                      דלג
                                     </button>
                                   </td>
                                 </tr>
@@ -2332,6 +2362,14 @@ export default function BuildingsPage() {
                 <p className="error">
                   חסרים שדות חובה:{' '}
                   {importEditRow.missingRequired.map((column) => getImportRequiredLabel(column)).join(', ')}
+                </p>
+              )}
+              {(importEditRow.invalidValues?.length ?? 0) > 0 && (
+                <p className="error">
+                  ערכים שגויים:{' '}
+                  {importEditRow.invalidValues
+                    .map((issue) => `${getImportRequiredLabel(issue.columnName)} (${issue.message})`)
+                    .join(', ')}
                 </p>
               )}
               {importEditRow.warnings?.length > 0 && (
