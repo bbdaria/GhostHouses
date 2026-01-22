@@ -273,75 +273,59 @@ public class BuildingsController : ApiControllerBase
             return NotFound("Building card template not found.");
         }
 
-        var streetName = ValueOrDash(building.Street?.Name ?? building.StreetName);
-        var houseNumber = ValueOrDash(building.HouseNumber);
-        var ownershipLabel = building.SugBaalut.HasValue
-            ? SelectTables.GetOptions("Tbl_SugBaalut")
-                .FirstOrDefault(option => option.Value == building.SugBaalut.Value)
-                ?.Label
-            : null;
-        var sivugLabel = building.BldSivug.HasValue
-            ? SelectTables.GetOptions("Tbl_Sivug")
-                .FirstOrDefault(option => option.Value == building.BldSivug.Value)
-                ?.Label
-            : null;
-        var yeudLabel = building.Yeud.HasValue
-            ? SelectTables.GetOptions("Tbl_YK")
-                .FirstOrDefault(option => option.Value == building.Yeud.Value)
-                ?.Label
-            : null;
-        var kidumTichnunLabel = building.KidumTichnunStatus.HasValue
-            ? SelectTables.GetOptions("Tbl_KidumTichnun")
-                .FirstOrDefault(option => option.Value == building.KidumTichnunStatus.Value)
-                ?.Label
-            : null;
-        var shimurLabel = building.ForShimur.HasValue
-            ? SelectTables.GetOptions("Tbl_ForShimur")
-                .FirstOrDefault(option => option.Value == building.ForShimur.Value)
-                ?.Label
-            : null;
-
-        var replacements = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["{STREET_NAME}"] = streetName,
-            ["{HOUSE_NUMBER}"] = houseNumber,
-            ["{QUARTER}"] = ValueOrDash(building.Quarter),
-            ["{GUSH_M}"] = ValueOrDash(building.GushM),
-            ["{PARCEL_M}"] = ValueOrDash(building.ParcelM),
-            ["{OWNERSHIP_TYPE}"] = ValueOrDash(ownershipLabel),
-            ["{OWNER_DETAILS}"] = ValueOrDash(building.OwnerDetails),
-            ["{SIVUG}"] = ValueOrDash(sivugLabel),
-            ["{BUILT_AREA_SQM}"] = ValueOrDash(building.ShtachBanuySum),
-            ["{YEUD}"] = ValueOrDash(yeudLabel),
-            ["{KIDUM_TICHNUN}"] = ValueOrDash(kidumTichnunLabel),
-            ["{SHIMUR_YEUD}"] = ValueOrDash(shimurLabel),
-            ["{OWNER_POSITION}"] = ValueOrDash(building.OwnerPosition),
-            ["{MUNI_POSITION}"] = ValueOrDash(building.MiuniPosition),
-            ["{PIKUACH_KLALI}"] = FormatTableValue(building.PikuachKlali, 9),
-            ["{PIKUACH_AL_BNIYA}"] = FormatTableValue(building.PikuachAlBniya, 9),
-            ["{TZAV_SHIPUTZ_FRONTS}"] = FormatTableValue(building.TzavShiputzFronts, 9),
-            ["{BUILDING_PERMIT}"] = ResolveIsThere(building.HeterBniya),
-            ["{DAMAGE_PERCENT}"] = building.DamagePercentage.HasValue
-                ? $"{building.DamagePercentage.Value}%"
-                : "-"
-        };
-
-        var cardImage = ParsePhotoUrls(building.PhotoUrls).FirstOrDefault();
-        byte[]? imageBytes = null;
-        string? imageExtension = null;
-
-        if (!string.IsNullOrWhiteSpace(cardImage) &&
-            TryDecodeImageDataUrl(cardImage, out var decodedBytes, out var decodedExtension))
-        {
-            imageExtension = NormalizeCardImageExtension(decodedExtension);
-            if (imageExtension is not null)
-            {
-                imageBytes = decodedBytes;
-            }
-        }
-
+        var replacements = BuildCardReplacements(building);
+        var (imageBytes, imageExtension) = GetCardImage(building);
         var pptxBytes = BuildCardPptx(templatePath, replacements, imageBytes, imageExtension);
         var fileName = $"building-card-{id}.pptx";
+
+        return File(
+            pptxBytes,
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            fileName);
+    }
+
+    public sealed record ExportCardSelectionRequest(List<int> Ids);
+
+    [HttpPost("export-cards")]
+    [Authorize(Policy = "Viewer")]
+    public async Task<IActionResult> ExportBuildingCards(
+        [FromBody] ExportCardSelectionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ids = request?.Ids ?? new List<int>();
+
+        var templatePath = Path.Combine(_hostEnvironment.ContentRootPath, "Data", "BuildingCardTemplate.pptx");
+        if (!System.IO.File.Exists(templatePath))
+        {
+            return NotFound("Building card template not found.");
+        }
+
+        List<Building> buildings = new();
+        if (ids.Count > 0)
+        {
+            buildings = await _context.Buildings
+                .Include(b => b.Street)
+                .Where(b => ids.Contains(b.Id))
+                .ToListAsync(cancellationToken);
+        }
+
+        var buildingsById = buildings.ToDictionary(b => b.Id, b => b);
+        var orderedBuildings = ids
+            .Select(id => buildingsById.TryGetValue(id, out var building) ? building : null)
+            .Where(building => building is not null)
+            .ToList();
+
+        var payloads = orderedBuildings
+            .Select(building =>
+            {
+                var replacements = BuildCardReplacements(building!);
+                var (imageBytes, imageExtension) = GetCardImage(building!);
+                return new BuildingCardPayload(replacements, imageBytes, imageExtension);
+            })
+            .ToList();
+
+        var pptxBytes = BuildCardsPptx(templatePath, payloads);
+        var fileName = $"building-cards-{DateTimeOffset.UtcNow:yyyy-MM-dd}.pptx";
 
         return File(
             pptxBytes,
@@ -2871,6 +2855,89 @@ public class BuildingsController : ApiControllerBase
         }
     }
 
+    private sealed record BuildingCardPayload(
+        IReadOnlyDictionary<string, string> Replacements,
+        byte[]? ImageBytes,
+        string? ImageExtension);
+
+    private static Dictionary<string, string> BuildCardReplacements(Building building)
+    {
+        var streetName = ValueOrDash(building.Street?.Name ?? building.StreetName);
+        var houseNumber = ValueOrDash(building.HouseNumber);
+        var ownershipLabel = building.SugBaalut.HasValue
+            ? SelectTables.GetOptions("Tbl_SugBaalut")
+                .FirstOrDefault(option => option.Value == building.SugBaalut.Value)
+                ?.Label
+            : null;
+        var sivugLabel = building.BldSivug.HasValue
+            ? SelectTables.GetOptions("Tbl_Sivug")
+                .FirstOrDefault(option => option.Value == building.BldSivug.Value)
+                ?.Label
+            : null;
+        var yeudLabel = building.Yeud.HasValue
+            ? SelectTables.GetOptions("Tbl_YK")
+                .FirstOrDefault(option => option.Value == building.Yeud.Value)
+                ?.Label
+            : null;
+        var kidumTichnunLabel = building.KidumTichnunStatus.HasValue
+            ? SelectTables.GetOptions("Tbl_KidumTichnun")
+                .FirstOrDefault(option => option.Value == building.KidumTichnunStatus.Value)
+                ?.Label
+            : null;
+        var shimurLabel = building.ForShimur.HasValue
+            ? SelectTables.GetOptions("Tbl_ForShimur")
+                .FirstOrDefault(option => option.Value == building.ForShimur.Value)
+                ?.Label
+            : null;
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["{STREET_NAME}"] = streetName,
+            ["{HOUSE_NUMBER}"] = houseNumber,
+            ["{QUARTER}"] = ValueOrDash(building.Quarter),
+            ["{GUSH_M}"] = ValueOrDash(building.GushM),
+            ["{PARCEL_M}"] = ValueOrDash(building.ParcelM),
+            ["{OWNERSHIP_TYPE}"] = ValueOrDash(ownershipLabel),
+            ["{OWNER_DETAILS}"] = ValueOrDash(building.OwnerDetails),
+            ["{SIVUG}"] = ValueOrDash(sivugLabel),
+            ["{BUILT_AREA_SQM}"] = ValueOrDash(building.ShtachBanuySum),
+            ["{YEUD}"] = ValueOrDash(yeudLabel),
+            ["{KIDUM_TICHNUN}"] = ValueOrDash(kidumTichnunLabel),
+            ["{SHIMUR_YEUD}"] = ValueOrDash(shimurLabel),
+            ["{OWNER_POSITION}"] = ValueOrDash(building.OwnerPosition),
+            ["{MUNI_POSITION}"] = ValueOrDash(building.MiuniPosition),
+            ["{PIKUACH_KLALI}"] = FormatTableValue(building.PikuachKlali, 9),
+            ["{PIKUACH_AL_BNIYA}"] = FormatTableValue(building.PikuachAlBniya, 9),
+            ["{TZAV_SHIPUTZ_FRONTS}"] = FormatTableValue(building.TzavShiputzFronts, 9),
+            ["{BUILDING_PERMIT}"] = ResolveIsThere(building.HeterBniya),
+            ["{DAMAGE_PERCENT}"] = building.DamagePercentage.HasValue
+                ? $"{building.DamagePercentage.Value}%"
+                : "-"
+        };
+    }
+
+    private static (byte[]? ImageBytes, string? ImageExtension) GetCardImage(Building building)
+    {
+        var cardImage = ParsePhotoUrls(building.PhotoUrls).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(cardImage))
+        {
+            return (null, null);
+        }
+
+        if (!TryDecodeImageDataUrl(cardImage, out var decodedBytes, out var decodedExtension))
+        {
+            return (null, null);
+        }
+
+        var imageExtension = NormalizeCardImageExtension(decodedExtension);
+        if (imageExtension is null)
+        {
+            return (null, null);
+        }
+
+        return (decodedBytes, imageExtension);
+    }
+
     private static byte[] BuildCardPptx(
         string templatePath,
         IReadOnlyDictionary<string, string> replacements,
@@ -2982,6 +3049,272 @@ public class BuildingsController : ApiControllerBase
         }
 
         return outputStream.ToArray();
+    }
+
+    private static byte[] BuildCardsPptx(string templatePath, IReadOnlyList<BuildingCardPayload> payloads)
+    {
+        const string imageRelId = "rId3";
+        const string templateImagePrefix = "ppt/media/image3.";
+        const string secondaryImageRelId = "rId2";
+        const string secondaryImagePath = "ppt/media/image2.png";
+        const string secondaryImageMarkerName = "אליפסה 31";
+        const string slideRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+
+        using var templateStream = System.IO.File.OpenRead(templatePath);
+        using var templateZip = new ZipArchive(templateStream, ZipArchiveMode.Read);
+
+        var templateImageEntry = templateZip.Entries.FirstOrDefault(entry =>
+            entry.FullName.StartsWith(templateImagePrefix, StringComparison.OrdinalIgnoreCase));
+        var templateImagePath = templateImageEntry?.FullName;
+        var templateImageBytes = templateImageEntry is null ? null : ReadAllBytes(templateImageEntry.Open());
+
+        using var slideEntryStream = templateZip.GetEntry("ppt/slides/slide1.xml")?.Open();
+        using var slideRelsEntryStream = templateZip.GetEntry("ppt/slides/_rels/slide1.xml.rels")?.Open();
+        using var presentationEntryStream = templateZip.GetEntry("ppt/presentation.xml")?.Open();
+        using var presentationRelsEntryStream = templateZip.GetEntry("ppt/_rels/presentation.xml.rels")?.Open();
+        using var contentTypesEntryStream = templateZip.GetEntry("[Content_Types].xml")?.Open();
+
+        if (slideEntryStream is null || slideRelsEntryStream is null ||
+            presentationEntryStream is null || presentationRelsEntryStream is null ||
+            contentTypesEntryStream is null)
+        {
+            throw new InvalidOperationException("Building card template is missing required parts.");
+        }
+
+        var slideTemplate = XDocument.Load(slideEntryStream);
+        var slideRelsTemplate = XDocument.Load(slideRelsEntryStream);
+        var presentationDoc = XDocument.Load(presentationEntryStream);
+        var presentationRelsDoc = XDocument.Load(presentationRelsEntryStream);
+        var contentTypesDoc = XDocument.Load(contentTypesEntryStream);
+
+        var slideContentType = contentTypesDoc
+            .Root?
+            .Elements("{http://schemas.openxmlformats.org/package/2006/content-types}Override")
+            .FirstOrDefault(element => string.Equals(
+                (string?)element.Attribute("PartName"),
+                "/ppt/slides/slide1.xml",
+                StringComparison.OrdinalIgnoreCase))
+            ?.Attribute("ContentType")
+            ?.Value;
+
+        if (string.IsNullOrWhiteSpace(slideContentType))
+        {
+            slideContentType = "application/vnd.openxmlformats-officedocument.presentationml.slide+xml";
+        }
+
+        using var outputStream = new MemoryStream();
+        using (var outputZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in templateZip.Entries)
+            {
+                if (string.Equals(entry.FullName, "ppt/slides/slide1.xml", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.FullName, "ppt/slides/_rels/slide1.xml.rels", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.FullName, "ppt/presentation.xml", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.FullName, "ppt/_rels/presentation.xml.rels", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.FullName, "[Content_Types].xml", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.FullName, secondaryImagePath, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrWhiteSpace(templateImagePath) &&
+                        string.Equals(entry.FullName, templateImagePath, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(entry.Name))
+                {
+                    outputZip.CreateEntry(entry.FullName);
+                    continue;
+                }
+
+                var newEntry = outputZip.CreateEntry(entry.FullName, CompressionLevel.Optimal);
+                using var entryStream = entry.Open();
+                using var newEntryStream = newEntry.Open();
+                entryStream.CopyTo(newEntryStream);
+            }
+
+            RebuildPresentationSlides(presentationDoc, presentationRelsDoc, contentTypesDoc, payloads.Count, slideContentType, slideRelType);
+
+            if (payloads.Count > 0)
+            {
+                for (var i = 0; i < payloads.Count; i++)
+                {
+                    var slideIndex = i + 1;
+                    var payload = payloads[i];
+                    var hasImage = payload.ImageBytes is { Length: > 0 } && !string.IsNullOrWhiteSpace(payload.ImageExtension);
+
+                    var slideDoc = new XDocument(slideTemplate);
+                    ReplaceText(slideDoc, payload.Replacements);
+                    if (!hasImage)
+                    {
+                        RemovePictureByRelId(slideDoc, imageRelId);
+                    }
+                    RemovePictureByRelId(slideDoc, secondaryImageRelId);
+                    RemoveShapeByName(slideDoc, secondaryImageMarkerName);
+                    if (hasImage)
+                    {
+                        RemovePictureCropByRelId(slideDoc, imageRelId);
+                    }
+
+                    var slideEntry = outputZip.CreateEntry($"ppt/slides/slide{slideIndex}.xml", CompressionLevel.Optimal);
+                    using (var slideStream = slideEntry.Open())
+                    {
+                        slideDoc.Save(slideStream, System.Xml.Linq.SaveOptions.DisableFormatting);
+                    }
+
+                    var slideRelsDoc = new XDocument(slideRelsTemplate);
+                    string? imageTarget = null;
+                    string? imagePath = null;
+
+                    if (hasImage)
+                    {
+                        var extension = payload.ImageExtension!;
+                        imagePath = $"ppt/media/image3_{slideIndex}.{extension}";
+                        imageTarget = $"../media/image3_{slideIndex}.{extension}";
+                    }
+
+                    UpdateSlideRelationship(slideRelsDoc, imageRelId, imageTarget);
+                    UpdateSlideRelationship(slideRelsDoc, secondaryImageRelId, null);
+
+                    var slideRelEntry = outputZip.CreateEntry($"ppt/slides/_rels/slide{slideIndex}.xml.rels", CompressionLevel.Optimal);
+                    using (var relStream = slideRelEntry.Open())
+                    {
+                        slideRelsDoc.Save(relStream, System.Xml.Linq.SaveOptions.DisableFormatting);
+                    }
+
+                    if (hasImage && payload.ImageBytes is not null)
+                    {
+                        var outputImageBytes = payload.ImageBytes;
+                        if (templateImageBytes is not null)
+                        {
+                            outputImageBytes = BuildLetterboxedImage(
+                                payload.ImageBytes,
+                                templateImageBytes,
+                                payload.ImageExtension!);
+                        }
+
+                        var imageEntry = outputZip.CreateEntry(imagePath!, CompressionLevel.Optimal);
+                        using var imageStream = imageEntry.Open();
+                        imageStream.Write(outputImageBytes, 0, outputImageBytes.Length);
+                    }
+                }
+            }
+
+            var presentationEntry = outputZip.CreateEntry("ppt/presentation.xml", CompressionLevel.Optimal);
+            using (var presentationStream = presentationEntry.Open())
+            {
+                presentationDoc.Save(presentationStream, System.Xml.Linq.SaveOptions.DisableFormatting);
+            }
+
+            var presentationRelsEntry = outputZip.CreateEntry("ppt/_rels/presentation.xml.rels", CompressionLevel.Optimal);
+            using (var presentationRelsStream = presentationRelsEntry.Open())
+            {
+                presentationRelsDoc.Save(presentationRelsStream, System.Xml.Linq.SaveOptions.DisableFormatting);
+            }
+
+            var contentTypesEntry = outputZip.CreateEntry("[Content_Types].xml", CompressionLevel.Optimal);
+            using (var contentTypesStream = contentTypesEntry.Open())
+            {
+                contentTypesDoc.Save(contentTypesStream, System.Xml.Linq.SaveOptions.DisableFormatting);
+            }
+        }
+
+        return outputStream.ToArray();
+    }
+
+    private static void RebuildPresentationSlides(
+        XDocument presentationDoc,
+        XDocument presentationRelsDoc,
+        XDocument contentTypesDoc,
+        int slideCount,
+        string slideContentType,
+        string slideRelType)
+    {
+        XNamespace p = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        XNamespace r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        XNamespace rel = "http://schemas.openxmlformats.org/package/2006/relationships";
+        XNamespace ct = "http://schemas.openxmlformats.org/package/2006/content-types";
+
+        var sldIdList = presentationDoc.Root?.Element(p + "sldIdLst");
+        if (sldIdList is null && presentationDoc.Root is not null)
+        {
+            sldIdList = new XElement(p + "sldIdLst");
+            presentationDoc.Root.Add(sldIdList);
+        }
+
+        var existingSlideIds = sldIdList?
+            .Elements(p + "sldId")
+            .Select(element => (int?)element.Attribute("id"))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .DefaultIfEmpty(256)
+            .Max() ?? 256;
+
+        sldIdList?.RemoveNodes();
+
+        var relRoot = presentationRelsDoc.Root;
+        if (relRoot is not null)
+        {
+            relRoot.Elements(rel + "Relationship")
+                .Where(element => string.Equals((string?)element.Attribute("Type"), slideRelType, StringComparison.Ordinal))
+                .ToList()
+                .ForEach(element => element.Remove());
+        }
+
+        var maxRelId = relRoot?
+            .Elements(rel + "Relationship")
+            .Select(element => (string?)element.Attribute("Id"))
+            .Select(ParseRelationshipId)
+            .DefaultIfEmpty(0)
+            .Max() ?? 0;
+
+        var nextRelId = maxRelId + 1;
+        var nextSlideId = existingSlideIds + 1;
+
+        if (slideCount > 0 && sldIdList is not null && relRoot is not null)
+        {
+            for (var i = 1; i <= slideCount; i++)
+            {
+                var relId = $"rId{nextRelId++}";
+                relRoot.Add(new XElement(rel + "Relationship",
+                    new XAttribute("Id", relId),
+                    new XAttribute("Type", slideRelType),
+                    new XAttribute("Target", $"slides/slide{i}.xml")));
+
+                sldIdList.Add(new XElement(p + "sldId",
+                    new XAttribute("id", nextSlideId++),
+                    new XAttribute(r + "id", relId)));
+            }
+        }
+
+        contentTypesDoc.Root?
+            .Elements(ct + "Override")
+            .Where(element => ((string?)element.Attribute("PartName"))?.StartsWith("/ppt/slides/slide", StringComparison.OrdinalIgnoreCase) == true)
+            .ToList()
+            .ForEach(element => element.Remove());
+
+        if (slideCount > 0 && contentTypesDoc.Root is not null)
+        {
+            for (var i = 1; i <= slideCount; i++)
+            {
+                contentTypesDoc.Root.Add(new XElement(ct + "Override",
+                    new XAttribute("PartName", $"/ppt/slides/slide{i}.xml"),
+                    new XAttribute("ContentType", slideContentType)));
+            }
+        }
+    }
+
+    private static int ParseRelationshipId(string? relId)
+    {
+        if (string.IsNullOrWhiteSpace(relId))
+        {
+            return 0;
+        }
+
+        if (!relId.StartsWith("rId", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        return int.TryParse(relId[3..], out var value) ? value : 0;
     }
 
     private static void ReplaceText(XDocument doc, IReadOnlyDictionary<string, string> replacements)
