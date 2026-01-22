@@ -170,7 +170,11 @@ export default function BuildingsPage() {
   const loadStreets = useCallback(async () => {
     try {
       const data = await api.fetchStreets();
-      setStreets(data || []);
+      const next = Array.isArray(data) ? data : [];
+      if (!next.find((street) => String(street.streetId) === String(NO_STREET_OPTION.streetId))) {
+        next.unshift(NO_STREET_OPTION);
+      }
+      setStreets(next);
     } catch {
       setStreets([]);
     }
@@ -666,6 +670,13 @@ export default function BuildingsPage() {
     setImportEditError('');
   };
 
+  const triggerImportFileSelect = () => {
+    const input = document.getElementById('buildings-import-file');
+    if (input && !input.disabled) {
+      input.click();
+    }
+  };
+
   const buildImportRows = (rows) =>
     rows.map((row) => {
       const missingRequired = Array.isArray(row.missingRequired)
@@ -833,6 +844,24 @@ export default function BuildingsPage() {
             return row;
           if ((row.addressMatches?.length ?? 0) === 0 || row.exactMatch) return row;
           return { ...row, decision: 'skip' };
+        })
+      )
+    );
+  };
+
+  const handleImportSkipAllStage1 = () => {
+    setImportRows((prev) =>
+      normalizeImportRows(
+        prev.map((row) => {
+          if (row.decision) return row;
+          if (
+            (row.missingRequired?.length ?? 0) > 0 ||
+            (row.invalidValues?.length ?? 0) > 0 ||
+            row.hasIdConflict
+          ) {
+            return { ...row, decision: 'skip' };
+          }
+          return row;
         })
       )
     );
@@ -1876,7 +1905,7 @@ export default function BuildingsPage() {
             </div>
           </div>
           <div className="table-wrapper">
-            <table>
+            <table className={exportMode ? 'export-table' : ''}>
               <thead>
                 <tr>
                   {exportMode && (
@@ -2113,12 +2142,26 @@ export default function BuildingsPage() {
             </div>
             <div className="modal-body">
               <div className="import-controls">
-                <input
-                  type="file"
-                  accept=".xlsx,.zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip"
-                  onChange={handleImportFileChange}
-                  disabled={importBusy}
-                />
+                <div className="file-input">
+                  <input
+                    id="buildings-import-file"
+                    type="file"
+                    accept=".xlsx,.zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip"
+                    onChange={handleImportFileChange}
+                    disabled={importBusy}
+                  />
+                  <button
+                    type="button"
+                    className="ghost file-input__button"
+                    onClick={triggerImportFileSelect}
+                    disabled={importBusy}
+                  >
+                    בחר קובץ
+                  </button>
+                  <span className={`file-input__name ${importFile ? '' : 'muted'}`}>
+                    {importFile ? importFile.name : 'לא נבחר קובץ'}
+                  </span>
+                </div>
                 <button
                   type="button"
                   className="ghost"
@@ -2143,6 +2186,11 @@ export default function BuildingsPage() {
                     <div className="import-stage">
                       <h4>שלב 1: השלמת שדות חובה / מזהה</h4>
                       <p className="muted">יש להשלים את השדות החסרים ולפתור כפילויות ID לפני מעבר לכפילויות.</p>
+                      <div className="import-actions">
+                        <button type="button" className="ghost" onClick={handleImportSkipAllStage1}>
+                          דלג על הכל
+                        </button>
+                      </div>
                       <div className="table-wrapper">
                         <table className="import-table">
                           <thead>
@@ -2256,37 +2304,39 @@ export default function BuildingsPage() {
                                   <td>{displayOrDash(row.values?.BldNum)}</td>
                                   <td>{displayOrDash(row.values?.BldName)}</td>
                                   <td>{row.addressMatches?.length ?? 0}</td>
-                                  <td className="import-actions">
-                                    <button
-                                      type="button"
-                                      className="ghost"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        openImportCompare(row.rowNumber);
-                                      }}
-                                    >
-                                      השוואה / החלפה
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="ghost"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        handleResolveConflict(row.rowNumber, 'skip');
-                                      }}
-                                    >
-                                      דלג
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="ghost"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        handleResolveConflict(row.rowNumber, 'add_anyway');
-                                      }}
-                                    >
-                                      הוסף בכל זאת
-                                    </button>
+                                  <td>
+                                    <div className="import-actions">
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openImportCompare(row.rowNumber);
+                                        }}
+                                      >
+                                        השוואה / החלפה
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          handleResolveConflict(row.rowNumber, 'skip');
+                                        }}
+                                      >
+                                        דלג
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          handleResolveConflict(row.rowNumber, 'add_anyway');
+                                        }}
+                                      >
+                                        הוסף בכל זאת
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -2388,7 +2438,9 @@ export default function BuildingsPage() {
                   />
                 </label>
                 <label className="required">
-                  שם רחוב <span className="required-mark">*</span>
+                  <span className="label-title">
+                    שם רחוב <span className="required-mark">*</span>
+                  </span>
                   <select
                     value={importEditValues?.StreetId ?? ''}
                     onChange={(event) => handleImportEditValueChange('StreetId', event.target.value)}
@@ -2402,7 +2454,9 @@ export default function BuildingsPage() {
                   </select>
                 </label>
                 <label className="required">
-                  מספר בית <span className="required-mark">*</span>
+                  <span className="label-title">
+                    מספר בית <span className="required-mark">*</span>
+                  </span>
                   <input
                     type="text"
                     value={importEditValues?.BldNum ?? ''}
@@ -2410,7 +2464,9 @@ export default function BuildingsPage() {
                   />
                 </label>
                 <label className="required">
-                  כינוי הבניין <span className="required-mark">*</span>
+                  <span className="label-title">
+                    כינוי הבניין <span className="required-mark">*</span>
+                  </span>
                   <input
                     type="text"
                     value={importEditValues?.BldName ?? ''}
@@ -2418,7 +2474,9 @@ export default function BuildingsPage() {
                   />
                 </label>
                 <label className="required">
-                  סיווג <span className="required-mark">*</span>
+                  <span className="label-title">
+                    סיווג <span className="required-mark">*</span>
+                  </span>
                   <select
                     value={importEditValues?.BldSivug ?? ''}
                     onChange={(event) => handleImportEditValueChange('BldSivug', event.target.value)}
@@ -2432,7 +2490,9 @@ export default function BuildingsPage() {
                   </select>
                 </label>
                 <label className={isImportEditRehabRequired ? 'required' : ''}>
-                  סטטוס שיקום {isImportEditRehabRequired && <span className="required-mark">*</span>}
+                  <span className="label-title">
+                    סטטוס שיקום {isImportEditRehabRequired && <span className="required-mark">*</span>}
+                  </span>
                   <select
                     value={importEditValues?.ShikumStatus ?? ''}
                     onChange={(event) => handleImportEditValueChange('ShikumStatus', event.target.value)}

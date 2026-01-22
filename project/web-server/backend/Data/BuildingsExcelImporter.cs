@@ -3,12 +3,10 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
-using System.Text.Json;
 using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
 using WebServer.Models;
 using WebServer.Models.Dtos;
-using WebServer.Utilities;
 
 namespace WebServer.Data;
 
@@ -71,7 +69,8 @@ public static class BuildingsExcelImporter
                 return;
             }
 
-            var buildings = ReadBuildingsFromExcel(filePath);
+            using var stream = File.OpenRead(filePath);
+            var buildings = ReadBuildingsFromStream(stream, out _);
 
             Console.WriteLine($"[BuildingsExcelImporter] Parsed {buildings.Count} building rows from '{filePath}'.");
 
@@ -121,54 +120,6 @@ public static class BuildingsExcelImporter
             await context.Buildings.AddRangeAsync(buildings, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
 
-            var createdAt = IsraelTime.NowUtc;
-            var logs = buildings.Select(building =>
-            {
-                var fieldsSnapshot = BuildFieldsSnapshot(building);
-                var changes = fieldsSnapshot
-                    .Where(field => !string.IsNullOrWhiteSpace(field.Value))
-                    .Select(field => new
-                    {
-                        field.ColumnName,
-                        field.FieldName,
-                        OldValue = (string?)null,
-                        NewValue = field.Value
-                    })
-                    .ToList();
-                var snapshot = new
-                {
-                    building.Id,
-                    building.StreetCode,
-                    building.BuildingName,
-                    building.StreetName,
-                    building.HouseNumber,
-                    building.Neighborhood,
-                    building.BldSivug,
-                    building.ShikumStatus,
-                    building.StatusSummary,
-                    building.StatusSummaryUpdatedAt,
-                    Changes = changes,
-                    Fields = fieldsSnapshot,
-                    ExternalData = (object?)null
-                };
-
-                return new BuildingLog
-                {
-                    BuildingId = building.Id,
-                    Title = "אתחול מערכת",
-                    Message = JsonSerializer.Serialize(snapshot),
-                    Category = "Seed",
-                    Severity = "info",
-                    CreatedAt = createdAt
-                };
-            }).ToList();
-
-            if (logs.Count > 0)
-            {
-                await context.BuildingLogs.AddRangeAsync(logs, cancellationToken);
-                await context.SaveChangesAsync(cancellationToken);
-            }
-
             Console.WriteLine($"[BuildingsExcelImporter] Seeded {buildings.Count} buildings from '{filePath}'.");
         }
         catch (Exception ex)
@@ -177,16 +128,29 @@ public static class BuildingsExcelImporter
         }
     }
 
-    private static List<Building> ReadBuildingsFromExcel(string filePath)
+    public static IReadOnlyList<Building> ReadBuildingsFromStream(Stream stream, out string? error)
     {
-        using var stream = File.OpenRead(filePath);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+        error = null;
+        try
+        {
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            return ReadBuildingsFromArchive(archive, ref error);
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to read buildings Excel: {ex.Message}";
+            return Array.Empty<Building>();
+        }
+    }
+
+    private static List<Building> ReadBuildingsFromArchive(ZipArchive archive, ref string? error)
+    {
 
         var sharedStrings = ReadSharedStrings(archive);
         var sheetEntry = archive.GetEntry("xl/worksheets/sheet1.xml");
         if (sheetEntry == null)
         {
-            Console.WriteLine("[BuildingsExcelImporter] Worksheet 'sheet1.xml' not found in Excel file.");
+            error = "Worksheet 'sheet1.xml' not found in Excel file.";
             return new List<Building>();
         }
 
@@ -197,14 +161,14 @@ public static class BuildingsExcelImporter
         var sheetDataElement = sheetDoc.Root?.Element(ns + "sheetData");
         if (sheetDataElement == null)
         {
-            Console.WriteLine("[BuildingsExcelImporter] <sheetData> not found in worksheet.");
+            error = "<sheetData> not found in worksheet.";
             return new List<Building>();
         }
 
         var rows = sheetDataElement.Elements(ns + "row").ToList();
         if (rows.Count == 0)
         {
-            Console.WriteLine("[BuildingsExcelImporter] Worksheet has no rows.");
+            error = "Worksheet has no rows.";
             return new List<Building>();
         }
 
@@ -212,14 +176,14 @@ public static class BuildingsExcelImporter
         var headerRow = rows.FirstOrDefault(r => (string?)r.Attribute("r") == "3");
         if (headerRow == null)
         {
-            Console.WriteLine("[BuildingsExcelImporter] Header row (r=\"3\") not found.");
+            error = "Header row not found in client buildings template.";
             return new List<Building>();
         }
 
         var headerByColumnIndex = BuildHeaderMap(headerRow, sharedStrings, ns);
         if (headerByColumnIndex.Count == 0)
         {
-            Console.WriteLine("[BuildingsExcelImporter] Could not build header map from Excel sheet.");
+            error = "Client buildings headers do not match the expected template.";
             return new List<Building>();
         }
 

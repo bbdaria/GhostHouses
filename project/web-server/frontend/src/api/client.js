@@ -283,6 +283,14 @@ const api = {
       body: JSON.stringify({ ids })
     });
   },
+  async convertBuildingsTemplate(file) {
+    if (!file) {
+      throw new Error('excel file is required');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    return requestBlob('/buildings/convert-template', { method: 'POST', body: formData });
+  },
   async previewImportBuildings(file) {
     if (!file) {
       throw new Error('excel file is required');
@@ -308,6 +316,43 @@ const api = {
       throw new Error('building id is required');
     }
     return requestBlob(`/buildings/${id}/card`);
+  },
+  async exportStreets() {
+    return requestBlob('/streets/export');
+  },
+  async exportStreetsSelection(ids = []) {
+    return requestBlob('/streets/export', {
+      method: 'POST',
+      body: { streetIds: ids }
+    });
+  },
+  async previewImportStreets(file) {
+    if (!file) {
+      throw new Error('excel file is required');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    return request('/streets/import/preview', { method: 'POST', body: formData });
+  },
+  async validateImportStreet(values = {}) {
+    return request('/streets/import/validate', {
+      method: 'POST',
+      body: { values }
+    });
+  },
+  async applyImportStreets(rows = []) {
+    return request('/streets/import/apply', {
+      method: 'POST',
+      body: { rows }
+    });
+  },
+  async convertStreetsTemplate(file) {
+    if (!file) {
+      throw new Error('excel file is required');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    return requestBlob('/streets/convert-template', { method: 'POST', body: formData });
   },
   async fetchBuilding(id) {
     const data = await request(`/buildings/${id}`);

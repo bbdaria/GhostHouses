@@ -568,6 +568,25 @@ public class BuildingsController : ApiControllerBase
         return BuildBuildingsExport(buildings, includeImages);
     }
 
+    [HttpPost("convert-template")]
+    [Authorize(Policy = "Admin")]
+    public IActionResult ConvertBuildingsTemplate([FromForm] IFormFile? file)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest("Import file is required.");
+        }
+
+        using var stream = file.OpenReadStream();
+        var buildings = BuildingsExcelImporter.ReadBuildingsFromStream(stream, out var error);
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return BadRequest(error);
+        }
+
+        return BuildBuildingsExport(buildings, includeImages: false);
+    }
+
     public sealed class BuildingsImportRequest
     {
         public IFormFile? File { get; set; }
@@ -925,6 +944,18 @@ public class BuildingsController : ApiControllerBase
             .Distinct()
             .ToList();
 
+        var streetIdsToValidate = addressStreetIds
+            .Where(value => value != NoStreetId)
+            .ToList();
+
+        var existingStreetIds = streetIdsToValidate.Count == 0
+            ? new HashSet<int>()
+            : (await _context.Streets
+                    .Where(s => streetIdsToValidate.Contains(s.StreetId))
+                    .Select(s => s.StreetId)
+                    .ToListAsync(cancellationToken))
+                .ToHashSet();
+
         var existingAddressCandidates = addressStreetIds.Count == 0
             ? new List<Building>()
             : await _context.Buildings
@@ -948,7 +979,8 @@ public class BuildingsController : ApiControllerBase
                 .Select(issue => new ImportValidationIssue(issue.ColumnName, issue.Message))
                 .ToList();
 
-            var idValue = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
+            values.TryGetValue("Id", out var idRaw);
+            var idValue = TryParsePositiveInt(idRaw);
             var streetId = TryParseStreetId(values.TryGetValue("StreetId", out var streetRaw) ? streetRaw : null);
             var houseNumber = values.TryGetValue("BldNum", out var houseRaw) ? houseRaw?.Trim() ?? string.Empty : string.Empty;
 
@@ -960,6 +992,11 @@ public class BuildingsController : ApiControllerBase
                 {
                     addressMatches.AddRange(matches.Select(match => BuildExistingMatch(match, fieldDefinitions)));
                 }
+            }
+
+            if (streetId.HasValue && streetId.Value != NoStreetId && !existingStreetIds.Contains(streetId.Value))
+            {
+                invalidValues.Add(new ImportValidationIssue("StreetId", "רחוב לא קיים במערכת."));
             }
 
             ImportExistingMatch? idMatch = null;
@@ -1037,7 +1074,8 @@ public class BuildingsController : ApiControllerBase
             .Select(issue => new ImportValidationIssue(issue.ColumnName, issue.Message))
             .ToList();
 
-        var idValue = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
+        values.TryGetValue("Id", out var idRaw);
+        var idValue = TryParsePositiveInt(idRaw);
         ImportExistingMatch? idMatch = null;
         if (idValue.HasValue)
         {
@@ -1060,6 +1098,17 @@ public class BuildingsController : ApiControllerBase
                 .Where(b => b.StreetCode == streetId.Value && b.HouseNumber == houseNumber)
                 .ToListAsync(cancellationToken);
             addressMatches.AddRange(matches.Select(match => BuildExistingMatch(match, fieldDefinitions)));
+        }
+
+        if (streetId.HasValue && streetId.Value != NoStreetId)
+        {
+            var streetExists = await _context.Streets.AnyAsync(
+                s => s.StreetId == streetId.Value,
+                cancellationToken);
+            if (!streetExists)
+            {
+                invalidValues.Add(new ImportValidationIssue("StreetId", "רחוב לא קיים במערכת."));
+            }
         }
 
         var hasIdConflict = idMatch != null;
@@ -1202,7 +1251,8 @@ public class BuildingsController : ApiControllerBase
                 return BadRequest($"Row {row.RowNumber}: House number is required.");
             }
 
-            var manualId = TryParsePositiveInt(values.TryGetValue("Id", out var idRaw) ? idRaw : null);
+            values.TryGetValue("Id", out var idRaw);
+            var manualId = TryParsePositiveInt(idRaw);
             var allowDuplicate = row.AllowDuplicate;
 
             if (action == "replace")

@@ -7,7 +7,8 @@ const NAV_LINKS = [
   { to: '/streets', label: 'מאגר רחובות', roles: ['Viewer', 'Editor', 'Admin'] },
   { to: '/logs', label: 'יומן פעילויות', roles: ['Viewer', 'Editor', 'Admin'] },
   { to: '/settings', label: 'הגדרות אישיות', roles: ['Viewer', 'Editor', 'Admin'] },
-  { to: '/users', label: 'ניהול משתמשים', roles: ['Admin'] }
+  { to: '/users', label: 'ניהול משתמשים', roles: ['Admin'] },
+  { to: '/converter', label: 'ממיר תבניות', roles: ['Admin'] }
 ];
 
 export default function AppLayout() {

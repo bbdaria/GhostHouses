@@ -77,14 +77,14 @@ export default function BuildingModal({
     event.target.value = '';
   };
   const renderLabel = (text, required = false) => (
-    <>
+    <span className="label-title">
       {text}
       {required && (
         <span className="required-marker" aria-hidden="true">
           *
         </span>
       )}
-    </>
+    </span>
   );
 
   return (
