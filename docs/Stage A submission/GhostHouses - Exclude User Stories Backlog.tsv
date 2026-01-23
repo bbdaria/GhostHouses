@@ -1,0 +1,31 @@
+Title	URL	Assignees	Status	Linked pull requests	Sub-issues progress
+Deployment on client Windows Server	https://github.com/bbdaria/GhostHouses/issues/78		Backlog		
+setup a real OTP	https://github.com/bbdaria/GhostHouses/issues/4	L54	Backlog		
+fetch data from other data bases	https://github.com/bbdaria/GhostHouses/issues/5		Backlog		
+Update building card template (awaiting client template)	https://github.com/bbdaria/GhostHouses/issues/82		Backlog		
+StageA submission requirements (David notes)	https://github.com/bbdaria/GhostHouses/issues/75	bkillercode, carolelasmar, KareemAraide, L54, StrBenny, YaraZeineh	Doing		
+add a feature to export building's details as a png file (building card)	https://github.com/bbdaria/GhostHouses/issues/7	bkillercode	Done		0 / 0 (0%)
+building card multiselect	https://github.com/bbdaria/GhostHouses/issues/74	KareemAraide	Done		
+add images feaure for building's details	https://github.com/bbdaria/GhostHouses/issues/8	YaraZeineh	Done		
+fix bugs in user managment page	https://github.com/bbdaria/GhostHouses/issues/3	KareemAraide	Done		
+HLD submission 19.11	https://github.com/bbdaria/GhostHouses/issues/1	bkillercode, KareemAraide, StrBenny	Done		
+popup building window	https://github.com/bbdaria/GhostHouses/issues/70	StrBenny	Done		
+make "delete" button safe	https://github.com/bbdaria/GhostHouses/issues/66	KareemAraide	Done		
+Add log filtering by deletion logs	https://github.com/bbdaria/GhostHouses/issues/67	KareemAraide	Done		
+remove "show" button	https://github.com/bbdaria/GhostHouses/issues/65	KareemAraide	Done		
+match exported excel columns to UI	https://github.com/bbdaria/GhostHouses/issues/64	KareemAraide	Done		
+add tests	https://github.com/bbdaria/GhostHouses/issues/17	bkillercode, YaraZeineh	Done		
+Fix Excel export when hosted externally	https://github.com/bbdaria/GhostHouses/issues/50	KareemAraide, StrBenny	Done		
+Add export to excel	https://github.com/bbdaria/GhostHouses/issues/45	KareemAraide	Done		
+Improve logging table	https://github.com/bbdaria/GhostHouses/issues/44	KareemAraide	Done		
+Change what fields appear in building creation	https://github.com/bbdaria/GhostHouses/issues/43	KareemAraide	Done		
+Remove "street name to street ID" tab from the GUI	https://github.com/bbdaria/GhostHouses/issues/42	KareemAraide	Done		
+GitFlow Github restructure	https://github.com/bbdaria/GhostHouses/issues/14	KareemAraide, StrBenny, YaraZeineh	Done		
+feature to import buildings from excel file	https://github.com/bbdaria/GhostHouses/issues/16	KareemAraide, L54, StrBenny	Done		0 / 0 (0%)
+add an option to sort the tables	https://github.com/bbdaria/GhostHouses/issues/11	YaraZeineh	Done		
+Documentation	https://github.com/bbdaria/GhostHouses/issues/15	bkillercode, KareemAraide	Done		
+fix sql table names and trypes	https://github.com/bbdaria/GhostHouses/issues/39	KareemAraide	Done		
+Add README	https://github.com/bbdaria/GhostHouses/issues/37	KareemAraide	Done		
+duplicate buildings protection	https://github.com/bbdaria/GhostHouses/issues/9	carolelasmar	Done		
+mandatory fields for filter and add buildings	https://github.com/bbdaria/GhostHouses/issues/10	KareemAraide	Done		0 / 0 (0%)
+implement streets page	https://github.com/bbdaria/GhostHouses/issues/40	KareemAraide	Done		

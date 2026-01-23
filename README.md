@@ -52,7 +52,6 @@ GhostHouses is a municipal web system for tracking vacant/rehabilitation buildin
 - External municipality system sync (data integration).
 - Deployment on client Windows Server environment.
 - Update building card template (awaiting client template).
-- Stage A submission documentation tasks.
 
 ## Tech Stack
 - **Backend:** ASP.NET Core (.NET 8, C#)
@@ -87,6 +86,8 @@ docker compose down && docker compose up -d --build
 - `docs/` – project documentation and submission files
 - `tests/` – automated tests
 - `.github/` – GitHub workflows and templates
+
+Documentation note: Stage A submission artifacts (docx + UML) live under `docs/Stage A submission/`.
 
 ## Conventions & Workflow
 See `docs/CONVENTIONS.md` for:

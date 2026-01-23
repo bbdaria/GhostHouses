@@ -1,0 +1,31 @@
+@startuml
+skinparam shadowing false
+skinparam componentStyle rectangle
+left to right direction
+
+actor "Municipality Users" as users
+actor "IT / DB Admin" as itadmin
+
+node "Municipality Network" {
+  frame "Docker Containers" {
+    component "Web GUI\n(Frontend - React/Vite)" as web
+    component "Backend API\n(ASP.NET Core)" as api
+    database "PostgreSQL" as db
+    component "pgAdmin\n(DB Admin Tool)" as pgadmin
+  }
+}
+
+node "Existing Municipality Services" as external <<planned>> {
+  component "Auth Server" as auth
+  component "Other Municipal Services" as services
+}
+
+users <--> web : HTTPS
+web <--> api : REST API
+api <--> db : SQL (EF Core)
+api <..> auth : planned integration
+api <..> services : planned integration
+itadmin <--> pgadmin : admin access
+pgadmin <--> db : management
+
+@enduml
