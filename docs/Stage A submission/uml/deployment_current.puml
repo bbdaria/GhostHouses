@@ -1,0 +1,34 @@
+@startuml
+skinparam shadowing false
+skinparam componentStyle rectangle
+left to right direction
+
+actor "Municipality Users" as users
+actor "IT / DB Admin" as itadmin
+cloud "Internet" as internet
+component "No‑IP DNS\n(free)" as noip
+node "Home Router\n(port forward :80 → 8080)" as router
+
+node "Team PC (temporary host)" {
+  frame "Docker Containers" {
+    component "Web GUI\n(Frontend - React/Vite)" as web
+    component "Backend API\n(ASP.NET Core)" as api
+    database "PostgreSQL\n(5432)" as db
+    component "pgAdmin\n(DB Admin Tool)\n(8081)" as pgadmin
+  }
+  component "Mock Auth Server" as mockauth <<mock>>
+  component "Mock Municipal Services" as mocksvc <<mock>>
+}
+
+users <--> internet : HTTP (port 80)
+internet --> noip
+noip --> router : DNS + port forward
+router --> web : HTTP (8080)
+web <--> api : REST API
+api <--> db : SQL (5432)
+pgadmin <--> db : management (5432)
+itadmin <--> pgadmin : admin access (8081)
+api ..> mockauth : mocked
+api ..> mocksvc : mocked
+
+@enduml
