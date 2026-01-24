@@ -6,8 +6,6 @@ services:
       POSTGRES_USER: ghostadmin
       POSTGRES_PASSWORD: ghostpass123
       POSTGRES_DB: ghosthouses
-    ports:
-      - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./sql:/docker-entrypoint-initdb.d:ro
@@ -24,13 +22,17 @@ services:
       PGADMIN_DEFAULT_EMAIL: admin@example.com
       PGADMIN_DEFAULT_PASSWORD: adminpass123
       PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_ENABLE_TLS: 'True'
+      PGADMIN_LISTEN_PORT: '443'
     ports:
-      - "8081:80"
+      - "8443:443"
     depends_on:
       db:
         condition: service_started
     volumes:
       - pgadmin-data:/var/lib/pgadmin
+      - ../certs/dev.crt:/certs/server.cert:ro
+      - ../certs/dev.key:/certs/server.key:ro
 
 volumes:
   db-data:
