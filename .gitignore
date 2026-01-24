@@ -27,3 +27,6 @@ Thumbs.db
 # Environment files
 .env
 .env.*
+
+# Local TLS certs
+project/certs/
