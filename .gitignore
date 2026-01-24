@@ -9,12 +9,17 @@ Thumbs.db
 *.swo
 *.user
 *.suo
+.vs/
+*.tmp
+*.bak
+*.cache
 
 # .NET build outputs
 **/bin/
 **/obj/
 *.userosscache
 *.sln.docstates
+*.sln
 
 # Node/Vite
 **/node_modules/
@@ -27,3 +32,9 @@ Thumbs.db
 # Environment files
 .env
 .env.*
+
+# Local TLS certs
+project/certs/
+
+# Git filter-branch temp
+.git-rewrite*
