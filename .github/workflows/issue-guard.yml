@@ -361,9 +361,6 @@ jobs:
                         labels(first:50) { nodes { name } }
                       }
                       linkedBranches(first: 20) { nodes { ref { name } } }
-                      subIssues(first: 100, states: OPEN) {
-                        nodes { number title state }
-                      }
                     }
                   }
                 }`;
@@ -376,7 +373,6 @@ jobs:
 
                 parent = result?.repository?.issue?.parent || null;
                 linkedBranches = result?.repository?.issue?.linkedBranches?.nodes || [];
-                issue.openChildren = result?.repository?.issue?.subIssues?.nodes || [];
               } catch (error) {
                 console.warn(`GraphQL check failed for #${issueNumber}:`, error);
               }
@@ -428,24 +424,46 @@ jobs:
               }
 
               if (isUserStory && issue.state === 'closed') {
-                const openChildren = issue.openChildren || [];
-                if (openChildren.length > 0) {
-                  const prefix = 'User Story was closed while child issues are still open:';
-                  const list = openChildren
-                    .map((child) => `- #${child.number} ${child.title}`)
-                    .join('\n');
-                  const body = [
-                    prefix,
-                    list,
-                    '',
-                    'Please keep the User Story open until all children are closed.'
-                  ].join('\n');
-                  await github.rest.issues.createComment({
+                try {
+                  const childrenQuery = `query($owner:String!, $repo:String!, $number:Int!) {
+                    repository(owner:$owner, name:$repo) {
+                      issue(number:$number) {
+                        subIssues(first: 100) {
+                          nodes { number title state }
+                        }
+                      }
+                    }
+                  }`;
+
+                  const childrenResult = await github.graphql(childrenQuery, {
                     owner,
                     repo,
-                    issue_number: issueNumber,
-                    body,
+                    number: issueNumber,
                   });
+
+                  const openChildren = (childrenResult?.repository?.issue?.subIssues?.nodes || [])
+                    .filter((child) => child.state === 'OPEN');
+
+                  if (openChildren.length > 0) {
+                    const prefix = 'User Story was closed while child issues are still open:';
+                    const list = openChildren
+                      .map((child) => `- #${child.number} ${child.title}`)
+                      .join('\n');
+                    const body = [
+                      prefix,
+                      list,
+                      '',
+                      'Please keep the User Story open until all children are closed.'
+                    ].join('\n');
+                    await github.rest.issues.createComment({
+                      owner,
+                      repo,
+                      issue_number: issueNumber,
+                      body,
+                    });
+                  }
+                } catch (error) {
+                  console.warn(`Child issue check failed for #${issueNumber}:`, error);
                 }
               }
 
