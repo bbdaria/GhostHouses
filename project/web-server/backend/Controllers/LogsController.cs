@@ -320,19 +320,4 @@ public class LogsController : ApiControllerBase
         return actorId;
     }
 
-    [HttpDelete("{logId:int}")]
-    [Authorize(Policy = "Admin")]
-    public async Task<ActionResult> DeleteLog(int logId, CancellationToken cancellationToken)
-    {
-        var log = await _context.BuildingLogs.FindAsync(new object[] { logId }, cancellationToken);
-        if (log is null)
-        {
-            return NotFound();
-        }
-
-        log.IsDeleted = true;
-        await _context.SaveChangesAsync(cancellationToken);
-        await _auditService.RecordAsync(CurrentUserId, nameof(BuildingLog), logId.ToString(), "Delete", null, cancellationToken);
-        return NoContent();
-    }
 }

@@ -228,34 +228,6 @@ public async Task GetLogs_FiltersByStatusSummary()
 }
 
 
-
-
-[Fact]
-public async Task GetLogs_ExcludesDeletedLogs()
-{
-    // Arrange
-    _context.Buildings.Add(new Building { Id = 1, StreetName = "X", HouseNumber = "1" });
-
-    _context.BuildingLogs.AddRange(
-        new BuildingLog { Id = 1, BuildingId = 1, Title = "Visible", IsDeleted = false },
-        new BuildingLog { Id = 2, BuildingId = 1, Title = "Deleted", IsDeleted = true }
-    );
-
-    await _context.SaveChangesAsync();
-
-    var filter = new LogFilterParameters();
-
-    // Act
-    var result = await _controller.GetLogs(filter);
-    var ok = Assert.IsType<OkObjectResult>(result.Result);
-    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
-
-    // Assert
-    Assert.Single(data.Items);
-    Assert.Equal(1, data.Items.First().Id);
-}
-
-
 [Fact]
 public async Task CreateLog_ReturnsCreatedLogDto()
 {
@@ -324,43 +296,6 @@ public async Task UpdateLog_UpdatesFields()
     Assert.Equal("New msg", updated.Message);
     Assert.Equal("new", updated.Category);
     Assert.Equal("critical", updated.Severity);
-}
-
-
-
-
-[Fact]
-public async Task DeleteLog_SoftDeletesLog()
-{
-    // Arrange
-    _context.Users.Add(new AppUser { Id = Guid.NewGuid(), Username = "admin", Role = UserRole.Admin });
-    await _context.SaveChangesAsync();
-
-    _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "10" });
-    _context.BuildingLogs.Add(new BuildingLog { Id = 20, BuildingId = 1, Title = "t" });
-    await _context.SaveChangesAsync();
-
-    // Act
-    var result = await _controller.DeleteLog(20);
-    
-    // Assert
-    Assert.IsType<NoContentResult>(result);
-
-    var log = await _context.BuildingLogs.IgnoreQueryFilters().FirstOrDefaultAsync(l => l.Id == 20);
-    Assert.True(log.IsDeleted);
-}
-
-
-
-
-[Fact]
-public async Task DeleteLog_ReturnsNotFound_WhenLogDoesNotExist()
-{
-    // Act
-    var result = await _controller.DeleteLog(999);
-
-    // Assert
-    Assert.IsType<NotFoundResult>(result);
 }
 
 
