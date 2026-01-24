@@ -38,14 +38,18 @@ It is written in English and kept in the repo to stay versioned with the code.
   Example: `Issue #19: add conventions document`.
 - Merge to `dev` only after the issue is **Done** and approved.
 - If an issue is **Canceled**, close it and do not merge.
+- Issue guard enforces that non‑User‑Story issues have a linked Development branch matching the naming pattern above.
 
 ## 5) Issue Management
 ### Automated checks (comment-only)
 - Issue guard comments when **Label** or **Milestone** is missing.
+- Issue guard comments when **Project (GhostHouses)** or **Status** is missing.
+- Issue guard comments if an issue is linked to any project other than **GhostHouses**.
 - For **non‑User Story** issues, issue guard comments if **Parent** is missing or not a User Story.
 - For **User Story** issues, issue guard comments if extra labels are present.
 - On **User Story close**, issue guard comments if any child issues remain open.
 - On **child reopen**, issue guard comments on both child + parent if the parent User Story is closed.
+ - Issue guard comments if **Status** is Done/Canceled while the issue is open, or if the issue is closed while **Status** is not Done/Canceled.
 
 ### User Story Issues
 - Must be labeled `User Story` **only** (no additional labels).
@@ -53,6 +57,7 @@ It is written in English and kept in the repo to stay versioned with the code.
 - Do **not** set a parent issue (they are the parent).
 - Can have multiple implementation issues linked as sub-issues.
 - Must still include milestone, status, and time-tracked updates.
+- Must be in the **GhostHouses** project with a **Status** value.
 - Must not have any Development branch linked.
 - If a child issue is reopened, the User Story should be reopened.
 - If **any** child issue is still open, the User Story must remain open (cannot be Done/Closed).
@@ -63,7 +68,8 @@ It is written in English and kept in the repo to stay versioned with the code.
 - Title and body must be clear and specific.
 - Milestone is required.
 - Labels are required.
-- Must have a linked Development branch.
+- Must be in the **GhostHouses** project with a **Status** value.
+- Must have **exactly one** linked Development branch.
 - Time-tracked updates are required on every progress comment.
 
 ### Status Usage (Project)
