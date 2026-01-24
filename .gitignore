@@ -15,6 +15,7 @@ Thumbs.db
 **/obj/
 *.userosscache
 *.sln.docstates
+*.sln
 
 # Node/Vite
 **/node_modules/
@@ -30,3 +31,6 @@ Thumbs.db
 
 # Local TLS certs
 project/certs/
+
+# Git filter-branch temp
+.git-rewrite*
