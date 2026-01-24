@@ -198,6 +198,26 @@ jobs:
                 }
               }
             }
+
+            if (issue.state === 'open') {
+              const statusResult = await getProjectStatus();
+              if (statusResult.ok) {
+                const status = statusResult.status || '';
+                if (status === 'Done' || status === 'Canceled') {
+                  const statusBody = [
+                    'Issue is open but Project Status is Done or Canceled.',
+                    `Current Status: ${status}.`,
+                    'Please close the issue or move the Project Status to an open state.'
+                  ].join('\n');
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body: statusBody,
+                  });
+                }
+              }
+            }
       - name: Comment when a User Story is closed with open child issues
         if: ${{ github.event.action == 'closed' }}
         uses: actions/github-script@v7
@@ -518,6 +538,26 @@ jobs:
                       'Issue is closed but Project Status is not Done or Canceled.',
                       `Current Status: ${status || 'Missing'}.`,
                       'Please update the Project Status to match the closed state.'
+                    ].join('\n');
+                    await github.rest.issues.createComment({
+                      owner,
+                      repo,
+                      issue_number: issueNumber,
+                      body: statusBody,
+                    });
+                  }
+                }
+              }
+
+              if (issue.state === 'open') {
+                const statusResult = await getProjectStatus(issueNumber);
+                if (statusResult.ok) {
+                  const status = statusResult.status || '';
+                  if (status === 'Done' || status === 'Canceled') {
+                    const statusBody = [
+                      'Issue is open but Project Status is Done or Canceled.',
+                      `Current Status: ${status}.`,
+                      'Please close the issue or move the Project Status to an open state.'
                     ].join('\n');
                     await github.rest.issues.createComment({
                       owner,
