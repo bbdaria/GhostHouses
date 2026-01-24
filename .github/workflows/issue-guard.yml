@@ -329,21 +329,6 @@ jobs:
               per_page: 100,
             });
 
-            const commentExists = async (issueNumber, prefix) => {
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                owner,
-                repo,
-                issue_number: issueNumber,
-                per_page: 100,
-              });
-              return comments.some(
-                (comment) =>
-                  comment?.user?.type === 'Bot' &&
-                  typeof comment?.body === 'string' &&
-                  comment.body.startsWith(prefix)
-              );
-            };
-
             for (const issue of issues) {
               if (!issue || issue.pull_request) continue;
 
@@ -427,14 +412,34 @@ jobs:
 
               if (missing.length > 0) {
                 const prefix = 'Required fields are missing:';
-                if (!(await commentExists(issueNumber, prefix))) {
+                const body = [
+                  prefix,
+                  ...missing,
+                  '',
+                  'Please update the issue and re-save to re-check.'
+                ].join('\n');
+
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body,
+                });
+              }
+
+              if (isUserStory && issue.state === 'closed') {
+                const openChildren = issue.openChildren || [];
+                if (openChildren.length > 0) {
+                  const prefix = 'User Story was closed while child issues are still open:';
+                  const list = openChildren
+                    .map((child) => `- #${child.number} ${child.title}`)
+                    .join('\n');
                   const body = [
                     prefix,
-                    ...missing,
+                    list,
                     '',
-                    'Please update the issue and re-save to re-check.'
+                    'Please keep the User Story open until all children are closed.'
                   ].join('\n');
-
                   await github.rest.issues.createComment({
                     owner,
                     repo,
@@ -444,47 +449,21 @@ jobs:
                 }
               }
 
-              if (isUserStory && issue.state === 'closed') {
-                const openChildren = issue.openChildren || [];
-                if (openChildren.length > 0) {
-                  const prefix = 'User Story was closed while child issues are still open:';
-                  if (!(await commentExists(issueNumber, prefix))) {
-                    const list = openChildren
-                      .map((child) => `- #${child.number} ${child.title}`)
-                      .join('\n');
-                    const body = [
-                      prefix,
-                      list,
-                      '',
-                      'Please keep the User Story open until all children are closed.'
-                    ].join('\n');
-                    await github.rest.issues.createComment({
-                      owner,
-                      repo,
-                      issue_number: issueNumber,
-                      body,
-                    });
-                  }
-                }
-              }
-
               if (!isUserStory && issue.state === 'closed') {
                 const reason = issue.state_reason || '';
                 if (reason !== 'not_planned' && (!Array.isArray(issue.assignees) || issue.assignees.length === 0)) {
                   const prefix = 'This issue was closed without an assignee.';
-                  if (!(await commentExists(issueNumber, prefix))) {
-                    const body = [
-                      prefix,
-                      'For non‑User Story issues closed as Done, an assignee is required.',
-                      'Please assign someone and update if needed.'
-                    ].join('\n');
-                    await github.rest.issues.createComment({
-                      owner,
-                      repo,
-                      issue_number: issueNumber,
-                      body,
-                    });
-                  }
+                  const body = [
+                    prefix,
+                    'For non‑User Story issues closed as Done, an assignee is required.',
+                    'Please assign someone and update if needed.'
+                  ].join('\n');
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body,
+                  });
                 }
               }
 
@@ -494,23 +473,19 @@ jobs:
                 );
                 if (parentIsUserStory) {
                   const childPrefix = 'Parent User Story is closed while this issue is open.';
-                  if (!(await commentExists(issueNumber, childPrefix))) {
-                    await github.rest.issues.createComment({
-                      owner,
-                      repo,
-                      issue_number: issueNumber,
-                      body: `${childPrefix} Please reopen the User Story.`,
-                    });
-                  }
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body: `${childPrefix} Please reopen the User Story.`,
+                  });
                   const parentPrefix = 'Child issue was reopened while this User Story is closed.';
-                  if (!(await commentExists(parent.number, parentPrefix))) {
-                    await github.rest.issues.createComment({
-                      owner,
-                      repo,
-                      issue_number: parent.number,
-                      body: `${parentPrefix} Please reopen this User Story until all children are closed.`,
-                    });
-                  }
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: parent.number,
+                    body: `${parentPrefix} Please reopen this User Story until all children are closed.`,
+                  });
                 }
               }
             }
