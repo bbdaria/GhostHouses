@@ -11,9 +11,14 @@ on:
       - labeled
       - unlabeled
       - closed
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
 
 permissions:
   issues: write
+  contents: read
+  pull-requests: read
 
 jobs:
   comment:
@@ -22,6 +27,7 @@ jobs:
       - name: Comment when required fields are missing
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.ISSUE_GUARD_PAT }}
           script: |
             const issue = context.payload.issue;
             if (!issue) return;
@@ -45,8 +51,65 @@ jobs:
               : [];
             const isUserStory = labelNames.includes('User Story');
 
+            const getProjectInfo = async () => {
+              const query = `query($owner:String!, $repo:String!, $number:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  issue(number:$number) {
+                    projectItems(first: 20) {
+                      nodes {
+                        project { title }
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue { name }
+                          ... on ProjectV2ItemFieldTextValue { text }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`;
+
+              try {
+                const result = await github.graphql(query, { owner, repo, number: issueNumber });
+                const items = result?.repository?.issue?.projectItems?.nodes || [];
+                const projectTitles = items.map((node) => node?.project?.title).filter(Boolean);
+                const ghostItem = items.find((node) => (node?.project?.title || '') === 'GhostHouses');
+                if (!ghostItem) {
+                  return { ok: true, status: null, hasGhostHouses: false, extraProjects: projectTitles.filter((t) => t !== 'GhostHouses') };
+                }
+                const fieldValue = ghostItem?.fieldValueByName;
+                const status =
+                  (fieldValue && typeof fieldValue.name === 'string' && fieldValue.name) ||
+                  (fieldValue && typeof fieldValue.text === 'string' && fieldValue.text) ||
+                  null;
+                return {
+                  ok: true,
+                  status,
+                  hasGhostHouses: true,
+                  extraProjects: projectTitles.filter((t) => t !== 'GhostHouses'),
+                };
+              } catch (error) {
+                console.warn('Project status check failed:', error);
+                return { ok: false, status: null, hasGhostHouses: false, extraProjects: [] };
+              }
+            };
+
             if (isUserStory && labelNames.length > 1) {
               missing.push('- User Story issues must have only the "User Story" label (remove extra labels).');
+            }
+
+            const projectInfo = await getProjectInfo();
+            if (projectInfo.ok) {
+              if (!projectInfo.hasGhostHouses) {
+                missing.push('- Project is missing: add this issue to the GhostHouses project.');
+              }
+              if (projectInfo.extraProjects && projectInfo.extraProjects.length > 0) {
+                missing.push('- Issue is linked to other projects; only GhostHouses is allowed.');
+              }
+              if (projectInfo.hasGhostHouses && !projectInfo.status) {
+                missing.push('- Project Status is missing (set Status in GhostHouses project).');
+              }
+            } else {
+              missing.push('- Could not verify project/status; please ensure GhostHouses project + Status are set.');
             }
 
             if (isUserStory) {
@@ -113,6 +176,8 @@ jobs:
 
                 if (linkedBranches.length === 0) {
                   missing.push('- Development branch is missing (link a branch for this issue).');
+                } else if (linkedBranches.length > 1) {
+                  missing.push('- Development branch must be a single branch (remove extra linked branches).');
                 } else {
                   const hasMatchingBranch = linkedBranches.some(
                     (node) => (node?.ref?.name || '').startsWith(expectedPrefix)
@@ -142,10 +207,47 @@ jobs:
               issue_number: issueNumber,
               body,
             });
+
+            if (projectInfo.ok && projectInfo.hasGhostHouses && projectInfo.status) {
+              if (issue.state === 'closed') {
+                const status = projectInfo.status;
+                if (status !== 'Done' && status !== 'Canceled') {
+                  const statusBody = [
+                    'Issue is closed but Project Status is not Done or Canceled.',
+                    `Current Status: ${status}.`,
+                    'Please update the Project Status to match the closed state.'
+                  ].join('\n');
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body: statusBody,
+                  });
+                }
+              }
+
+              if (issue.state === 'open') {
+                const status = projectInfo.status;
+                if (status === 'Done' || status === 'Canceled') {
+                  const statusBody = [
+                    'Issue is open but Project Status is Done or Canceled.',
+                    `Current Status: ${status}.`,
+                    'Please close the issue or move the Project Status to an open state.'
+                  ].join('\n');
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body: statusBody,
+                  });
+                }
+              }
+            }
       - name: Comment when a User Story is closed with open child issues
         if: ${{ github.event.action == 'closed' }}
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.ISSUE_GUARD_PAT }}
           script: |
             const issue = context.payload.issue;
             if (!issue) return;
@@ -210,6 +312,7 @@ jobs:
         if: ${{ github.event.action == 'closed' }}
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.ISSUE_GUARD_PAT }}
           script: |
             const issue = context.payload.issue;
             if (!issue) return;
@@ -247,6 +350,7 @@ jobs:
         if: ${{ github.event.action == 'reopened' }}
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.ISSUE_GUARD_PAT }}
           script: |
             const issue = context.payload.issue;
             if (!issue) return;
@@ -307,4 +411,296 @@ jobs:
                 body: 'Could not verify parent User Story on reopen. Please ensure the parent is reopened if needed.',
               });
               console.warn('Parent reopen check failed:', error);
+            }
+  scan_all:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan all issues and comment on missing requirements
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ISSUE_GUARD_PAT }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'all',
+              per_page: 100,
+            });
+
+            const getProjectInfo = async (issueNumber) => {
+              const query = `query($owner:String!, $repo:String!, $number:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  issue(number:$number) {
+                    projectItems(first: 20) {
+                      nodes {
+                        project { title }
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue { name }
+                          ... on ProjectV2ItemFieldTextValue { text }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`;
+
+              try {
+                const result = await github.graphql(query, { owner, repo, number: issueNumber });
+                const items = result?.repository?.issue?.projectItems?.nodes || [];
+                const projectTitles = items.map((node) => node?.project?.title).filter(Boolean);
+                const ghostItem = items.find((node) => (node?.project?.title || '') === 'GhostHouses');
+                if (!ghostItem) {
+                  return { ok: true, status: null, hasGhostHouses: false, extraProjects: projectTitles.filter((t) => t !== 'GhostHouses') };
+                }
+                const fieldValue = ghostItem?.fieldValueByName;
+                const status =
+                  (fieldValue && typeof fieldValue.name === 'string' && fieldValue.name) ||
+                  (fieldValue && typeof fieldValue.text === 'string' && fieldValue.text) ||
+                  null;
+                return {
+                  ok: true,
+                  status,
+                  hasGhostHouses: true,
+                  extraProjects: projectTitles.filter((t) => t !== 'GhostHouses'),
+                };
+              } catch (error) {
+                console.warn(`Project status check failed for #${issueNumber}:`, error);
+                return { ok: false, status: null, hasGhostHouses: false, extraProjects: [] };
+              }
+            };
+
+            for (const issue of issues) {
+              if (!issue || issue.pull_request) continue;
+
+              const issueNumber = issue.number;
+              const labelNames = Array.isArray(issue.labels)
+                ? issue.labels.map((label) => (label.name || label)).filter(Boolean)
+                : [];
+              const isUserStory = labelNames.includes('User Story');
+
+              const missing = [];
+              if (!Array.isArray(issue.labels) || issue.labels.length === 0) {
+                missing.push('- Label is missing.');
+              }
+              if (!issue.milestone) {
+                missing.push('- Milestone is missing.');
+              }
+              if (isUserStory && labelNames.length > 1) {
+                missing.push('- User Story issues must have only the "User Story" label (remove extra labels).');
+              }
+
+              let parent = null;
+              let linkedBranches = [];
+              try {
+                const query = `query($owner:String!, $repo:String!, $number:Int!) {
+                  repository(owner:$owner, name:$repo) {
+                    issue(number:$number) {
+                      parent {
+                        number
+                        state
+                        labels(first:50) { nodes { name } }
+                      }
+                      linkedBranches(first: 20) { nodes { ref { name } } }
+                    }
+                  }
+                }`;
+
+                const result = await github.graphql(query, {
+                  owner,
+                  repo,
+                  number: issueNumber,
+                });
+
+                parent = result?.repository?.issue?.parent || null;
+                linkedBranches = result?.repository?.issue?.linkedBranches?.nodes || [];
+              } catch (error) {
+                console.warn(`GraphQL check failed for #${issueNumber}:`, error);
+              }
+
+              if (isUserStory) {
+                if (linkedBranches.length > 0) {
+                  missing.push('- User Story issues must not have a Development branch linked (remove the branch).');
+                }
+              } else {
+                const expectedPrefix = `Issues/#${issueNumber}-`;
+                if (!parent) {
+                  missing.push('- Parent issue is missing (must be a User Story).');
+                } else {
+                  const parentIsUserStory = parent.labels?.nodes?.some(
+                    (label) => label.name === 'User Story'
+                  );
+                  if (!parentIsUserStory) {
+                    missing.push(`- Parent issue #${parent.number} is not labeled "User Story".`);
+                  }
+                }
+
+                if (linkedBranches.length === 0) {
+                  missing.push('- Development branch is missing (link a branch for this issue).');
+                } else if (linkedBranches.length > 1) {
+                  missing.push('- Development branch must be a single branch (remove extra linked branches).');
+                } else {
+                  const hasMatchingBranch = linkedBranches.some(
+                    (node) => (node?.ref?.name || '').startsWith(expectedPrefix)
+                  );
+                  if (!hasMatchingBranch) {
+                    missing.push(`- Development branch name must start with "${expectedPrefix}".`);
+                  }
+                }
+              }
+
+              const projectInfo = await getProjectInfo(issueNumber);
+              if (projectInfo.ok) {
+                if (!projectInfo.hasGhostHouses) {
+                  missing.push('- Project is missing: add this issue to the GhostHouses project.');
+                }
+                if (projectInfo.extraProjects && projectInfo.extraProjects.length > 0) {
+                  missing.push('- Issue is linked to other projects; only GhostHouses is allowed.');
+                }
+                if (projectInfo.hasGhostHouses && !projectInfo.status) {
+                  missing.push('- Project Status is missing (set Status in GhostHouses project).');
+                }
+              } else {
+                missing.push('- Could not verify project/status; please ensure GhostHouses project + Status are set.');
+              }
+
+              if (missing.length > 0) {
+                const prefix = 'Required fields are missing:';
+                const body = [
+                  prefix,
+                  ...missing,
+                  '',
+                  'Please update the issue and re-save to re-check.'
+                ].join('\n');
+
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body,
+                });
+              }
+
+              if (projectInfo.ok && projectInfo.hasGhostHouses && projectInfo.status) {
+                if (issue.state === 'closed') {
+                  const status = projectInfo.status;
+                  if (status !== 'Done' && status !== 'Canceled') {
+                    const statusBody = [
+                      'Issue is closed but Project Status is not Done or Canceled.',
+                      `Current Status: ${status}.`,
+                      'Please update the Project Status to match the closed state.'
+                    ].join('\n');
+                    await github.rest.issues.createComment({
+                      owner,
+                      repo,
+                      issue_number: issueNumber,
+                      body: statusBody,
+                    });
+                  }
+                }
+
+                if (issue.state === 'open') {
+                  const status = projectInfo.status;
+                  if (status === 'Done' || status === 'Canceled') {
+                    const statusBody = [
+                      'Issue is open but Project Status is Done or Canceled.',
+                      `Current Status: ${status}.`,
+                      'Please close the issue or move the Project Status to an open state.'
+                    ].join('\n');
+                    await github.rest.issues.createComment({
+                      owner,
+                      repo,
+                      issue_number: issueNumber,
+                      body: statusBody,
+                    });
+                  }
+                }
+              }
+
+              if (isUserStory && issue.state === 'closed') {
+                try {
+                  const childrenQuery = `query($owner:String!, $repo:String!, $number:Int!) {
+                    repository(owner:$owner, name:$repo) {
+                      issue(number:$number) {
+                        subIssues(first: 100) {
+                          nodes { number title state }
+                        }
+                      }
+                    }
+                  }`;
+
+                  const childrenResult = await github.graphql(childrenQuery, {
+                    owner,
+                    repo,
+                    number: issueNumber,
+                  });
+
+                  const openChildren = (childrenResult?.repository?.issue?.subIssues?.nodes || [])
+                    .filter((child) => child.state === 'OPEN');
+
+                  if (openChildren.length > 0) {
+                    const prefix = 'User Story was closed while child issues are still open:';
+                    const list = openChildren
+                      .map((child) => `- #${child.number} ${child.title}`)
+                      .join('\n');
+                    const body = [
+                      prefix,
+                      list,
+                      '',
+                      'Please keep the User Story open until all children are closed.'
+                    ].join('\n');
+                    await github.rest.issues.createComment({
+                      owner,
+                      repo,
+                      issue_number: issueNumber,
+                      body,
+                    });
+                  }
+                } catch (error) {
+                  console.warn(`Child issue check failed for #${issueNumber}:`, error);
+                }
+              }
+
+              if (!isUserStory && issue.state === 'closed') {
+                const reason = issue.state_reason || '';
+                if (reason !== 'not_planned' && (!Array.isArray(issue.assignees) || issue.assignees.length === 0)) {
+                  const prefix = 'This issue was closed without an assignee.';
+                  const body = [
+                    prefix,
+                    'For non‑User Story issues closed as Done, an assignee is required.',
+                    'Please assign someone and update if needed.'
+                  ].join('\n');
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body,
+                  });
+                }
+              }
+
+              if (!isUserStory && issue.state === 'open' && parent && parent.state === 'CLOSED') {
+                const parentIsUserStory = parent.labels?.nodes?.some(
+                  (label) => label.name === 'User Story'
+                );
+                if (parentIsUserStory) {
+                  const childPrefix = 'Parent User Story is closed while this issue is open.';
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body: `${childPrefix} Please reopen the User Story.`,
+                  });
+                  const parentPrefix = 'Child issue was reopened while this User Story is closed.';
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: parent.number,
+                    body: `${parentPrefix} Please reopen this User Story until all children are closed.`,
+                  });
+                }
+              }
             }
