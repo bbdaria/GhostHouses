@@ -9,6 +9,10 @@ Thumbs.db
 *.swo
 *.user
 *.suo
+.vs/
+*.tmp
+*.bak
+*.cache
 
 # .NET build outputs
 **/bin/
