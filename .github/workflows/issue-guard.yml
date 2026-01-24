@@ -97,6 +97,7 @@ jobs:
 
                 const parent = result?.repository?.issue?.parent;
                 const linkedBranches = result?.repository?.issue?.linkedBranches?.nodes || [];
+                const expectedPrefix = `Issues/#${issueNumber}-`;
 
                 if (!parent) {
                   missing.push('- Parent issue is missing (must be a User Story).');
@@ -112,6 +113,13 @@ jobs:
 
                 if (linkedBranches.length === 0) {
                   missing.push('- Development branch is missing (link a branch for this issue).');
+                } else {
+                  const hasMatchingBranch = linkedBranches.some(
+                    (node) => (node?.ref?.name || '').startsWith(expectedPrefix)
+                  );
+                  if (!hasMatchingBranch) {
+                    missing.push(`- Development branch name must start with "${expectedPrefix}".`);
+                  }
                 }
               } catch (error) {
                 missing.push('- Parent issue could not be verified; please ensure it is set to a User Story.');

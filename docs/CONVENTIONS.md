@@ -38,6 +38,7 @@ It is written in English and kept in the repo to stay versioned with the code.
   Example: `Issue #19: add conventions document`.
 - Merge to `dev` only after the issue is **Done** and approved.
 - If an issue is **Canceled**, close it and do not merge.
+- Issue guard enforces that non‑User‑Story issues have a linked Development branch matching the naming pattern above.
 
 ## 5) Issue Management
 ### Automated checks (comment-only)
