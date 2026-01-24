@@ -68,12 +68,14 @@ jobs:
               try {
                 const result = await github.graphql(query, { owner, repo, number: issueNumber });
                 const items = result?.repository?.issue?.projectItems?.nodes || [];
+                if (items.length === 0) return { status: null, ok: false };
                 const item = items.find((node) => (node?.project?.title || '') === 'GhostHouses') || items[0];
                 const fieldValue = item?.fieldValueByName;
                 const status =
                   (fieldValue && typeof fieldValue.name === 'string' && fieldValue.name) ||
                   (fieldValue && typeof fieldValue.text === 'string' && fieldValue.text) ||
                   null;
+                if (!status) return { status: null, ok: false };
                 return { status, ok: true };
               } catch (error) {
                 console.warn('Project status check failed:', error);
@@ -422,12 +424,14 @@ jobs:
               try {
                 const result = await github.graphql(query, { owner, repo, number: issueNumber });
                 const items = result?.repository?.issue?.projectItems?.nodes || [];
+                if (items.length === 0) return { status: null, ok: false };
                 const item = items.find((node) => (node?.project?.title || '') === 'GhostHouses') || items[0];
                 const fieldValue = item?.fieldValueByName;
                 const status =
                   (fieldValue && typeof fieldValue.name === 'string' && fieldValue.name) ||
                   (fieldValue && typeof fieldValue.text === 'string' && fieldValue.text) ||
                   null;
+                if (!status) return { status: null, ok: false };
                 return { status, ok: true };
               } catch (error) {
                 console.warn(`Project status check failed for #${issueNumber}:`, error);
