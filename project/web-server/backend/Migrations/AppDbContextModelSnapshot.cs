@@ -354,9 +354,6 @@ namespace WebServer.Migrations
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasColumnType("text");

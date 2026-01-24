@@ -15,5 +15,4 @@ public class BuildingLog
     public string Severity { get; set; } = "info";
     public DateTimeOffset CreatedAt { get; set; } = IsraelTime.NowUtc;
     public DateTimeOffset? UpdatedAt { get; set; }
-    public bool IsDeleted { get; set; }
 }

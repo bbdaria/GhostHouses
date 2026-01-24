@@ -44,9 +44,6 @@ public class AppDbContext : DbContext
             .Metadata.SetValueComparer(moneyComparer);
 
         modelBuilder.Entity<BuildingLog>()
-            .HasQueryFilter(log => !log.IsDeleted);
-
-        modelBuilder.Entity<BuildingLog>()
             .HasIndex(log => log.BuildingId);
 
         modelBuilder.Entity<Street>()
