@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.IO;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -90,11 +91,18 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseDefaultFiles();
-app.UseStaticFiles();
+var webRoot = app.Environment.WebRootPath;
+if (!string.IsNullOrWhiteSpace(webRoot) && File.Exists(Path.Combine(webRoot, "index.html")))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
 
 app.MapControllers();
-app.MapFallbackToFile("index.html");
+if (!string.IsNullOrWhiteSpace(webRoot) && File.Exists(Path.Combine(webRoot, "index.html")))
+{
+    app.MapFallbackToFile("index.html");
+}
 
 await SeedData.InitializeAsync(app.Services);
 

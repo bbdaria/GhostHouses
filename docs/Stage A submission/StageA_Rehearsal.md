@@ -347,11 +347,11 @@ Plain-language summary:
 ---
 
 ## 12) UML: Deployment (Current / Existing)
-Current deployment reflects the temporary hosting on a team PC. The client reaches it over HTTP (unencrypted web traffic) on port 80 via No‑IP + router port‑forwarding to the internal 8080.  
+Current deployment reflects the temporary hosting on a team PC. The client reaches it over HTTP (unencrypted web traffic) on port 80 via No‑IP + router port‑forwarding to the frontend on 8082.  
 HTTPS is the encrypted version of HTTP; we will use it once the official Windows Server deployment is live.  
 No‑IP provides a stable DNS name (DNS is the system that maps a name to an IP address) while the public IP changes.  
 Port‑forwarding is the router rule that maps external traffic to an internal machine/port.  
-Ports: Web app HTTP 8080 (internal), PostgreSQL 5432, pgAdmin 8081 (IT/admin only).  
+Ports: Frontend HTTP 8082 (host‑mapped), Backend API 8080 (internal only), PostgreSQL 5432 (internal), pgAdmin 8081 (IT/admin only).  
 pgAdmin is a web UI for database administration (monitoring, queries, backups); it’s used by IT/DB admins, not end users.
 File: `docs/Stage A submission/uml/deployment_current.puml` / `.png`.
 
