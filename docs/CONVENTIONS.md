@@ -50,6 +50,7 @@ It is written in English and kept in the repo to stay versioned with the code.
 - On **User Story close**, issue guard comments if any child issues remain open.
 - On **child reopen**, issue guard comments on both child + parent if the parent User Story is closed.
  - Issue guard comments if **Status** is Done/Canceled while the issue is open, or if the issue is closed while **Status** is not Done/Canceled.
+- Issue guard runs on issue events and once daily (scheduled). It uses a PAT secret `ISSUE_GUARD_PAT` (classic scopes: `repo`, `read:org`, `project`) to read GhostHouses project data.
 
 ### User Story Issues
 - Must be labeled `User Story` **only** (no additional labels).

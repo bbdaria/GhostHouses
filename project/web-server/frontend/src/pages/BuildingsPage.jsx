@@ -1390,7 +1390,12 @@ export default function BuildingsPage() {
     if (!confirmed) return;
     try {
       await api.deleteBuilding(id);
+      setShowModal(false);
+      setModalMode('view');
+      setUnsavedChanges(false);
       setSelectedBuilding(null);
+      setDuplicatePrompt('');
+      setEditDuplicatePrompt('');
       loadBuildings(filters);
       setActionMessage('המבנה הוסר.');
     } catch (err) {

@@ -65,6 +65,19 @@ public static class SeedData
             context.Streets.Add(new Street { StreetId = NoStreetId, Name = NoStreetName });
             await context.SaveChangesAsync(cancellationToken);
         }
+        await SyncBuildingIdSequenceAsync(context, cancellationToken);
+    }
 
+
+    private static async Task SyncBuildingIdSequenceAsync(AppDbContext context, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT setval(
+                pg_get_serial_sequence('"Buildings"', 'Id'),
+                GREATEST(COALESCE((SELECT MAX("Id") FROM "Buildings"), 1), 1),
+                true
+            );
+            """;
+        await context.Database.ExecuteSqlRawAsync(sql, cancellationToken);
     }
 }

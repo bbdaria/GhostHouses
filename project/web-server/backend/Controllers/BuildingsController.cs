@@ -1515,6 +1515,11 @@ public class BuildingsController : ApiControllerBase
             }
         }
 
+        if (request.Id <= 0)
+        {
+            await UpdateBuildingIdSequenceAsync(cancellationToken);
+        }
+
         _context.Buildings.Add(building);
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -2494,7 +2499,7 @@ public class BuildingsController : ApiControllerBase
         const string sql = """
             SELECT setval(
                 pg_get_serial_sequence('"Buildings"', 'Id'),
-                COALESCE((SELECT MAX("Id") FROM "Buildings"), 1),
+                GREATEST(COALESCE((SELECT MAX("Id") FROM "Buildings"), 1), 1),
                 true
             );
             """;

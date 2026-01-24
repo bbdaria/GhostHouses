@@ -68,6 +68,13 @@ cd GhostHouses/project
 docker compose up -d --build
 ```
 
+### Ports & Networking (local Docker)
+- **Frontend (Nginx)**: `https://localhost:443` (host port 443 -> container 443).
+- **Backend (ASP.NET Core)**: internal only, `http://backend:8080` (no host port mapping).
+- **Database (PostgreSQL)**: internal only, `db:5432`.
+- **pgAdmin**: `https://localhost:8443` (host port 8443 -> container 443).
+- Networks: `app-net` (frontend ↔ backend), `db-net` (backend ↔ db), `admin-net` (pgAdmin ↔ db).
+
 ### Quick rebuild/run
 Reset data and rebuild:
 ```bash
@@ -98,7 +105,11 @@ See `docs/CONVENTIONS.md` for:
 - Approval rules and time tracking
 
 ## CI/CD
-GitHub Actions builds the project, runs tests, and validates PRs.
+GitHub Actions builds the project, runs tests, and validates PRs. Issue guard runs on issue events and daily to comment on missing required metadata.
+
+## Local TLS Certificates
+The frontend and pgAdmin use local HTTPS. Self‑signed certs live in `project/certs/` (ignored by git).  
+If missing, generate them locally (see `project/certs/README_Certs.docx` for the exact command).
 
 ---
 Maintained by the GhostHouses team.
