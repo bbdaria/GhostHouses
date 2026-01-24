@@ -48,7 +48,7 @@ jobs:
               : [];
             const isUserStory = labelNames.includes('User Story');
 
-            const getProjectStatus = async () => {
+            const getProjectInfo = async () => {
               const query = `query($owner:String!, $repo:String!, $number:Int!) {
                 repository(owner:$owner, name:$repo) {
                   issue(number:$number) {
@@ -68,23 +68,45 @@ jobs:
               try {
                 const result = await github.graphql(query, { owner, repo, number: issueNumber });
                 const items = result?.repository?.issue?.projectItems?.nodes || [];
-                if (items.length === 0) return { status: null, ok: false };
-                const item = items.find((node) => (node?.project?.title || '') === 'GhostHouses') || items[0];
-                const fieldValue = item?.fieldValueByName;
+                const projectTitles = items.map((node) => node?.project?.title).filter(Boolean);
+                const ghostItem = items.find((node) => (node?.project?.title || '') === 'GhostHouses');
+                if (!ghostItem) {
+                  return { ok: true, status: null, hasGhostHouses: false, extraProjects: projectTitles.filter((t) => t !== 'GhostHouses') };
+                }
+                const fieldValue = ghostItem?.fieldValueByName;
                 const status =
                   (fieldValue && typeof fieldValue.name === 'string' && fieldValue.name) ||
                   (fieldValue && typeof fieldValue.text === 'string' && fieldValue.text) ||
                   null;
-                if (!status) return { status: null, ok: false };
-                return { status, ok: true };
+                return {
+                  ok: true,
+                  status,
+                  hasGhostHouses: true,
+                  extraProjects: projectTitles.filter((t) => t !== 'GhostHouses'),
+                };
               } catch (error) {
                 console.warn('Project status check failed:', error);
-                return { status: null, ok: false };
+                return { ok: false, status: null, hasGhostHouses: false, extraProjects: [] };
               }
             };
 
             if (isUserStory && labelNames.length > 1) {
               missing.push('- User Story issues must have only the "User Story" label (remove extra labels).');
+            }
+
+            const projectInfo = await getProjectInfo();
+            if (projectInfo.ok) {
+              if (!projectInfo.hasGhostHouses) {
+                missing.push('- Project is missing: add this issue to the GhostHouses project.');
+              }
+              if (projectInfo.extraProjects && projectInfo.extraProjects.length > 0) {
+                missing.push('- Issue is linked to other projects; only GhostHouses is allowed.');
+              }
+              if (projectInfo.hasGhostHouses && !projectInfo.status) {
+                missing.push('- Project Status is missing (set Status in GhostHouses project).');
+              }
+            } else {
+              missing.push('- Could not verify project/status; please ensure GhostHouses project + Status are set.');
             }
 
             if (isUserStory) {
@@ -151,6 +173,8 @@ jobs:
 
                 if (linkedBranches.length === 0) {
                   missing.push('- Development branch is missing (link a branch for this issue).');
+                } else if (linkedBranches.length > 1) {
+                  missing.push('- Development branch must be a single branch (remove extra linked branches).');
                 } else {
                   const hasMatchingBranch = linkedBranches.some(
                     (node) => (node?.ref?.name || '').startsWith(expectedPrefix)
@@ -181,14 +205,13 @@ jobs:
               body,
             });
 
-            if (issue.state === 'closed') {
-              const statusResult = await getProjectStatus();
-              if (statusResult.ok) {
-                const status = statusResult.status || '';
+            if (projectInfo.ok && projectInfo.hasGhostHouses && projectInfo.status) {
+              if (issue.state === 'closed') {
+                const status = projectInfo.status;
                 if (status !== 'Done' && status !== 'Canceled') {
                   const statusBody = [
                     'Issue is closed but Project Status is not Done or Canceled.',
-                    `Current Status: ${status || 'Missing'}.`,
+                    `Current Status: ${status}.`,
                     'Please update the Project Status to match the closed state.'
                   ].join('\n');
                   await github.rest.issues.createComment({
@@ -199,12 +222,9 @@ jobs:
                   });
                 }
               }
-            }
 
-            if (issue.state === 'open') {
-              const statusResult = await getProjectStatus();
-              if (statusResult.ok) {
-                const status = statusResult.status || '';
+              if (issue.state === 'open') {
+                const status = projectInfo.status;
                 if (status === 'Done' || status === 'Canceled') {
                   const statusBody = [
                     'Issue is open but Project Status is Done or Canceled.',
@@ -404,7 +424,7 @@ jobs:
               per_page: 100,
             });
 
-            const getProjectStatus = async (issueNumber) => {
+            const getProjectInfo = async (issueNumber) => {
               const query = `query($owner:String!, $repo:String!, $number:Int!) {
                 repository(owner:$owner, name:$repo) {
                   issue(number:$number) {
@@ -424,18 +444,25 @@ jobs:
               try {
                 const result = await github.graphql(query, { owner, repo, number: issueNumber });
                 const items = result?.repository?.issue?.projectItems?.nodes || [];
-                if (items.length === 0) return { status: null, ok: false };
-                const item = items.find((node) => (node?.project?.title || '') === 'GhostHouses') || items[0];
-                const fieldValue = item?.fieldValueByName;
+                const projectTitles = items.map((node) => node?.project?.title).filter(Boolean);
+                const ghostItem = items.find((node) => (node?.project?.title || '') === 'GhostHouses');
+                if (!ghostItem) {
+                  return { ok: true, status: null, hasGhostHouses: false, extraProjects: projectTitles.filter((t) => t !== 'GhostHouses') };
+                }
+                const fieldValue = ghostItem?.fieldValueByName;
                 const status =
                   (fieldValue && typeof fieldValue.name === 'string' && fieldValue.name) ||
                   (fieldValue && typeof fieldValue.text === 'string' && fieldValue.text) ||
                   null;
-                if (!status) return { status: null, ok: false };
-                return { status, ok: true };
+                return {
+                  ok: true,
+                  status,
+                  hasGhostHouses: true,
+                  extraProjects: projectTitles.filter((t) => t !== 'GhostHouses'),
+                };
               } catch (error) {
                 console.warn(`Project status check failed for #${issueNumber}:`, error);
-                return { status: null, ok: false };
+                return { ok: false, status: null, hasGhostHouses: false, extraProjects: [] };
               }
             };
 
@@ -506,6 +533,8 @@ jobs:
 
                 if (linkedBranches.length === 0) {
                   missing.push('- Development branch is missing (link a branch for this issue).');
+                } else if (linkedBranches.length > 1) {
+                  missing.push('- Development branch must be a single branch (remove extra linked branches).');
                 } else {
                   const hasMatchingBranch = linkedBranches.some(
                     (node) => (node?.ref?.name || '').startsWith(expectedPrefix)
@@ -514,6 +543,21 @@ jobs:
                     missing.push(`- Development branch name must start with "${expectedPrefix}".`);
                   }
                 }
+              }
+
+              const projectInfo = await getProjectInfo(issueNumber);
+              if (projectInfo.ok) {
+                if (!projectInfo.hasGhostHouses) {
+                  missing.push('- Project is missing: add this issue to the GhostHouses project.');
+                }
+                if (projectInfo.extraProjects && projectInfo.extraProjects.length > 0) {
+                  missing.push('- Issue is linked to other projects; only GhostHouses is allowed.');
+                }
+                if (projectInfo.hasGhostHouses && !projectInfo.status) {
+                  missing.push('- Project Status is missing (set Status in GhostHouses project).');
+                }
+              } else {
+                missing.push('- Could not verify project/status; please ensure GhostHouses project + Status are set.');
               }
 
               if (missing.length > 0) {
@@ -533,14 +577,13 @@ jobs:
                 });
               }
 
-              if (issue.state === 'closed') {
-                const statusResult = await getProjectStatus(issueNumber);
-                if (statusResult.ok) {
-                  const status = statusResult.status || '';
+              if (projectInfo.ok && projectInfo.hasGhostHouses && projectInfo.status) {
+                if (issue.state === 'closed') {
+                  const status = projectInfo.status;
                   if (status !== 'Done' && status !== 'Canceled') {
                     const statusBody = [
                       'Issue is closed but Project Status is not Done or Canceled.',
-                      `Current Status: ${status || 'Missing'}.`,
+                      `Current Status: ${status}.`,
                       'Please update the Project Status to match the closed state.'
                     ].join('\n');
                     await github.rest.issues.createComment({
@@ -551,12 +594,9 @@ jobs:
                     });
                   }
                 }
-              }
 
-              if (issue.state === 'open') {
-                const statusResult = await getProjectStatus(issueNumber);
-                if (statusResult.ok) {
-                  const status = statusResult.status || '';
+                if (issue.state === 'open') {
+                  const status = projectInfo.status;
                   if (status === 'Done' || status === 'Canceled') {
                     const statusBody = [
                       'Issue is open but Project Status is Done or Canceled.',
