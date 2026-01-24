@@ -48,6 +48,39 @@ jobs:
               : [];
             const isUserStory = labelNames.includes('User Story');
 
+            const getProjectStatus = async () => {
+              const query = `query($owner:String!, $repo:String!, $number:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  issue(number:$number) {
+                    projectItems(first: 20) {
+                      nodes {
+                        project { title }
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue { name }
+                          ... on ProjectV2ItemFieldTextValue { text }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`;
+
+              try {
+                const result = await github.graphql(query, { owner, repo, number: issueNumber });
+                const items = result?.repository?.issue?.projectItems?.nodes || [];
+                const item = items.find((node) => (node?.project?.title || '') === 'GhostHouses') || items[0];
+                const fieldValue = item?.fieldValueByName;
+                const status =
+                  (fieldValue && typeof fieldValue.name === 'string' && fieldValue.name) ||
+                  (fieldValue && typeof fieldValue.text === 'string' && fieldValue.text) ||
+                  null;
+                return { status, ok: true };
+              } catch (error) {
+                console.warn('Project status check failed:', error);
+                return { status: null, ok: false };
+              }
+            };
+
             if (isUserStory && labelNames.length > 1) {
               missing.push('- User Story issues must have only the "User Story" label (remove extra labels).');
             }
@@ -145,6 +178,26 @@ jobs:
               issue_number: issueNumber,
               body,
             });
+
+            if (issue.state === 'closed') {
+              const statusResult = await getProjectStatus();
+              if (statusResult.ok) {
+                const status = statusResult.status || '';
+                if (status !== 'Done' && status !== 'Canceled') {
+                  const statusBody = [
+                    'Issue is closed but Project Status is not Done or Canceled.',
+                    `Current Status: ${status || 'Missing'}.`,
+                    'Please update the Project Status to match the closed state.'
+                  ].join('\n');
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body: statusBody,
+                  });
+                }
+              }
+            }
       - name: Comment when a User Story is closed with open child issues
         if: ${{ github.event.action == 'closed' }}
         uses: actions/github-script@v7
@@ -329,6 +382,39 @@ jobs:
               per_page: 100,
             });
 
+            const getProjectStatus = async (issueNumber) => {
+              const query = `query($owner:String!, $repo:String!, $number:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  issue(number:$number) {
+                    projectItems(first: 20) {
+                      nodes {
+                        project { title }
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue { name }
+                          ... on ProjectV2ItemFieldTextValue { text }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`;
+
+              try {
+                const result = await github.graphql(query, { owner, repo, number: issueNumber });
+                const items = result?.repository?.issue?.projectItems?.nodes || [];
+                const item = items.find((node) => (node?.project?.title || '') === 'GhostHouses') || items[0];
+                const fieldValue = item?.fieldValueByName;
+                const status =
+                  (fieldValue && typeof fieldValue.name === 'string' && fieldValue.name) ||
+                  (fieldValue && typeof fieldValue.text === 'string' && fieldValue.text) ||
+                  null;
+                return { status, ok: true };
+              } catch (error) {
+                console.warn(`Project status check failed for #${issueNumber}:`, error);
+                return { status: null, ok: false };
+              }
+            };
+
             for (const issue of issues) {
               if (!issue || issue.pull_request) continue;
 
@@ -421,6 +507,26 @@ jobs:
                   issue_number: issueNumber,
                   body,
                 });
+              }
+
+              if (issue.state === 'closed') {
+                const statusResult = await getProjectStatus(issueNumber);
+                if (statusResult.ok) {
+                  const status = statusResult.status || '';
+                  if (status !== 'Done' && status !== 'Canceled') {
+                    const statusBody = [
+                      'Issue is closed but Project Status is not Done or Canceled.',
+                      `Current Status: ${status || 'Missing'}.`,
+                      'Please update the Project Status to match the closed state.'
+                    ].join('\n');
+                    await github.rest.issues.createComment({
+                      owner,
+                      repo,
+                      issue_number: issueNumber,
+                      body: statusBody,
+                    });
+                  }
+                }
               }
 
               if (isUserStory && issue.state === 'closed') {
