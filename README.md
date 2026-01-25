@@ -17,7 +17,7 @@ GhostHouses is a municipal web system for tracking vacant/rehabilitation buildin
 - Full audit trail with per‑field changes.
 - Filters by user/date/fields and sorting by header click.
 - Log table shows key fields directly (no dropdown rows).
-- Deletion logs supported and protected (no delete button).
+- Logs are immutable (no delete UI).
 
 ### Import / Export (Buildings)
 - Excel export respects current UI field order and labels.
@@ -37,7 +37,7 @@ GhostHouses is a municipal web system for tracking vacant/rehabilitation buildin
 ### Users & Permissions
 - User management (create/edit/view) in popups.
 - Role model (Viewer / Editor / Admin).
-- OTP reset and password reset actions.
+- OTP reset actions.
 
 ### Building Cards (PPTX)
 - Export single or multiple building cards as PPTX.
@@ -57,9 +57,9 @@ GhostHouses is a municipal web system for tracking vacant/rehabilitation buildin
 - **Backend:** ASP.NET Core (.NET 8, C#)
 - **Frontend:** React (Vite)
 - **Database:** PostgreSQL
-- **Testing:** xUnit (WebServer.Tests)
+- **Testing:** xUnit (WebServer.Tests) for backend unit tests (run locally).
 - **Containerization:** Docker + Docker Compose
-- **CI/CD:** GitHub Actions
+- **CI/CD:** GitHub Actions (issue guard comment-only workflow)
 
 ## Installation & Running
 ```bash
@@ -105,7 +105,7 @@ See `docs/CONVENTIONS.md` for:
 - Approval rules and time tracking
 
 ## CI/CD
-GitHub Actions builds the project, runs tests, and validates PRs. Issue guard runs on issue events and daily to comment on missing required metadata.
+GitHub Actions runs the issue‑guard workflow on issue events and daily to comment on missing required metadata. Build/test pipelines are run locally by the team.
 
 ## Local TLS Certificates
 The frontend and pgAdmin use local HTTPS. Self‑signed certs live in `project/certs/` (ignored by git).  
