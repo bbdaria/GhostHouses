@@ -49,12 +49,21 @@ It is written in English and kept in the repo to stay versioned with the code.
 - For **User Story** issues, issue guard comments if extra labels are present.
 - On **User Story close**, issue guard comments if any child issues remain open.
 - On **child reopen**, issue guard comments on both child + parent if the parent User Story is closed.
- - Issue guard comments if **Status** is Done/Canceled while the issue is open, or if the issue is closed while **Status** is not Done/Canceled.
+- Issue guard comments if **Status** is Done/Canceled while the issue is open, or if the issue is closed while **Status** is not Done/Canceled.
 - Issue guard runs on issue events and once daily (scheduled). It uses a PAT secret `ISSUE_GUARD_PAT` (classic scopes: `repo`, `read:org`, `project`) to read GhostHouses project data.
 
 ### User Story Issues
 - Must be labeled `User Story` **only** (no additional labels).
 - Describe the user value in plain language.
+- Body must start with `## Acceptance Criteria` and include at least one checkbox item.
+  Example:
+  ```
+  ## Acceptance Criteria
+  - [ ] When a duplicate address is submitted, the user sees a clear warning.
+  - [x] Exporting buildings generates an Excel file with headers.
+  ```
+- If the User Story is **open**, at least one Acceptance Criteria checkbox must be **unchecked**.
+- If the User Story is **closed** and Status is **Done**, **all** Acceptance Criteria checkboxes must be **checked**.
 - Do **not** set a parent issue (they are the parent).
 - Can have multiple implementation issues linked as sub-issues.
 - Must still include milestone, status, and time-tracked updates.

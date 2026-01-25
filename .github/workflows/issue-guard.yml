@@ -50,6 +50,41 @@ jobs:
               ? issue.labels.map((label) => (label.name || label)).filter(Boolean)
               : [];
             const isUserStory = labelNames.includes('User Story');
+            const issueBody = issue.body || '';
+
+            const checkAcceptanceCriteria = (body) => {
+              const lines = body.split(/\r?\n/);
+              const firstNonEmpty = lines.find((line) => line.trim().length > 0) || '';
+              const missingMessages = [];
+              const stats = { total: 0, checked: 0, unchecked: 0 };
+
+              if (firstNonEmpty.trim() !== '## Acceptance Criteria') {
+                missingMessages.push('- Acceptance Criteria section must start the issue body with "## Acceptance Criteria".');
+              }
+
+              const acIndex = lines.findIndex((line) => line.trim() === '## Acceptance Criteria');
+              if (acIndex >= 0) {
+                for (let i = acIndex + 1; i < lines.length; i += 1) {
+                  const line = lines[i];
+                  if (/^#+\s/.test(line.trim())) break;
+                  if (/^-\s*\[( |x|X)\]\s+.+/.test(line)) {
+                    stats.total += 1;
+                    if (/^-\s*\[[xX]\]/.test(line)) {
+                      stats.checked += 1;
+                    } else {
+                      stats.unchecked += 1;
+                    }
+                  }
+                }
+                if (stats.total === 0) {
+                  missingMessages.push('- Acceptance Criteria must include at least one checkbox item (e.g., "- [ ] ...").');
+                }
+              } else {
+                missingMessages.push('- Acceptance Criteria section is missing (add "## Acceptance Criteria").');
+              }
+
+              return { missingMessages, stats };
+            };
 
             const getProjectInfo = async () => {
               const query = `query($owner:String!, $repo:String!, $number:Int!) {
@@ -96,6 +131,12 @@ jobs:
             if (isUserStory && labelNames.length > 1) {
               missing.push('- User Story issues must have only the "User Story" label (remove extra labels).');
             }
+            let acStats = null;
+            if (isUserStory) {
+              const acResult = checkAcceptanceCriteria(issueBody);
+              missing.push(...acResult.missingMessages);
+              acStats = acResult.stats;
+            }
 
             const projectInfo = await getProjectInfo();
             if (projectInfo.ok) {
@@ -107,6 +148,14 @@ jobs:
               }
               if (projectInfo.hasGhostHouses && !projectInfo.status) {
                 missing.push('- Project Status is missing (set Status in GhostHouses project).');
+              }
+              if (isUserStory && acStats && acStats.total > 0) {
+                if (issue.state === 'open' && acStats.unchecked === 0) {
+                  missing.push('- Open User Story must have at least one unchecked Acceptance Criteria item.');
+                }
+                if (issue.state === 'closed' && projectInfo.status === 'Done' && acStats.unchecked > 0) {
+                  missing.push('- Closed User Story in Done must have all Acceptance Criteria items checked.');
+                }
               }
             } else {
               missing.push('- Could not verify project/status; please ensure GhostHouses project + Status are set.');
@@ -481,6 +530,41 @@ jobs:
                 ? issue.labels.map((label) => (label.name || label)).filter(Boolean)
                 : [];
               const isUserStory = labelNames.includes('User Story');
+              const issueBody = issue.body || '';
+
+              const checkAcceptanceCriteria = (body) => {
+                const lines = body.split(/\r?\n/);
+                const firstNonEmpty = lines.find((line) => line.trim().length > 0) || '';
+                const missingMessages = [];
+                const stats = { total: 0, checked: 0, unchecked: 0 };
+
+                if (firstNonEmpty.trim() !== '## Acceptance Criteria') {
+                  missingMessages.push('- Acceptance Criteria section must start the issue body with "## Acceptance Criteria".');
+                }
+
+                const acIndex = lines.findIndex((line) => line.trim() === '## Acceptance Criteria');
+                if (acIndex >= 0) {
+                  for (let i = acIndex + 1; i < lines.length; i += 1) {
+                    const line = lines[i];
+                    if (/^#+\s/.test(line.trim())) break;
+                    if (/^-\s*\[( |x|X)\]\s+.+/.test(line)) {
+                      stats.total += 1;
+                      if (/^-\s*\[[xX]\]/.test(line)) {
+                        stats.checked += 1;
+                      } else {
+                        stats.unchecked += 1;
+                      }
+                    }
+                  }
+                  if (stats.total === 0) {
+                    missingMessages.push('- Acceptance Criteria must include at least one checkbox item (e.g., "- [ ] ...").');
+                  }
+                } else {
+                  missingMessages.push('- Acceptance Criteria section is missing (add "## Acceptance Criteria").');
+                }
+
+                return { missingMessages, stats };
+              };
 
               const missing = [];
               if (!Array.isArray(issue.labels) || issue.labels.length === 0) {
@@ -491,6 +575,12 @@ jobs:
               }
               if (isUserStory && labelNames.length > 1) {
                 missing.push('- User Story issues must have only the "User Story" label (remove extra labels).');
+              }
+              let acStats = null;
+              if (isUserStory) {
+                const acResult = checkAcceptanceCriteria(issueBody);
+                missing.push(...acResult.missingMessages);
+                acStats = acResult.stats;
               }
 
               let parent = null;
@@ -562,6 +652,14 @@ jobs:
                 }
                 if (projectInfo.hasGhostHouses && !projectInfo.status) {
                   missing.push('- Project Status is missing (set Status in GhostHouses project).');
+                }
+                if (isUserStory && acStats && acStats.total > 0) {
+                  if (issue.state === 'open' && acStats.unchecked === 0) {
+                    missing.push('- Open User Story must have at least one unchecked Acceptance Criteria item.');
+                  }
+                  if (issue.state === 'closed' && projectInfo.status === 'Done' && acStats.unchecked > 0) {
+                    missing.push('- Closed User Story in Done must have all Acceptance Criteria items checked.');
+                  }
                 }
               } else {
                 missing.push('- Could not verify project/status; please ensure GhostHouses project + Status are set.');
