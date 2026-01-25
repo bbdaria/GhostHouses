@@ -13,6 +13,10 @@ Operationally we hardened the deployment layout: the frontend is served over HTT
 
 Stage A focused on completing the core workflows (buildings, streets, logs, import/export, cards) and hardening governance and documentation: issue conventions, automated issue checks (issue guard runs on events and daily), and updated README + submission docs. Remaining backlog is mostly external integration and deployment on the client’s Windows Server.
 
+Current status (explicit for the rubric’s “Current …” item):
+- Stage A is complete and stable, running on a temporary HTTPS host.
+- Remaining Stage B work depends on client IT access and external integrations.
+
 Plain-language summary:
 - We built a working system with clean data rules, reliable logs, and import/export tools.
 - We tightened operational setup (HTTPS frontend, internal backend/db, separate admin access).
@@ -55,6 +59,55 @@ What to say out loud:
 
 Plain-language summary:
 - User Stories are our official checklist, Stage A core workflows are done, and the remaining open items belong to Stage B (auth integration, template update, external systems).
+
+Rubric Q&A (user stories):
+- Question: Are user stories well defined and formulated?  
+  Answer: Yes, each User Story is a single, focused requirement with a clear title and scope, and every non‑story issue is linked back to a parent User Story.
+- Question: Do we have acceptance criteria?  
+  Answer: Yes, each User Story now starts with `## Acceptance Criteria` and has checkbox items, open stories keep at least one unchecked item, closed Done stories have all items checked.
+- Question: Do we know our actors?  
+  Answer: Yes, actors are explicit in the use‑case diagram and permissions, Viewer, Editor, Admin (plus IT/DB Admin for pgAdmin).
+- Question: Do we understand inter‑dependencies?  
+  Answer: Yes, we track dependencies, OTP depends on the client’s OTP provider, external sync depends on municipal APIs, deployment depends on client IT access, those are moved to Stage B.
+- Question: Are there changes from the HLD?  
+  Answer: Yes, we documented additions and removals, change is expected and acceptable, we added Excel export, strengthened import, removed log deletion, and added a template converter.
+- Question: Do we estimate remaining difficulty?  
+  Answer: Yes, remaining items are medium to hard due to external dependencies, OTP integration, external APIs, and client Windows Server deployment.
+
+Rubric Q&A (design and class diagram):
+- Question: Is the design feasible, maintainable, and extensible?  
+  Answer: Yes, it is layered and modular, Controllers are thin, rules live in one place, import and export are isolated utilities, adding external integrations can be done by adding adapters without rewriting controllers.
+- Question: Are there loop dependencies?  
+  Answer: No, the flow is one‑way, UI → Controllers → Services or Rules → Data, models are shared, there are no circular dependencies in the main path.
+- Question: Are interfaces used where extension makes sense?  
+  Answer: We keep clear boundaries and service style classes, external sync and auth are isolated so adding interfaces or adapters later is straightforward without changing business rules.
+- Question: Is responsibility encapsulated correctly?  
+  Answer: Yes, DTOs isolate the API shape, rules are centralized, persistence is in the data layer, and the UI does not know database details.
+
+Rubric Q&A (GitHub and repo quality):
+- Question: Do they have a clear repo and README?  
+  Answer: Yes, README explains how to run the stack and where the backend, frontend, and docs live, it includes deployment and local run instructions.
+- Question: Do they have a good branching system?  
+  Answer: Yes, we use main for stable releases, dev for ongoing work, and per‑issue branches following a fixed naming convention.
+
+Rubric Q&A (testing and deployment workflow):
+- Question: Do they have a workflow from commit to deployment?  
+  Answer: Yes, we work per issue, review and test manually, then merge to dev, then to main for stable releases, deployment is Docker‑based, and daily issue‑guard checks enforce process rules.  
+  Important note: deployment to the client Windows Server is delayed by client IT availability, so we use a temporary host for testing, this is a process constraint, not a design issue.
+
+Rubric Q&A (PoC):
+- Question: Did they prove their PoC from the HLD?  
+  Answer: Yes, the HLD PoC focused on Excel ingestion, we built a staged importer, validation rules, and a template converter, which goes beyond a demo and proves the concept in production‑style flow.  
+  Important note: even if the HLD PoC was limited, we validated the core ideas during Stage A.
+
+Rubric Q&A (risk assessment):
+- Question: What is the major risk and how is it mitigated?  
+  Answer: The major risk is external dependency, deployment on the client Windows Server and integration with municipal systems, we mitigate with a temporary hosted environment, clear network separation, and staged integration plans.  
+  The full risk table is in point 7 and includes past risks and current risks.
+
+Rubric Q&A (current backlog):
+- Question: Is the backlog too short or unusual?  
+  Answer: No, the open backlog contains Stage B items driven by external dependencies and planned features, it is visible in the GitHub Project board and does not contain filler issues.
 
 ---
 
