@@ -75,8 +75,8 @@ docker compose up -d --build
 - **pgAdmin**: `https://localhost:8443` (host port 8443 -> container 443).
 - Networks: `app-net` (frontend ↔ backend), `db-net` (backend ↔ db), `admin-net` (pgAdmin ↔ db).
 
-### Quick rebuild/run
-Reset data and rebuild:
+### Reset & Rebuild
+Main command (run from `project/`):
 ```bash
 cd project
 docker compose down -v && docker compose up -d --build
@@ -87,6 +87,24 @@ Rebuild without wiping data:
 docker compose down && docker compose up -d --build
 ```
 
+## Offline / No‑Internet Setup
+If you need to run without internet access, use the pre‑pulled image bundle in:
+`project/offline-images/ghosthouses-images.tar`
+
+Commands:
+```bash
+cd project
+docker load -i offline-images/ghosthouses-images.tar
+docker compose down -v
+docker compose up -d --build --pull=never
+```
+If the images were already built once, you can just run:
+```bash
+cd project
+docker compose up -d
+```
+See `project/offline-images/OFFLINE_IMAGES_README.docx` for details.
+
 ## Project Structure
 - `project/web-server/backend` – ASP.NET Core backend
 - `project/web-server/frontend` – React frontend
@@ -95,6 +113,7 @@ docker compose down && docker compose up -d --build
 - `.github/` – GitHub workflows and templates
 
 Documentation note: Stage A submission artifacts (docx + UML) live under `docs/Stage A submission/`.
+Internal technical notes live under `docs/internal/`.
 
 ## Conventions & Workflow
 See `docs/CONVENTIONS.md` for:
