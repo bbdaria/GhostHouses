@@ -29,6 +29,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Archives
+*.tar
+project/offline-images/
+
 # Environment files
 .env
 .env.*
