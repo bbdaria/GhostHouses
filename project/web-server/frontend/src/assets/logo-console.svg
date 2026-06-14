@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="logoTitle logoDesc">
+  <title id="logoTitle">מוקד ניהול מבנים</title>
+  <desc id="logoDesc">לוגו של הקונסולה עם טקסט וסמל הודעות</desc>
+  <rect width="120" height="120" rx="24" fill="#ffffff" stroke="#17233c" stroke-width="4" />
+  <path d="M28 36 h64 v12 h-64 z M28 60 h64 v12 h-64 z M28 84 h34 v12 h-34 z" fill="#17233c" />
+  <circle cx="92" cy="42" r="6" fill="#fbaf58" />
+  <circle cx="92" cy="68" r="6" fill="#58a5fb" />
+  <circle cx="92" cy="94" r="6" fill="#7c6fff" />
+  <path d="M32 26 h38 v12 h-38 z" fill="#b08d49" opacity="0.15" />
+</svg>
