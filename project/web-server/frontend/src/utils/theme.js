@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'gh-theme';
 
-const fallbackTheme = 'dark';
+const fallbackTheme = 'light';
 
 export function getStoredTheme() {
   if (typeof window === 'undefined') {
