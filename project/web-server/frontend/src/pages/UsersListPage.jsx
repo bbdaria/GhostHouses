@@ -290,7 +290,6 @@ export default function UsersListPage() {
     <main className="app users-app">
       <header className="page-header">
         <div>
-          <p className="eyebrow">ניהול</p>
           <h1>ניהול משתמשים</h1>
           <p className="subtitle">יצירה, עדכון ומחיקה של חשבונות מערכת.</p>
         </div>
