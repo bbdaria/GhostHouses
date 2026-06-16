@@ -90,7 +90,6 @@ export default function UserDetailsPage() {
       </button>
       <header className="page-header">
         <div>
-          <p className="eyebrow">חשבון</p>
           <h1>{user.username}</h1>
           <p className="subtitle">{user.email || 'ללא דוא"ל'}</p>
         </div>

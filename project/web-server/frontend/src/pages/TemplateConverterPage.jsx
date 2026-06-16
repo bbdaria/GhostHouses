@@ -52,7 +52,6 @@ export default function TemplateConverterPage() {
     <main className="app settings-app">
       <header className="page-header">
         <div>
-          <p className="eyebrow">כלי מנהל</p>
           <h1>ממיר תבניות</h1>
           <p className="subtitle">
             המירו את תבניות הלקוח לתבניות הייבוא של המערכת. הכלי זמני וניתן להסרה לאחר ההטמעה.
