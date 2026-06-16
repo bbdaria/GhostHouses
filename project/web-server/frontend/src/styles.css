@@ -104,6 +104,15 @@ main.app {
   gap: 0.2rem;
 }
 
+.brand .eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-gold);
+}
+
 .brand-mark {
   display: inline-grid;
   place-items: center;
@@ -119,9 +128,11 @@ main.app {
 }
 
 .brand h2 {
-  margin: 0.2rem 0 0;
+  margin: 0;
   color: var(--color-navy);
-  font-size: 1.2rem;
+  font-size: clamp(1.45rem, 1.8vw, 1.9rem);
+  line-height: 1.2;
+  font-weight: 750;
   letter-spacing: 0;
 }
 
