@@ -1445,25 +1445,56 @@ textarea:focus {
 }
 
 .theme-dark {
-  background-color: #101725;
-  color: #e5e7eb;
-  --color-bg: #101725;
-  --color-shell: #121c2e;
-  --color-surface: #182235;
-  --color-surface-muted: #202b3f;
-  --color-navy: #d8c28a;
-  --color-navy-soft: #f3e6bd;
-  --color-gold: #d6b86a;
-  --color-border: #36445c;
-  --color-border-strong: #52627b;
-  --color-text: #e5e7eb;
-  --color-muted: #a9b3c4;
+  /* Midnight charcoal palette mapped to existing project vars */
+  background-color: #0d1524;
+  color: #f8fafc;
+
+  /* New palette tokens */
+  --dark-page: #0d1524;
+  --dark-header: #101827;
+  --dark-surface: #172238;
+  --dark-surface-elevated: #1c2940;
+  --dark-input: #0f192a;
+  --dark-border: #344258;
+  --dark-text: #f8fafc;
+  --dark-text-muted: #cbd5e1;
+  --gold-primary: #d8b45f;
+  --gold-light: #f4e7c1;
+
+  /* Map existing variables used across the stylesheet to the new palette */
+  --color-bg: var(--dark-page);
+  --color-shell: var(--dark-header);
+  --color-surface: var(--dark-surface);
+  --color-surface-muted: var(--dark-surface-elevated);
+  --color-navy: var(--gold-primary);
+  --color-navy-soft: var(--gold-light);
+  --color-gold: var(--gold-primary);
+  --color-border: var(--dark-border);
+  --color-border-strong: #273446;
+  --color-text: var(--dark-text);
+  --color-muted: var(--dark-text-muted);
   --shadow-formal: 0 14px 30px rgba(0, 0, 0, 0.28);
 }
 
 .theme-dark body {
   background-color: var(--color-bg);
   color: var(--color-text);
+}
+
+/* Ensure main text color and muted labels use the new palette */
+.theme-dark {
+  color: var(--dark-text);
+}
+
+/* Primary action style in dark theme (gold on dark header) */
+.theme-dark button.primary {
+  background: var(--gold-primary);
+  color: var(--dark-header);
+  border-color: transparent;
+}
+
+.theme-dark button.primary:hover {
+  filter: brightness(0.98);
 }
 
 .theme-dark .app-shell {
@@ -1478,8 +1509,8 @@ textarea:focus {
 }
 
 .theme-dark .top-bar {
-  background: #151f31;
-  border-bottom-color: #d6b86a;
+  background: var(--dark-header);
+  border-bottom-color: var(--gold-primary);
 }
 
 .theme-dark .brand h2,
@@ -1488,45 +1519,66 @@ textarea:focus {
 .theme-dark button.ghost,
 .theme-dark .nickname,
 .theme-dark .tab {
-  color: var(--color-navy-soft);
+  color: var(--dark-text-muted);
 }
 
 .theme-dark .brand-mark {
-  background: #101725;
+  background: var(--dark-header);
 }
 
+/* Keep user pill readable but subtle */
 .theme-dark .user-pill {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(218, 180, 91, 0.28);
-  color: #ffffff;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(216, 180, 95, 0.12);
+  color: var(--dark-text);
 }
 
 .theme-dark .user-pill .muted {
-  color: #cbd5e1;
+  color: var(--dark-text-muted);
 }
 
 .theme-dark .user-pill strong {
-  color: #ffffff;
+  color: var(--dark-text);
 }
 
 .theme-dark .logout-btn {
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--dark-text);
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .theme-dark .logout-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
 }
 
+/* Active / hover nav state with gold accent */
 .theme-dark .nav-link.active,
 .theme-dark .nav-link:hover,
 .theme-dark button.ghost:hover {
-  background: rgba(214, 184, 106, 0.12);
-  border-color: rgba(214, 184, 106, 0.36);
+  background: #263147;
+  border-color: rgba(216, 180, 95, 0.55);
+  color: var(--gold-light);
 }
 
+/* Panels & elevated surfaces */
+.theme-dark .panel,
+.theme-dark .filters-card,
+.theme-dark .list-panel,
+.theme-dark .details-panel,
+.theme-dark .card-link,
+.theme-dark .modal-window {
+  background: rgba(23, 34, 56, 0.96);
+  border-color: var(--dark-border);
+  color: var(--dark-text);
+}
+
+.theme-dark .panel.elevated,
+.theme-dark .panel .elevated,
+.theme-dark .filters-card.elevated {
+  background: var(--dark-surface-elevated);
+}
+
+/* Inputs */
 .theme-dark .filters-grid input,
 .theme-dark .filters-grid select,
 .theme-dark .form-grid input,
@@ -1535,10 +1587,19 @@ textarea:focus {
 .theme-dark .import-edit-grid input,
 .theme-dark .import-edit-grid select,
 .theme-dark .import-edit-grid textarea,
-.theme-dark .auth-card input {
-  background: #101725;
-  color: var(--color-text);
-  border-color: var(--color-border);
+.theme-dark .auth-card input,
+.theme-dark input,
+.theme-dark select,
+.theme-dark textarea {
+  background: var(--dark-input);
+  color: var(--dark-text);
+  border-color: var(--dark-border);
+}
+
+.theme-dark input::placeholder,
+.theme-dark textarea::placeholder,
+.theme-dark .muted {
+  color: var(--dark-text-muted);
 }
 
 .theme-dark .modal-overlay {
@@ -1546,7 +1607,87 @@ textarea:focus {
 }
 
 .theme-dark .log-change-image {
-  background: #101725;
+  background: var(--dark-header);
+}
+
+/* Dark-mode: Login / auth page styles */
+.theme-dark .auth-page .auth-card {
+  background: rgba(16, 24, 39, 0.94);
+  color: var(--dark-text);
+
+  border: 1px solid rgba(216, 180, 95, 0.3);
+  border-radius: 1.25rem;
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.theme-dark .auth-page .auth-card h1 {
+  color: #f4e7c1;
+}
+
+.theme-dark .auth-page .auth-card .subtitle {
+  color: var(--dark-text-muted);
+}
+
+.theme-dark .auth-page .auth-card .muted {
+  color: var(--dark-text-muted);
+}
+
+.theme-dark .auth-page .auth-card label {
+  color: #e2e8f0;
+}
+
+.theme-dark .auth-page .auth-card input,
+.theme-dark .auth-page .auth-card select,
+.theme-dark .auth-page .auth-card textarea {
+  background: var(--dark-input);
+  color: var(--dark-text);
+  border: 1px solid var(--dark-border);
+}
+
+.theme-dark .auth-page .auth-card input::placeholder,
+.theme-dark .auth-page .auth-card textarea::placeholder {
+  color: var(--dark-text-muted);
+}
+
+.theme-dark .auth-page .auth-card input:focus,
+.theme-dark .auth-page .auth-card textarea:focus,
+.theme-dark .auth-page .auth-card select:focus {
+  outline: none;
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 0 3px rgba(216, 180, 95, 0.18);
+}
+
+.theme-dark .auth-page .auth-card button.primary {
+  background: var(--gold-primary);
+  color: var(--dark-header);
+  border-color: var(--gold-primary);
+}
+
+.theme-dark .auth-page .auth-card button.primary:hover:not(:disabled) {
+  background: #e4c574;
+}
+
+.theme-dark .auth-page .auth-card button.primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.theme-dark .auth-page .auth-card a {
+  color: #e4c574;
+}
+
+.theme-dark .auth-page .auth-card a:hover {
+  color: #f4e7c1;
+}
+
+.theme-dark .auth-page .auth-card .error {
+  color: #fda4af;
 }
 .export-table th:first-child,
 .export-table td:first-child {
