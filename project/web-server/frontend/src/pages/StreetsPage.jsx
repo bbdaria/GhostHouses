@@ -625,7 +625,6 @@ export default function StreetsPage() {
     <main className="app streets-app">
       <header className="page-header">
         <div>
-          <p className="eyebrow">מאגר רחובות</p>
           <h1>ניהול רחובות</h1>
           <p className="subtitle">הוספה, עדכון ומחיקה של רחובות זמינים למבנים.</p>
         </div>

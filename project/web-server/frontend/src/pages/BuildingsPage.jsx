@@ -1795,7 +1795,6 @@ export default function BuildingsPage() {
     <main className="app buildings-app">
       <header className="page-header">
         <div>
-          <p className="eyebrow">מאגר מבנים</p>
           <h1>מערכת ניהול מבנים נטושים</h1>
           <p className="subtitle">בצעו חיפושים, עדכונים ומעקב אחר לוגים עירוניים.</p>
         </div>

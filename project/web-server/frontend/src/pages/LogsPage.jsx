@@ -374,7 +374,6 @@ export default function LogsPage() {
     <main className="app logs-app">
       <header className="page-header">
         <div>
-          <p className="eyebrow">מרכז פעילות</p>
           <h1>יומן פעילויות</h1>
           <p className="subtitle">נטרו את כל השינויים שנרשמים במערכת.</p>
         </div>
