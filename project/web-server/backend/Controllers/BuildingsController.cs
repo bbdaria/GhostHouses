@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -33,6 +34,10 @@ public class BuildingsController : ApiControllerBase
     private const int NoStreetId = -1;
     private const string NoStreetName = "ללא שם רחוב";
     private const int MaxPhotoSizeBytes = 5 * 1024 * 1024;
+    private const int MaxServerGeocodePerRequest = 25;
+    private static readonly ConcurrentDictionary<string, GeocodedLocation> GeocodeCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, bool> GeocodeMissCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HttpClient GeocodeHttpClient = CreateGeocodeHttpClient();
 
     private readonly AppDbContext _context;
     private readonly IExternalDataService _externalDataService;
@@ -184,7 +189,18 @@ public class BuildingsController : ApiControllerBase
     {
         var query = _context.Buildings
             .AsNoTracking()
-            .Where(b => b.Latitude.HasValue && b.Longitude.HasValue);
+            .AsQueryable();
+
+        var hasBounds =
+            filter.North.HasValue ||
+            filter.South.HasValue ||
+            filter.East.HasValue ||
+            filter.West.HasValue;
+
+        if (!filter.IncludeUnmapped || hasBounds)
+        {
+            query = query.Where(b => b.Latitude.HasValue && b.Longitude.HasValue);
+        }
 
         if (filter.North.HasValue)
         {
@@ -219,23 +235,183 @@ public class BuildingsController : ApiControllerBase
         var items = await query
             .OrderBy(b => b.StreetName)
             .ThenBy(b => b.HouseNumber)
-            .Select(b => new BuildingMapDto(
+            .Select(b => new
+            {
                 b.Id,
-                b.StreetCode,
+                StreetId = b.StreetCode,
                 b.BuildingName,
-                b.Street != null ? b.Street.Name : b.StreetName,
+                StreetName = b.Street != null ? b.Street.Name : b.StreetName,
                 b.HouseNumber,
                 b.Neighborhood,
                 b.ShikumStatus,
                 b.BldSivug,
                 b.StatusSummary,
-                IsraelTime.Convert(b.StatusSummaryUpdatedAt),
-                b.Latitude!.Value,
-                b.Longitude!.Value))
+                StatusSummaryUpdatedAt = IsraelTime.Convert(b.StatusSummaryUpdatedAt),
+                b.Latitude,
+                b.Longitude
+            })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        var result = new List<BuildingMapDto>(items.Count);
+        var geocodeAttempts = 0;
+        foreach (var item in items)
+        {
+            var latitude = item.Latitude;
+            var longitude = item.Longitude;
+            var isGeocoded = false;
+            string? geocodedAddress = null;
+
+            if ((!latitude.HasValue || !longitude.HasValue) &&
+                filter.IncludeUnmapped &&
+                geocodeAttempts < MaxServerGeocodePerRequest)
+            {
+                geocodeAttempts++;
+                var geocoded = await TryGeocodeBuildingAddressAsync(
+                    item.StreetName,
+                    item.HouseNumber,
+                    cancellationToken);
+
+                if (geocoded is not null)
+                {
+                    latitude = geocoded.Latitude;
+                    longitude = geocoded.Longitude;
+                    geocodedAddress = geocoded.DisplayName;
+                    isGeocoded = true;
+                }
+            }
+
+            result.Add(new BuildingMapDto(
+                item.Id,
+                item.StreetId,
+                item.BuildingName,
+                item.StreetName,
+                item.HouseNumber,
+                item.Neighborhood,
+                item.ShikumStatus,
+                item.BldSivug,
+                item.StatusSummary,
+                item.StatusSummaryUpdatedAt,
+                latitude,
+                longitude,
+                latitude.HasValue && longitude.HasValue,
+                isGeocoded,
+                geocodedAddress));
+        }
+
+        return Ok(result);
     }
+
+    private static HttpClient CreateGeocodeHttpClient()
+    {
+        var client = new HttpClient();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("GhostHouses/1.0 map-geocoder");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        return client;
+    }
+
+    private static async Task<GeocodedLocation?> TryGeocodeBuildingAddressAsync(
+        string? streetName,
+        string? houseNumber,
+        CancellationToken cancellationToken)
+    {
+        var queries = BuildGeocodeQueries(streetName, houseNumber);
+        foreach (var query in queries)
+        {
+            if (GeocodeCache.TryGetValue(query, out var cached))
+            {
+                return cached;
+            }
+
+            if (GeocodeMissCache.ContainsKey(query))
+            {
+                continue;
+            }
+
+            var location = await QueryNominatimAsync(query, cancellationToken);
+
+            if (location is not null)
+            {
+                GeocodeCache[query] = location;
+                return location;
+            }
+
+            GeocodeMissCache[query] = true;
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string> BuildGeocodeQueries(string? streetName, string? houseNumber)
+    {
+        var street = streetName?.Trim();
+        var number = houseNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(street))
+        {
+            return Array.Empty<string>();
+        }
+
+        var streetAndNumber = string.IsNullOrWhiteSpace(number)
+            ? street
+            : $"{street} {number}";
+
+        return new[]
+        {
+            $"{streetAndNumber}, Haifa, Israel",
+            $"{streetAndNumber}, חיפה, ישראל",
+            $"{street}, Haifa, Israel",
+            $"{street}, חיפה, ישראל"
+        }
+        .Where(query => !string.IsNullOrWhiteSpace(query))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+    }
+
+    private static async Task<GeocodedLocation?> QueryNominatimAsync(
+        string query,
+        CancellationToken cancellationToken)
+    {
+        var url =
+            "https://nominatim.openstreetmap.org/search" +
+            $"?format=jsonv2&limit=1&countrycodes=il&q={Uri.EscapeDataString(query)}";
+
+        try
+        {
+            using var response = await GeocodeHttpClient.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var first = document.RootElement.EnumerateArray().FirstOrDefault();
+            if (first.ValueKind != JsonValueKind.Object ||
+                !first.TryGetProperty("lat", out var latElement) ||
+                !first.TryGetProperty("lon", out var lonElement))
+            {
+                return null;
+            }
+
+            if (!double.TryParse(latElement.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var latitude) ||
+                !double.TryParse(lonElement.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var longitude))
+            {
+                return null;
+            }
+
+            var displayName = first.TryGetProperty("display_name", out var displayNameElement)
+                ? displayNameElement.GetString()
+                : query;
+
+            return new GeocodedLocation(latitude, longitude, displayName ?? query);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private sealed record GeocodedLocation(double Latitude, double Longitude, string DisplayName);
 
     [HttpGet("{id:int}")]
     [Authorize(Policy = "Viewer")]

@@ -8,6 +8,48 @@ const DEFAULT_ZOOM = 13;
 const TILE_URL = import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIBUTION =
   import.meta.env.VITE_MAP_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const GEOCODE_CITY = import.meta.env.VITE_MAP_GEOCODE_CITY || 'חיפה';
+const GEOCODE_COUNTRY = import.meta.env.VITE_MAP_GEOCODE_COUNTRY || 'ישראל';
+const GEOCODE_CACHE_KEY = 'ghosthouses:geocoded-buildings:v1';
+const MAX_GEOCODE_PER_LOAD = 25;
+const GEOCODE_DELAY_MS = 1100;
+const HEBREW_LABELS = {
+  pageEyebrow: 'מפה',
+  pageTitle: 'מפת מבנים',
+  pageSubtitle: 'ניתן להזיז ולהגדיל את המפה, לבחור אזור, ולראות את מצב המבנים הרשומים במערכת.',
+  noBuildingTitle: 'לא נבחר מבנה',
+  noBuildingText: 'בחרו סימון על המפה או סמנו אזור כדי לראות פרטים.',
+  buildingNumber: 'מבנה',
+  address: 'כתובת',
+  status: 'סטטוס',
+  classification: 'סיווג',
+  area: 'אזור',
+  centerOnMap: 'מרכז במפה',
+  noCoordinates: 'למבנה אין קואורדינטות ולכן לא ניתן למרכז אותו במפה.',
+  all: 'הכול',
+  selectArea: 'בחירת אזור',
+  clear: 'ניקוי',
+  mappedLoading: 'טוען מבנים מהמפה...',
+  mappedCount: 'מבנים עם מיקום במפה',
+  firstCorner: 'בחרו את הפינה הראשונה של האזור.',
+  oppositeCorner: 'בחרו את הפינה הנגדית של האזור.',
+  selectedArea: 'אזור נבחר',
+  buildings: 'מבנים',
+  noSelectedArea: 'עדיין לא נבחר אזור.',
+  unmappedTitle: 'מבנים ללא מיקום במפה',
+  unmappedText: 'המבנים האלה קיימים במסד הנתונים, אבל חסרים להם קווי אורך/רוחב ולכן אי אפשר להציג אותם כסימון על המפה.',
+  noUnmapped: 'לכל המבנים המסוננים יש מיקום.',
+  needsAttention: 'דורש טיפול',
+  planned: 'בתכנון',
+  active: 'פעיל',
+  unknown: 'לא ידוע',
+  estimated: 'מיקום משוער לפי כתובת',
+  geocoding: 'מאתר כתובות על המפה...',
+  geocodedCount: 'מבנים מוקמו לפי כתובת',
+  failedLoad: 'טעינת המבנים למפה נכשלה.',
+  failedSelection: 'טעינת המבנים באזור הנבחר נכשלה.',
+  geocodingPartial: 'חלק מהכתובות לא אותרו. מומלץ להזין קווי אורך/רוחב במבנה עצמו.'
+};
 
 const statusClass = (status) => {
   if (!status || status === 'Unknown') return 'map-marker--unknown';
@@ -16,16 +58,77 @@ const statusClass = (status) => {
   return 'map-marker--attention';
 };
 
-const toBoundsQuery = (bounds) => ({
-  north: bounds.getNorth(),
-  south: bounds.getSouth(),
-  east: bounds.getEast(),
-  west: bounds.getWest()
-});
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const loadGeocodeCache = () => {
+  try {
+    const raw = localStorage.getItem(GEOCODE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveGeocodeCache = (cache) => {
+  try {
+    localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // The map still works without local storage caching.
+  }
+};
+
+const buildAddressQuery = (building) =>
+  [building.street, building.houseNumber, GEOCODE_CITY, GEOCODE_COUNTRY]
+    .filter((part) => part !== null && part !== undefined && String(part).trim() !== '')
+    .join(' ');
+
+const geocodeAddress = async (building) => {
+  const query = buildAddressQuery(building);
+  if (!query) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    limit: '1',
+    countrycodes: 'il',
+    q: query
+  });
+
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: {
+      Accept: 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const results = await response.json();
+  const first = Array.isArray(results) ? results[0] : null;
+  if (!first?.lat || !first?.lon) {
+    return null;
+  }
+
+  const latitude = Number(first.lat);
+  const longitude = Number(first.lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+    displayName: first.display_name || query
+  };
+};
 
 function markerIcon(building, isSelected) {
   return L.divIcon({
-    className: `map-marker ${statusClass(building.status)}${isSelected ? ' map-marker--selected' : ''}`,
+    className: `map-marker ${statusClass(building.status)}${building.isGeocoded ? ' map-marker--estimated' : ''}${
+      isSelected ? ' map-marker--selected' : ''
+    }`,
     html: `<span>${building.id}</span>`,
     iconSize: [34, 34],
     iconAnchor: [17, 17],
@@ -38,12 +141,17 @@ function popupContent(building) {
   const title = document.createElement('strong');
   const address = document.createElement('div');
   const status = document.createElement('div');
+  const source = document.createElement('small');
 
-  title.textContent = building.nickname || `Building ${building.id}`;
+  title.textContent = building.nickname || `${HEBREW_LABELS.buildingNumber} ${building.id}`;
   address.textContent = `${building.street || ''} ${building.houseNumber || ''}`.trim();
   status.textContent = statusToLabel(building.status);
+  source.textContent = building.isGeocoded ? HEBREW_LABELS.estimated : '';
 
   container.append(title, address, status);
+  if (building.isGeocoded) {
+    container.append(source);
+  }
   return container;
 }
 
@@ -51,8 +159,8 @@ function BuildingMiniCard({ building, onFocus }) {
   if (!building) {
     return (
       <div className="map-empty-state">
-        <strong>No building selected</strong>
-        <span>Select a marker or draw an area to inspect buildings.</span>
+        <strong>{HEBREW_LABELS.noBuildingTitle}</strong>
+        <span>{HEBREW_LABELS.noBuildingText}</span>
       </div>
     );
   }
@@ -60,25 +168,37 @@ function BuildingMiniCard({ building, onFocus }) {
   return (
     <article className="map-mini-card">
       <div>
-        <p className="eyebrow">Building #{building.id}</p>
+        <p className="eyebrow">
+          {HEBREW_LABELS.buildingNumber} #{building.id}
+        </p>
         <h3>{building.nickname || `${building.street} ${building.houseNumber}`}</h3>
       </div>
       <dl>
-        <dt>Address</dt>
+        <dt>{HEBREW_LABELS.address}</dt>
         <dd>
           {building.street} {building.houseNumber}
         </dd>
-        <dt>Status</dt>
+        <dt>{HEBREW_LABELS.status}</dt>
         <dd>{statusToLabel(building.status)}</dd>
-        <dt>Classification</dt>
+        <dt>{HEBREW_LABELS.classification}</dt>
         <dd>{building.bldSivug || '-'}</dd>
-        <dt>Area</dt>
+        <dt>{HEBREW_LABELS.area}</dt>
         <dd>{building.area || '-'}</dd>
+        {building.isGeocoded ? (
+          <>
+            <dt>{HEBREW_LABELS.estimated}</dt>
+            <dd>{building.geocodedAddress || '-'}</dd>
+          </>
+        ) : null}
       </dl>
       {building.statusSummary ? <p>{building.statusSummary}</p> : null}
-      <button type="button" className="ghost" onClick={() => onFocus(building)}>
-        Center on map
-      </button>
+      {building.isMapped ? (
+        <button type="button" className="ghost" onClick={() => onFocus(building)}>
+          {HEBREW_LABELS.centerOnMap}
+        </button>
+      ) : (
+        <p className="muted">{HEBREW_LABELS.noCoordinates}</p>
+      )}
     </article>
   );
 }
@@ -89,6 +209,7 @@ export default function MapPage() {
   const markersRef = useRef(null);
   const selectionRef = useRef(null);
   const selectionStartRef = useRef(null);
+  const didFitMarkersRef = useRef(false);
 
   const [mapReady, setMapReady] = useState(false);
   const [buildings, setBuildings] = useState([]);
@@ -101,6 +222,30 @@ export default function MapPage() {
   const [selectionHint, setSelectionHint] = useState('');
   const [filters, setFilters] = useState({ status: '', bldSivug: '' });
   const [sivugOptions, setSivugOptions] = useState([]);
+  const [geocodedById, setGeocodedById] = useState(() => loadGeocodeCache());
+  const [geocodeFailedIds, setGeocodeFailedIds] = useState(() => new Set());
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodingMessage, setGeocodingMessage] = useState('');
+  const mappedBuildings = useMemo(() => buildings.filter((building) => building.isMapped), [buildings]);
+  const geocodedBuildings = useMemo(
+    () =>
+      buildings
+        .filter((building) => !building.isMapped && geocodedById[building.id])
+        .map((building) => ({
+          ...building,
+          latitude: geocodedById[building.id].latitude,
+          longitude: geocodedById[building.id].longitude,
+          isMapped: true,
+          isGeocoded: true,
+          geocodedAddress: geocodedById[building.id].displayName
+        })),
+    [buildings, geocodedById]
+  );
+  const visibleBuildings = useMemo(() => [...mappedBuildings, ...geocodedBuildings], [mappedBuildings, geocodedBuildings]);
+  const unmappedBuildings = useMemo(
+    () => buildings.filter((building) => !building.isMapped && !geocodedById[building.id]),
+    [buildings, geocodedById]
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -152,14 +297,14 @@ export default function MapPage() {
   }, []);
 
   const loadBuildings = useCallback(
-    async (bounds) => {
+    async () => {
       setLoading(true);
       setError('');
       try {
-        const data = await api.fetchMapBuildings(toBoundsQuery(bounds), filters);
+        const data = await api.fetchMapBuildings(null, { ...filters, includeUnmapped: true });
         setBuildings(data);
       } catch (err) {
-        setError(err.message || 'Failed to load map buildings.');
+        setError(err.message || HEBREW_LABELS.failedLoad);
       } finally {
         setLoading(false);
       }
@@ -173,15 +318,9 @@ export default function MapPage() {
       return undefined;
     }
 
-    const handleMoveEnd = () => {
-      loadBuildings(map.getBounds());
-    };
-
-    map.on('moveend', handleMoveEnd);
-    handleMoveEnd();
+    loadBuildings();
 
     return () => {
-      map.off('moveend', handleMoveEnd);
     };
   }, [loadBuildings, mapReady]);
 
@@ -192,7 +331,7 @@ export default function MapPage() {
     }
 
     layer.clearLayers();
-    buildings.forEach((building) => {
+    visibleBuildings.forEach((building) => {
       const marker = L.marker([building.latitude, building.longitude], {
         icon: markerIcon(building, selectedBuilding?.id === building.id)
       });
@@ -201,7 +340,86 @@ export default function MapPage() {
       marker.on('click', () => setSelectedBuilding(building));
       marker.addTo(layer);
     });
-  }, [buildings, selectedBuilding?.id]);
+  }, [selectedBuilding?.id, visibleBuildings]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || didFitMarkersRef.current || visibleBuildings.length === 0) {
+      return;
+    }
+
+    const bounds = L.latLngBounds(visibleBuildings.map((building) => [building.latitude, building.longitude]));
+    map.fitBounds(bounds.pad(0.15), { maxZoom: 16 });
+    didFitMarkersRef.current = true;
+  }, [visibleBuildings, mapReady]);
+
+  useEffect(() => {
+    if (unmappedBuildings.length === 0 || geocoding) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      const nextCache = { ...loadGeocodeCache(), ...geocodedById };
+      const nextFailedIds = new Set(geocodeFailedIds);
+      const candidates = unmappedBuildings
+        .filter((building) => buildAddressQuery(building))
+        .filter((building) => !nextFailedIds.has(building.id))
+        .slice(0, MAX_GEOCODE_PER_LOAD);
+
+      if (candidates.length === 0) {
+        return;
+      }
+
+      setGeocoding(true);
+      setGeocodingMessage(HEBREW_LABELS.geocoding);
+      let misses = 0;
+      let changed = false;
+
+      for (const building of candidates) {
+        if (cancelled) {
+          return;
+        }
+
+        if (nextCache[building.id]) {
+          continue;
+        }
+
+        const result = await geocodeAddress(building);
+        if (cancelled) {
+          return;
+        }
+
+        if (result) {
+          nextCache[building.id] = result;
+          changed = true;
+        } else {
+          misses += 1;
+          nextFailedIds.add(building.id);
+          changed = true;
+        }
+
+        await sleep(GEOCODE_DELAY_MS);
+      }
+
+      if (!cancelled) {
+        if (changed) {
+          saveGeocodeCache(nextCache);
+          setGeocodedById({ ...nextCache });
+          setGeocodeFailedIds(new Set(nextFailedIds));
+        }
+        setGeocoding(false);
+        setGeocodingMessage(misses > 0 ? HEBREW_LABELS.geocodingPartial : '');
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [geocodeFailedIds, geocodedById, geocoding, unmappedBuildings]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -216,7 +434,7 @@ export default function MapPage() {
 
       if (!selectionStartRef.current) {
         selectionStartRef.current = event.latlng;
-        setSelectionHint('Select the opposite corner of the area.');
+        setSelectionHint(HEBREW_LABELS.oppositeCorner);
         return;
       }
 
@@ -233,11 +451,11 @@ export default function MapPage() {
       setSelectionLoading(true);
       setSelectionHint('');
       try {
-        const data = await api.fetchMapBuildings(toBoundsQuery(bounds), filters);
-        setSelectedBuildings(data);
-        setSelectedBuilding(data[0] || null);
+        const selected = visibleBuildings.filter((building) => bounds.contains([building.latitude, building.longitude]));
+        setSelectedBuildings(selected);
+        setSelectedBuilding(selected[0] || null);
       } catch (err) {
-        setError(err.message || 'Failed to load selected buildings.');
+        setError(err.message || HEBREW_LABELS.failedSelection);
       } finally {
         setSelectionLoading(false);
       }
@@ -245,21 +463,22 @@ export default function MapPage() {
 
     map.on('click', handleClick);
     map.getContainer().classList.toggle('map-selecting', selectionMode);
-    setSelectionHint(selectionMode ? 'Select the first corner of the area.' : '');
+    setSelectionHint(selectionMode ? HEBREW_LABELS.firstCorner : '');
 
     return () => {
       map.off('click', handleClick);
       map.getContainer().classList.remove('map-selecting');
     };
-  }, [filters, mapReady, selectionMode]);
+  }, [mapReady, selectionMode, visibleBuildings]);
 
   const visibleCountLabel = useMemo(() => {
-    if (loading) return 'Loading map buildings...';
-    return `${buildings.length} mapped buildings in view`;
-  }, [buildings.length, loading]);
+    if (loading) return HEBREW_LABELS.mappedLoading;
+    return `${visibleBuildings.length} ${HEBREW_LABELS.mappedCount}`;
+  }, [visibleBuildings.length, loading]);
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
+    didFitMarkersRef.current = false;
     setFilters((current) => ({ ...current, [name]: value }));
   };
 
@@ -278,6 +497,9 @@ export default function MapPage() {
     }
 
     setSelectedBuilding(building);
+    if (!building.isMapped || !Number.isFinite(building.latitude) || !Number.isFinite(building.longitude)) {
+      return;
+    }
     map.setView([building.latitude, building.longitude], Math.max(map.getZoom(), 17));
   };
 
@@ -285,15 +507,15 @@ export default function MapPage() {
     <main className="map-app">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Map</p>
-          <h1>Building locations</h1>
-          <p className="subtitle">Pan the map to inspect mapped abandoned buildings and select an area to review details.</p>
+          <p className="eyebrow">{HEBREW_LABELS.pageEyebrow}</p>
+          <h1>{HEBREW_LABELS.pageTitle}</h1>
+          <p className="subtitle">{HEBREW_LABELS.pageSubtitle}</p>
         </div>
         <div className="map-toolbar">
           <label>
-            Status
+            {HEBREW_LABELS.status}
             <select name="status" value={filters.status} onChange={handleFilterChange}>
-              <option value="">All</option>
+              <option value="">{HEBREW_LABELS.all}</option>
               {STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -302,9 +524,9 @@ export default function MapPage() {
             </select>
           </label>
           <label>
-            Classification
+            {HEBREW_LABELS.classification}
             <select name="bldSivug" value={filters.bldSivug} onChange={handleFilterChange}>
-              <option value="">All</option>
+              <option value="">{HEBREW_LABELS.all}</option>
               {sivugOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -320,10 +542,10 @@ export default function MapPage() {
               setSelectionMode((current) => !current);
             }}
           >
-            Select area
+            {HEBREW_LABELS.selectArea}
           </button>
           <button type="button" className="ghost" onClick={clearSelection}>
-            Clear
+            {HEBREW_LABELS.clear}
           </button>
         </div>
       </div>
@@ -335,6 +557,7 @@ export default function MapPage() {
           <div className="map-status-bar">
             <span>{visibleCountLabel}</span>
             {selectionHint ? <strong>{selectionHint}</strong> : null}
+            {geocoding ? <strong>{geocodingMessage}</strong> : null}
           </div>
           <div ref={mapElementRef} className="map-canvas" />
         </div>
@@ -345,12 +568,12 @@ export default function MapPage() {
           <div className="map-selection-panel">
             <div className="panel-header">
               <div>
-                <p className="eyebrow">Selected area</p>
-                <h3>{selectionLoading ? 'Loading...' : `${selectedBuildings.length} buildings`}</h3>
+                <p className="eyebrow">{HEBREW_LABELS.selectedArea}</p>
+                <h3>{selectionLoading ? HEBREW_LABELS.mappedLoading : `${selectedBuildings.length} ${HEBREW_LABELS.buildings}`}</h3>
               </div>
             </div>
             {selectedBuildings.length === 0 ? (
-              <p className="muted">No selected area yet.</p>
+              <p className="muted">{HEBREW_LABELS.noSelectedArea}</p>
             ) : (
               <ul className="map-selection-list">
                 {selectedBuildings.map((building) => (
@@ -367,18 +590,51 @@ export default function MapPage() {
             )}
           </div>
 
+          <div className="map-selection-panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">{HEBREW_LABELS.unmappedTitle}</p>
+                <h3>{unmappedBuildings.length}</h3>
+              </div>
+            </div>
+            <p className="muted">{unmappedBuildings.length > 0 ? HEBREW_LABELS.unmappedText : HEBREW_LABELS.noUnmapped}</p>
+            {geocodedBuildings.length > 0 ? (
+              <p className="success">
+                {geocodedBuildings.length} {HEBREW_LABELS.geocodedCount}
+              </p>
+            ) : null}
+            {geocodingMessage && !geocoding ? <p className="muted">{geocodingMessage}</p> : null}
+            {unmappedBuildings.length > 0 ? (
+              <ul className="map-selection-list">
+                {unmappedBuildings.slice(0, 25).map((building) => (
+                  <li key={building.id}>
+                    <button type="button" onClick={() => setSelectedBuilding(building)}>
+                      <strong>
+                        {building.street} {building.houseNumber}
+                      </strong>
+                      <span>{statusToLabel(building.status)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
           <div className="map-legend">
             <span>
-              <i className="map-dot map-dot--attention" /> Needs attention
+              <i className="map-dot map-dot--attention" /> {HEBREW_LABELS.needsAttention}
             </span>
             <span>
-              <i className="map-dot map-dot--planned" /> Planned
+              <i className="map-dot map-dot--planned" /> {HEBREW_LABELS.planned}
             </span>
             <span>
-              <i className="map-dot map-dot--active" /> Active
+              <i className="map-dot map-dot--active" /> {HEBREW_LABELS.active}
             </span>
             <span>
-              <i className="map-dot map-dot--unknown" /> Unknown
+              <i className="map-dot map-dot--unknown" /> {HEBREW_LABELS.unknown}
+            </span>
+            <span>
+              <i className="map-dot map-dot--estimated" /> {HEBREW_LABELS.estimated}
             </span>
           </div>
         </aside>

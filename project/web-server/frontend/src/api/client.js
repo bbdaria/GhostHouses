@@ -256,12 +256,13 @@ const api = {
   },
   async fetchMapBuildings(bounds = {}, filters = {}) {
     const params = new URLSearchParams();
-    if (bounds.north !== undefined) params.append('north', bounds.north);
-    if (bounds.south !== undefined) params.append('south', bounds.south);
-    if (bounds.east !== undefined) params.append('east', bounds.east);
-    if (bounds.west !== undefined) params.append('west', bounds.west);
+    if (bounds && bounds.north !== undefined) params.append('north', bounds.north);
+    if (bounds && bounds.south !== undefined) params.append('south', bounds.south);
+    if (bounds && bounds.east !== undefined) params.append('east', bounds.east);
+    if (bounds && bounds.west !== undefined) params.append('west', bounds.west);
     if (filters.status) params.append('status', filters.status);
     if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+    if (filters.includeUnmapped) params.append('includeUnmapped', 'true');
 
     const data = await request(`/buildings/map${params.toString() ? `?${params}` : ''}`);
     return (data || []).map((item) => ({
@@ -276,7 +277,10 @@ const api = {
       statusSummary: item.statusSummary || '',
       updatedAt: item.statusSummaryUpdatedAt,
       latitude: item.latitude,
-      longitude: item.longitude
+      longitude: item.longitude,
+      isMapped: Boolean(item.isMapped),
+      isGeocoded: Boolean(item.isGeocoded),
+      geocodedAddress: item.geocodedAddress
     }));
   },
   async exportBuildings(filters = {}, includeImages = false) {

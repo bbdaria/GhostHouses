@@ -44,7 +44,8 @@ public record BuildingMapParameters(
     double? East = null,
     double? West = null,
     BuildingStatus? Status = null,
-    int? BldSivug = null);
+    int? BldSivug = null,
+    bool IncludeUnmapped = false);
 
 public record BuildingMapDto(
     int Id,
@@ -57,8 +58,11 @@ public record BuildingMapDto(
     int? BldSivug,
     string StatusSummary,
     DateTime? StatusSummaryUpdatedAt,
-    double Latitude,
-    double Longitude);
+    double? Latitude,
+    double? Longitude,
+    bool IsMapped,
+    bool IsGeocoded,
+    string? GeocodedAddress);
 
 public record BuildingDetailDto(
     BuildingSummaryDto Summary,
