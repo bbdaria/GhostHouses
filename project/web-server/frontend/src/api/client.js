@@ -254,6 +254,31 @@ const api = {
     const data = await request(`/buildings${params.toString() ? `?${params}` : ''}`);
     return (data.items || []).map(mapBuildingSummary);
   },
+  async fetchMapBuildings(bounds = {}, filters = {}) {
+    const params = new URLSearchParams();
+    if (bounds.north !== undefined) params.append('north', bounds.north);
+    if (bounds.south !== undefined) params.append('south', bounds.south);
+    if (bounds.east !== undefined) params.append('east', bounds.east);
+    if (bounds.west !== undefined) params.append('west', bounds.west);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.bldSivug) params.append('bldSivug', filters.bldSivug);
+
+    const data = await request(`/buildings/map${params.toString() ? `?${params}` : ''}`);
+    return (data || []).map((item) => ({
+      id: item.id,
+      streetId: item.streetId,
+      street: item.streetName,
+      houseNumber: item.houseNumber,
+      nickname: item.buildingName,
+      area: item.neighborhood,
+      status: item.shikumStatus,
+      bldSivug: item.bldSivug,
+      statusSummary: item.statusSummary || '',
+      updatedAt: item.statusSummaryUpdatedAt,
+      latitude: item.latitude,
+      longitude: item.longitude
+    }));
+  },
   async exportBuildings(filters = {}, includeImages = false) {
     const params = new URLSearchParams();
     if (filters.street) params.append('street', filters.street);

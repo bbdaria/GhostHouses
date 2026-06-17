@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { initTheme } from './utils/theme.js';
+import 'leaflet/dist/leaflet.css';
 import './styles.css';
 
 initTheme();

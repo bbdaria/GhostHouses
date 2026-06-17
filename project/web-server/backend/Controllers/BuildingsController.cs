@@ -176,6 +176,67 @@ public class BuildingsController : ApiControllerBase
         return Ok(new PaginatedResult<BuildingSummaryDto>(items, total, filter.Page, filter.PageSize));
     }
 
+    [HttpGet("map")]
+    [Authorize(Policy = "Viewer")]
+    public async Task<ActionResult<IEnumerable<BuildingMapDto>>> GetMapBuildings(
+        [FromQuery] BuildingMapParameters filter,
+        CancellationToken cancellationToken)
+    {
+        var query = _context.Buildings
+            .AsNoTracking()
+            .Where(b => b.Latitude.HasValue && b.Longitude.HasValue);
+
+        if (filter.North.HasValue)
+        {
+            query = query.Where(b => b.Latitude <= filter.North.Value);
+        }
+
+        if (filter.South.HasValue)
+        {
+            query = query.Where(b => b.Latitude >= filter.South.Value);
+        }
+
+        if (filter.East.HasValue)
+        {
+            query = query.Where(b => b.Longitude <= filter.East.Value);
+        }
+
+        if (filter.West.HasValue)
+        {
+            query = query.Where(b => b.Longitude >= filter.West.Value);
+        }
+
+        if (filter.Status.HasValue)
+        {
+            query = query.Where(b => b.ShikumStatus == filter.Status.Value);
+        }
+
+        if (filter.BldSivug.HasValue)
+        {
+            query = query.Where(b => b.BldSivug == filter.BldSivug.Value);
+        }
+
+        var items = await query
+            .OrderBy(b => b.StreetName)
+            .ThenBy(b => b.HouseNumber)
+            .Select(b => new BuildingMapDto(
+                b.Id,
+                b.StreetCode,
+                b.BuildingName,
+                b.Street != null ? b.Street.Name : b.StreetName,
+                b.HouseNumber,
+                b.Neighborhood,
+                b.ShikumStatus,
+                b.BldSivug,
+                b.StatusSummary,
+                IsraelTime.Convert(b.StatusSummaryUpdatedAt),
+                b.Latitude!.Value,
+                b.Longitude!.Value))
+            .ToListAsync(cancellationToken);
+
+        return Ok(items);
+    }
+
     [HttpGet("{id:int}")]
     [Authorize(Policy = "Viewer")]
     public async Task<ActionResult<BuildingDetailDto>> GetBuilding(int id, CancellationToken cancellationToken)

@@ -38,6 +38,28 @@ public record BuildingSummaryDto(
     string? SubQuarter,
     string? StatisticalArea);
 
+public record BuildingMapParameters(
+    double? North = null,
+    double? South = null,
+    double? East = null,
+    double? West = null,
+    BuildingStatus? Status = null,
+    int? BldSivug = null);
+
+public record BuildingMapDto(
+    int Id,
+    int? StreetId,
+    string BuildingName,
+    string StreetName,
+    string HouseNumber,
+    string Neighborhood,
+    BuildingStatus ShikumStatus,
+    int? BldSivug,
+    string StatusSummary,
+    DateTime? StatusSummaryUpdatedAt,
+    double Latitude,
+    double Longitude);
+
 public record BuildingDetailDto(
     BuildingSummaryDto Summary,
     string? StatusSummary,
