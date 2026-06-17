@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS } from '../i18n.js';
+import logoImage from '../assets/logo.jpg';
 
 const NAV_LINKS = [
   { to: '/buildings', label: 'מאגר מבנים', roles: ['Viewer', 'Editor', 'Admin'] },
@@ -20,8 +21,11 @@ export default function AppLayout() {
     <div className="app-shell">
       <header className="top-bar">
         <div className="brand">
-          <p className="eyebrow">עירייה</p>
-          <h2>מוקד ניהול מבנים</h2>
+          <img src={logoImage} alt="לוגו הקונסולה" className="brand-logo" />
+          <div className="brand-copy">
+            <p className="eyebrow">פורטל עירוני רשמי</p>
+            <h2>מוקד ניהול מבנים</h2>
+          </div>
         </div>
         <nav className="nav-links">
           {allowedLinks.map((link) => (

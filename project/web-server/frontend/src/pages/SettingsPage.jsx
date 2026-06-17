@@ -45,7 +45,6 @@ export default function SettingsPage() {
     <main className="app settings-app">
       <header className="page-header">
         <div>
-          <p className="eyebrow">חשבון</p>
           <h1>הגדרות אישיות</h1>
           <p className="subtitle">ניהול פרטי משתמש, סיסמה והעדפות תצוגה.</p>
         </div>

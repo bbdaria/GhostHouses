@@ -37,7 +37,7 @@ export default function LoginPage() {
   return (
     <main className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1>מערכת העירייה</h1>
+        <h1>מערכת ניהול מבנים</h1>
         <p className="subtitle">הזינו שם משתמש וסיסמה לקבלת קוד אימות.</p>
         <label>
           שם משתמש
@@ -54,7 +54,7 @@ export default function LoginPage() {
           />
         </label>
         <button type="submit" className="primary" disabled={loading}>
-          {loading ? 'מחשב קוד…' : 'בקשת OTP'}
+          {loading ? 'מחשב קוד…' : 'שליחת קוד אימות'}
         </button>
         {error && <p className="error">{error}</p>}
         {otpChallenge && (
