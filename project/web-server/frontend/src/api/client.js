@@ -190,11 +190,21 @@ const mapBuildingDetail = (data) => ({
   complaints: data.complaints,
   photos: data.photos || [],
   gisLocation: data.gisLocation || null,
-  external: data.externalData || {},
   fields: Array.isArray(data.fields)
     ? data.fields.map((field) => mapBuildingField(field))
     : [],
   logs: (data.recentLogs || []).map((log) => mapLog(log))
+});
+
+const mapBuildingGisCandidate = (item) => ({
+  id: item.id,
+  street: item.streetName,
+  houseNumber: item.houseNumber,
+  nickname: item.buildingName,
+  bldSivug: item.bldSivug,
+  status: item.shikumStatus,
+  area: item.neighborhood,
+  gisLocation: item.gisLocation || null
 });
 
 const mapUser = (user) => ({
@@ -235,6 +245,21 @@ const api = {
   },
   async me() {
     return request('/auth/me');
+  },
+  async updateCurrentUser(form) {
+    return request('/auth/me', {
+      method: 'PUT',
+      body: { email: form.email }
+    });
+  },
+  async changeCurrentPassword(form) {
+    return request('/auth/me/password', {
+      method: 'POST',
+      body: {
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword
+      }
+    });
   },
   async fetchBuildings(filters = {}) {
     const params = new URLSearchParams();
@@ -365,6 +390,10 @@ const api = {
   async fetchBuilding(id) {
     const data = await request(`/buildings/${id}`);
     return mapBuildingDetail(data);
+  },
+  async fetchBuildingGisCandidates() {
+    const data = await request('/buildings/gis-candidates');
+    return Array.isArray(data) ? data.map(mapBuildingGisCandidate) : [];
   },
   async fetchBuildingFieldTemplate() {
     const data = await request('/buildings/template');

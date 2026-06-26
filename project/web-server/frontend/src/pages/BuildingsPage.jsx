@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
 import BuildingModal from '../components/BuildingModal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -52,6 +52,8 @@ const EXCEL_LABEL_OVERRIDES = {
 
 export default function BuildingsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const buildingIdParam = searchParams.get('buildingId');
   const { user } = useAuth();
   useDocumentTitle('מאגר מבנים - מוקד המבנים העירוני');
   const [filters, setFilters] = useState(initialFilters);
@@ -1117,6 +1119,18 @@ export default function BuildingsPage() {
     }
   };
 
+  useEffect(() => {
+    const buildingId = Number(buildingIdParam);
+    if (!Number.isFinite(buildingId) || buildingId <= 0) return;
+
+    openBuildingModal(buildingId, 'view');
+    setSearchParams((currentParams) => {
+      const nextParams = new URLSearchParams(currentParams);
+      nextParams.delete('buildingId');
+      return nextParams;
+    }, { replace: true });
+  }, [buildingIdParam, setSearchParams]);
+
   const handleCloseModal = () => {
     if (unsavedChanges) {
       const confirmed = window.confirm('ישנם שינויים שלא נשמרו. האם ברצונך לסגור ללא שמירה?');
@@ -1591,32 +1605,6 @@ export default function BuildingsPage() {
     });
     return copy;
   }, [buildings, sortConfig, sivugOptions, statusLabelMap, ownershipOptions]);
-
-  const tryParseJson = (value) => {
-    if (!value) return null;
-    try {
-      return JSON.parse(value);
-    } catch {
-      return null;
-    }
-  };
-
-  const externalEntries = useMemo(() => {
-    if (!selectedBuilding?.external) return [];
-    const entries = [
-      { key: 'gis', label: 'GIS' },
-      { key: 'water', label: 'מים' },
-      { key: 'electricity', label: 'חשמל' },
-      { key: 'tax', label: 'ארנונה' },
-      { key: 'complaints106', label: 'מוקד 106' }
-    ];
-    return entries
-      .map((entry) => ({
-        ...entry,
-        snapshot: selectedBuilding.external?.[entry.key]
-      }))
-      .filter((entry) => entry.snapshot);
-  }, [selectedBuilding]);
 
   const fieldsByCategory = useMemo(() => {
     const fields = selectedBuilding?.fields || [];
@@ -2776,7 +2764,6 @@ export default function BuildingsPage() {
         selectTablesByName={selectTablesByName}
         selectTablesLoading={selectTablesLoading}
         orderedFieldGroups={orderedFieldGroups}
-        externalEntries={externalEntries}
         isRehabStatusRequired={isRehabStatusRequired}
         isEditRehabStatusRequired={isEditRehabStatusRequired}
         isRequiredCreateColumn={isRequiredCreateColumn}

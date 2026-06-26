@@ -608,7 +608,7 @@ public static class BuildingsExcelImporter
             .Where(p => p.CanRead)
             .Where(p =>
             {
-                if (p.Name is nameof(Building.ExternalSnapshots) or nameof(Building.Street))
+                if (p.Name is nameof(Building.Street))
                 {
                     return false;
                 }
