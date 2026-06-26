@@ -41,6 +41,7 @@ export default function OtpPage() {
         <label>
           קוד OTP
           <input
+            className="auth-ltr-input auth-otp-input"
             value={otp}
             onChange={(event) => setOtp(event.target.value)}
             maxLength={6}
