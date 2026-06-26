@@ -7,6 +7,7 @@ using WebServer.Data;
 using WebServer.Models;
 using WebServer.Models.Dtos;
 using WebServer.Services;
+using WebServer.Utilities;
 
 namespace WebServer.Controllers;
 
@@ -493,7 +494,7 @@ public class StreetsController : ControllerBase
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         stream.Position = 0;
-        var fileName = $"streets-{DateTimeOffset.UtcNow:yyyy-MM-dd}.xlsx";
+        var fileName = $"streets-{IsraelTime.Convert(IsraelTime.NowUtc).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.xlsx";
         return new FileContentResult(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         {
             FileDownloadName = fileName

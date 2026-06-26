@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
+import { getIsraelDateStamp } from '../utils/formatDate.js';
 
 const initialFilters = { search: '' };
 const initialForm = { streetId: '', name: '' };
@@ -100,7 +101,7 @@ export default function StreetsPage() {
   const downloadExportFile = (blob, prefix = 'streets') => {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const dateStamp = new Date().toISOString().slice(0, 10);
+    const dateStamp = getIsraelDateStamp();
     link.href = url;
     link.download = `${prefix}-${dateStamp}.xlsx`;
     document.body.appendChild(link);

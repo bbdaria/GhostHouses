@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import api from '../api/client.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
+import { getIsraelDateStamp } from '../utils/formatDate.js';
 
 export default function TemplateConverterPage() {
   useDocumentTitle('ממיר תבניות - מוקד המבנים העירוני');
@@ -35,7 +36,7 @@ export default function TemplateConverterPage() {
       const link = document.createElement('a');
       link.href = url;
       const prefix = type === 'buildings' ? 'buildings-template' : 'streets-template';
-      link.download = `${prefix}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.download = `${prefix}-${getIsraelDateStamp()}.xlsx`;
       document.body.appendChild(link);
       link.click();
       link.remove();

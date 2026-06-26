@@ -11,7 +11,7 @@ import api from '../api/client.js';
 import BuildingModal from '../components/BuildingModal.jsx';
 import { STATUS_LABEL_MAP } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
-import { formatDateTime } from '../utils/formatDate.js';
+import { formatDateTime, getIsraelDateStamp } from '../utils/formatDate.js';
 import { HAIFA_CENTER, HAIFA_GIS_MAP_SERVICES } from '../gis/gisConfig.js';
 import { resolveBuildingLocation } from '../gis/resolveBuildingLocation.js';
 import {
@@ -717,7 +717,7 @@ export default function MapPage() {
       const blob = await api.exportBuildingCardsByIds(ids);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const date = new Date().toISOString().slice(0, 10);
+      const date = getIsraelDateStamp();
       link.href = url;
       link.download = `building-cards-map-area-${date}.pptx`;
       document.body.appendChild(link);
