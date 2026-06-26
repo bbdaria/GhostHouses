@@ -3,9 +3,10 @@ import { ROLE_LABELS } from '../i18n.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 import { applyTheme, getStoredTheme } from '../utils/theme.js';
+import api from '../api/client.js';
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const [profileForm, setProfileForm] = useState({ email: user?.email || '' });
   const [profileMessage, setProfileMessage] = useState('');
   const [passwordForm, setPasswordForm] = useState({
@@ -22,18 +23,35 @@ export default function SettingsPage() {
     setProfileForm((prev) => ({ ...prev, email: user?.email || '' }));
   }, [user]);
 
-  const handleProfileSubmit = (event) => {
+  const handleProfileSubmit = async (event) => {
     event.preventDefault();
-    setProfileMessage('שמירת כתובת הדוא"ל העצמית תתווסף בהמשך. לעת עתה זהו מסך הכנה.');
+    setProfileMessage('');
+    try {
+      await updateProfile(profileForm);
+      setProfileMessage('פרטי החשבון נשמרו.');
+    } catch (error) {
+      setProfileMessage(error.message || 'שמירת פרטי החשבון נכשלה.');
+    }
   };
 
-  const handlePasswordSubmit = (event) => {
+  const handlePasswordSubmit = async (event) => {
     event.preventDefault();
+    setPasswordMessage('');
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setPasswordMessage('הסיסמאות אינן תואמות.');
       return;
     }
-    setPasswordMessage('שינוי סיסמה עצמי יופעל כשחיבור ה-API יתעדכן.');
+    try {
+      await api.changeCurrentPassword(passwordForm);
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setPasswordMessage('הסיסמה עודכנה.');
+    } catch (error) {
+      setPasswordMessage(error.message || 'עדכון הסיסמה נכשל.');
+    }
   };
 
   const handleThemeChange = (value) => {

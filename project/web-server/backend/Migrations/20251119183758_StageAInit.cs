@@ -161,28 +161,6 @@ namespace WebServer.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "ExternalSystemSnapshots",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    BuildingId = table.Column<int>(type: "integer", nullable: false),
-                    SystemName = table.Column<string>(type: "text", nullable: false),
-                    Payload = table.Column<string>(type: "text", nullable: false),
-                    RetrievedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ExternalSystemSnapshots", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ExternalSystemSnapshots_Buildings_BuildingId",
-                        column: x => x.BuildingId,
-                        principalTable: "Buildings",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "BuildingLogs",
                 columns: table => new
                 {
@@ -229,11 +207,6 @@ namespace WebServer.Migrations
                 column: "StreetId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ExternalSystemSnapshots_BuildingId",
-                table: "ExternalSystemSnapshots",
-                column: "BuildingId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Users_Username",
                 table: "Users",
                 column: "Username",
@@ -253,9 +226,6 @@ namespace WebServer.Migrations
 
             migrationBuilder.DropTable(
                 name: "BuildingLogs");
-
-            migrationBuilder.DropTable(
-                name: "ExternalSystemSnapshots");
 
             migrationBuilder.DropTable(
                 name: "Users");

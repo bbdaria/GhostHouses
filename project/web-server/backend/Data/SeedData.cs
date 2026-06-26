@@ -27,32 +27,12 @@ public static class SeedData
             var admin = new AppUser
             {
                 Username = "admin",
-                Email = "admin@haifa.gov",
+                Email = "admin@haifa.muni.il",
                 Role = UserRole.Admin,
                 TwoFactorSecret = Guid.NewGuid().ToString("N")
             };
             admin.PasswordHash = hasher.HashPassword(admin, "admin");
             context.Users.Add(admin);
-
-            var editor = new AppUser
-            {
-                Username = "editor",
-                Email = "editor@haifa.gov",
-                Role = UserRole.Editor,
-                TwoFactorSecret = Guid.NewGuid().ToString("N")
-            };
-            editor.PasswordHash = hasher.HashPassword(editor, "editor");
-            context.Users.Add(editor);
-
-            var viewer = new AppUser
-            {
-                Username = "viewer",
-                Email = "viewer@haifa.gov",
-                Role = UserRole.Viewer,
-                TwoFactorSecret = Guid.NewGuid().ToString("N")
-            };
-            viewer.PasswordHash = hasher.HashPassword(viewer, "viewer");
-            context.Users.Add(viewer);
 
             await context.SaveChangesAsync(cancellationToken);
         }
@@ -67,7 +47,6 @@ public static class SeedData
         }
         await SyncBuildingIdSequenceAsync(context, cancellationToken);
     }
-
 
     private static async Task SyncBuildingIdSequenceAsync(AppDbContext context, CancellationToken cancellationToken)
     {

@@ -584,5 +584,4 @@ public class Building
     [FieldSpec(Category = "מידע כללי", FieldName = "תמונה", IncludeInEventLog = true)]
     public string PhotoUrls { get; set; } = string.Empty;
 
-    public ICollection<ExternalSystemSnapshot> ExternalSnapshots { get; set; } = new List<ExternalSystemSnapshot>();
 }
