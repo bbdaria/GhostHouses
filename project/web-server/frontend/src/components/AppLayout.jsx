@@ -5,6 +5,7 @@ import logoImage from '../assets/logo.jpg';
 
 const NAV_LINKS = [
   { to: '/buildings', label: 'מאגר מבנים', roles: ['Viewer', 'Editor', 'Admin'] },
+  { to: '/map', label: 'מפת GIS', roles: ['Viewer', 'Editor', 'Admin'] },
   { to: '/streets', label: 'מאגר רחובות', roles: ['Viewer', 'Editor', 'Admin'] },
   { to: '/logs', label: 'יומן פעילויות', roles: ['Viewer', 'Editor', 'Admin'] },
   { to: '/settings', label: 'הגדרות אישיות', roles: ['Viewer', 'Editor', 'Admin'] },

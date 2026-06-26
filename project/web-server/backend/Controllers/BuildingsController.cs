@@ -239,6 +239,7 @@ public class BuildingsController : ApiControllerBase
             IsraelTime.Convert(building.StatusSummaryUpdatedAt),
             building.Complaints,
             ParsePhotoUrls(building.PhotoUrls),
+            BuildGisLocation(building),
             externalData,
             logs,
             fields);
@@ -2024,6 +2025,19 @@ public class BuildingsController : ApiControllerBase
 
 
     private sealed record FieldChange(string ColumnName, string FieldName, string? OldValue, string? NewValue);
+
+    private static BuildingGisLocationDto BuildGisLocation(Building building)
+    {
+        return new BuildingGisLocationDto(
+            building.Latitude,
+            building.Longitude,
+            building.GushM,
+            building.ParcelM,
+            building.GushS,
+            building.ParcelS,
+            building.Street?.Name ?? building.StreetName,
+            building.HouseNumber);
+    }
 
     private static IReadOnlyList<BuildingFieldDto> BuildFieldsSnapshot(Building building, bool includePhotos = false)
     {
