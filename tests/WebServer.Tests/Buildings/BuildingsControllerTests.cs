@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using System.IO.Compression;
+using System.Xml.Linq;
 using WebServer.Controllers;
 using WebServer.Models;
 using WebServer.Models.Dtos;
@@ -11,12 +13,16 @@ namespace WebServer.Tests.Buildings;
 
 public class BuildingsControllerTests
 {
-    private static BuildingsController CreateController(WebServer.Data.AppDbContext db)
+    private static BuildingsController CreateController(
+        WebServer.Data.AppDbContext db,
+        IGisSnapshotService? gisSnapshotService = null,
+        IWebHostEnvironment? hostEnvironment = null)
     {
         return new BuildingsController(
             db,
             Mock.Of<IAuditService>(),
-            Mock.Of<IWebHostEnvironment>());
+            hostEnvironment ?? Mock.Of<IWebHostEnvironment>(),
+            gisSnapshotService ?? Mock.Of<IGisSnapshotService>());
     }
 
     [Fact]
@@ -155,4 +161,68 @@ public class BuildingsControllerTests
         Assert.Equal(32.81, candidate.GisLocation.Latitude);
         Assert.Equal(34.99, candidate.GisLocation.Longitude);
     }
+
+    [Fact]
+    public async Task ExportBuildingCard_KeepsGisSnapshotPlaceholder_WhenSnapshotExists()
+    {
+        await using var db = TestDb.Create();
+        db.Buildings.Add(new Building
+        {
+            Id = 11,
+            StreetName = "Main",
+            HouseNumber = "1",
+            BuildingName = "Card Building"
+        });
+        await db.SaveChangesAsync();
+
+        var gisSnapshot = new Mock<IGisSnapshotService>();
+        gisSnapshot
+            .Setup(service => service.CreateBuildingSnapshotAsync(It.IsAny<Building>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOnePixelPng());
+
+        var hostEnvironment = new Mock<IWebHostEnvironment>();
+        hostEnvironment
+            .SetupGet(env => env.ContentRootPath)
+            .Returns(FindBackendContentRoot());
+
+        var controller = CreateController(db, gisSnapshot.Object, hostEnvironment.Object);
+
+        var result = await controller.ExportBuildingCard(11, CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        using var pptxStream = new MemoryStream(file.FileContents);
+        using var archive = new ZipArchive(pptxStream, ZipArchiveMode.Read);
+
+        Assert.NotNull(archive.GetEntry("ppt/media/image2.png"));
+
+        using var relStream = archive.GetEntry("ppt/slides/_rels/slide1.xml.rels")!.Open();
+        var relDoc = XDocument.Load(relStream);
+        XNamespace rel = "http://schemas.openxmlformats.org/package/2006/relationships";
+        var mapRelationship = relDoc.Root!
+            .Elements(rel + "Relationship")
+            .SingleOrDefault(element => (string?)element.Attribute("Id") == "rId2");
+
+        Assert.NotNull(mapRelationship);
+        Assert.Equal("../media/image2.png", (string?)mapRelationship!.Attribute("Target"));
+    }
+
+    private static string FindBackendContentRoot()
+    {
+        var current = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (current is not null)
+        {
+            var candidate = Path.Combine(current.FullName, "project", "web-server", "backend");
+            if (File.Exists(Path.Combine(candidate, "Data", "BuildingCardTemplate.pptx")))
+            {
+                return candidate;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate backend content root.");
+    }
+
+    private static byte[] CreateOnePixelPng() =>
+        Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lW1sMwAAAABJRU5ErkJggg==");
 }
