@@ -189,6 +189,7 @@ const mapBuildingDetail = (data) => ({
   updatedAt: data.statusSummaryUpdatedAt,
   complaints: data.complaints,
   photos: data.photos || [],
+  gisLocation: data.gisLocation || null,
   external: data.externalData || {},
   fields: Array.isArray(data.fields)
     ? data.fields.map((field) => mapBuildingField(field))

@@ -41,11 +41,18 @@ export default function LoginPage() {
         <p className="subtitle">הזינו שם משתמש וסיסמה לקבלת קוד אימות.</p>
         <label>
           שם משתמש
-          <input name="username" value={form.username} onChange={handleChange} required />
+          <input
+            className="auth-ltr-input"
+            name="username"
+            value={form.username}
+            onChange={handleChange}
+            required
+          />
         </label>
         <label>
           סיסמה
           <input
+            className="auth-ltr-input"
             type="password"
             name="password"
             value={form.password}

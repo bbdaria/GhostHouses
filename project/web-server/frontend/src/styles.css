@@ -240,6 +240,7 @@ pre {
 
 .buildings-app,
 .dashboard-app,
+.gis-app,
 .streets-app,
 .logs-app,
 .users-app {
@@ -415,6 +416,83 @@ button.ghost:hover {
   border-radius: 0.45rem;
   padding: 1rem;
   margin-top: 1.5rem;
+  box-shadow: var(--shadow-formal);
+}
+
+.gis-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 1.5rem;
+  min-height: min(72vh, 760px);
+}
+
+.gis-side-panel,
+.gis-map-shell {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.45rem;
+  box-shadow: var(--shadow-formal);
+}
+
+.gis-side-panel {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.gis-side-panel h2 {
+  margin: 0;
+}
+
+.gis-building-summary {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.gis-building-summary div {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.65rem;
+}
+
+.gis-building-summary dt {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
+.gis-building-summary dd {
+  margin: 0.15rem 0 0;
+  font-weight: 700;
+}
+
+.gis-map-shell {
+  position: relative;
+  overflow: hidden;
+  min-height: 620px;
+}
+
+.gis-map {
+  width: 100%;
+  height: 100%;
+  min-height: 620px;
+  direction: ltr;
+}
+
+.gis-map .esri-view {
+  direction: ltr;
+}
+
+.gis-map-status {
+  position: absolute;
+  inset-inline-start: 1rem;
+  top: 1rem;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--color-border);
+  border-radius: 0.35rem;
+  padding: 0.65rem 0.85rem;
   box-shadow: var(--shadow-formal);
 }
 
@@ -1115,6 +1193,15 @@ tbody tr.active {
   .content-layout {
     grid-template-columns: 1fr;
   }
+
+  .gis-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .gis-map-shell,
+  .gis-map {
+    min-height: 520px;
+  }
 }
 
 .auth-page {
@@ -1159,6 +1246,16 @@ tbody tr.active {
   border: 1px solid var(--color-border);
   background: #ffffff;
   color: var(--color-text);
+}
+
+.auth-card input.auth-ltr-input {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: plaintext;
+}
+
+.auth-card input.auth-otp-input {
+  letter-spacing: 0.12em;
 }
 
 /* Form control focus across authenticated pages */
@@ -1379,6 +1476,8 @@ textarea:focus {
 .theme-light .list-panel,
 .theme-light .details-panel,
 .theme-light .panel,
+.theme-light .gis-side-panel,
+.theme-light .gis-map-shell,
 .theme-light .card-link,
 .theme-light .auth-card {
   background: var(--color-surface);
@@ -1389,6 +1488,8 @@ textarea:focus {
 .theme-light .list-panel,
 .theme-light .details-panel,
 .theme-light .panel,
+.theme-light .gis-side-panel,
+.theme-light .gis-map-shell,
 .theme-light .card-link,
 .theme-light .auth-card {
   background: var(--panel-background);
@@ -1565,6 +1666,8 @@ textarea:focus {
 .theme-dark .filters-card,
 .theme-dark .list-panel,
 .theme-dark .details-panel,
+.theme-dark .gis-side-panel,
+.theme-dark .gis-map-shell,
 .theme-dark .card-link,
 .theme-dark .modal-window {
   background: rgba(23, 34, 56, 0.96);
@@ -1576,6 +1679,12 @@ textarea:focus {
 .theme-dark .panel .elevated,
 .theme-dark .filters-card.elevated {
   background: var(--dark-surface-elevated);
+}
+
+.theme-dark .gis-map-status {
+  background: rgba(23, 34, 56, 0.94);
+  border-color: var(--dark-border);
+  color: var(--dark-text);
 }
 
 /* Inputs */
