@@ -43,14 +43,23 @@ GhostHouses is a municipal web system for tracking vacant/rehabilitation buildin
 - Export single or multiple building cards as PPTX.
 - Each selected building becomes a slide in a deck.
 - Template‑based with image replacement and aspect‑ratio preservation.
+- GIS snapshots are inserted into the card map placeholder when the building can be located.
+- The card building is highlighted in red, and nearby buildings that exist in the system database are highlighted in blue.
+
+### GIS
+- GIS map page using Haifa municipality map services.
+- Buildings can be opened from the Buildings page directly on the GIS map.
+- All mapped database buildings are shown on the map when GIS location data is available.
+- Users can select an area on the map and view/export the matching system buildings.
+- GIS is an active integration, not a mock.
 
 ### Admin Template Converter
 - Converter page to migrate legacy client templates into the current system format.
 
 ## Open / Planned Items (from open issues)
 - Real OTP implementation and stronger 2FA enforcement.
-- External municipality system sync (data integration).
-- Deployment on client Windows Server environment.
+- Additional external municipality system integrations beyond GIS, after the municipality provides real API/file contracts.
+- Final deployment/handoff on the client Windows Server environment.
 - Update building card template (awaiting client template).
 
 ## Tech Stack
