@@ -24,6 +24,7 @@ builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddHttpClient<IGisSnapshotService, ArcGisSnapshotService>();
 builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>

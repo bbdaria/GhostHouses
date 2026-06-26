@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 import { BUILDING_FIELD_PLACEHOLDERS, LAST_BUILDING_KEY } from '../constants.js';
-import { formatDate, formatTime, formatDateTime } from '../utils/formatDate.js';
+import { formatDate, formatTime, formatDateTime, getIsraelDateStamp } from '../utils/formatDate.js';
 
 const initialFilters = {
   streetId: '',
@@ -577,7 +577,7 @@ export default function BuildingsPage() {
   const downloadExportFile = (blob, prefix = 'buildings') => {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const dateStamp = new Date().toISOString().slice(0, 10);
+    const dateStamp = getIsraelDateStamp();
     const extension = blob?.type === 'application/zip' ? 'zip' : 'xlsx';
     link.href = url;
     link.download = `${prefix}-${dateStamp}.${extension}`;
@@ -590,7 +590,7 @@ export default function BuildingsPage() {
   const downloadPptxFile = (blob, prefix = 'building-cards') => {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const dateStamp = new Date().toISOString().slice(0, 10);
+    const dateStamp = getIsraelDateStamp();
     link.href = url;
     link.download = `${prefix}-${dateStamp}.pptx`;
     document.body.appendChild(link);

@@ -37,15 +37,18 @@ public class BuildingsController : ApiControllerBase
     private readonly AppDbContext _context;
     private readonly IAuditService _auditService;
     private readonly IWebHostEnvironment _hostEnvironment;
+    private readonly IGisSnapshotService _gisSnapshotService;
 
     public BuildingsController(
         AppDbContext context,
         IAuditService auditService,
-        IWebHostEnvironment hostEnvironment)
+        IWebHostEnvironment hostEnvironment,
+        IGisSnapshotService gisSnapshotService)
     {
         _context = context;
         _auditService = auditService;
         _hostEnvironment = hostEnvironment;
+        _gisSnapshotService = gisSnapshotService;
     }
 
     [HttpGet]
@@ -293,7 +296,8 @@ public class BuildingsController : ApiControllerBase
 
         var replacements = BuildCardReplacements(building);
         var (imageBytes, imageExtension) = GetCardImage(building);
-        var pptxBytes = BuildCardPptx(templatePath, replacements, imageBytes, imageExtension);
+        var mapImageBytes = await _gisSnapshotService.CreateBuildingSnapshotAsync(building, cancellationToken);
+        var pptxBytes = BuildCardPptx(templatePath, replacements, imageBytes, imageExtension, mapImageBytes);
         var fileName = $"building-card-{id}.pptx";
 
         return File(
@@ -333,17 +337,17 @@ public class BuildingsController : ApiControllerBase
             .Where(building => building is not null)
             .ToList();
 
-        var payloads = orderedBuildings
-            .Select(building =>
-            {
-                var replacements = BuildCardReplacements(building!);
-                var (imageBytes, imageExtension) = GetCardImage(building!);
-                return new BuildingCardPayload(replacements, imageBytes, imageExtension);
-            })
-            .ToList();
+        var payloads = new List<BuildingCardPayload>();
+        foreach (var building in orderedBuildings)
+        {
+            var replacements = BuildCardReplacements(building!);
+            var (imageBytes, imageExtension) = GetCardImage(building!);
+            var mapImageBytes = await _gisSnapshotService.CreateBuildingSnapshotAsync(building!, cancellationToken);
+            payloads.Add(new BuildingCardPayload(replacements, imageBytes, imageExtension, mapImageBytes));
+        }
 
         var pptxBytes = BuildCardsPptx(templatePath, payloads);
-        var fileName = $"building-cards-{DateTimeOffset.UtcNow:yyyy-MM-dd}.pptx";
+        var fileName = $"building-cards-{FileDateStamp()}.pptx";
 
         return File(
             pptxBytes,
@@ -520,7 +524,7 @@ public class BuildingsController : ApiControllerBase
 
         if (!includeImages)
         {
-            var fileName = $"buildings-{DateTimeOffset.UtcNow:yyyy-MM-dd}.xlsx";
+            var fileName = $"buildings-{FileDateStamp()}.xlsx";
             return File(
                 excelStream.ToArray(),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -561,9 +565,11 @@ public class BuildingsController : ApiControllerBase
             }
         }
 
-        var zipName = $"buildings-{DateTimeOffset.UtcNow:yyyy-MM-dd}.zip";
+        var zipName = $"buildings-{FileDateStamp()}.zip";
         return File(zipStream.ToArray(), "application/zip", zipName);
     }
+
+    private static string FileDateStamp() => IsraelTime.Convert(IsraelTime.NowUtc).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     public sealed record ExportSelectionRequest(List<int> Ids);
 
@@ -2110,11 +2116,11 @@ public class BuildingsController : ApiControllerBase
                 }
                 else if (raw is DateTime dt)
                 {
-                    value = dt.ToString("yyyy-MM-dd");
+                    value = FormatDateTimeValue(dt, p.Name == nameof(Building.StatusSummaryUpdatedAt));
                 }
                 else if (raw is DateTimeOffset dto)
                 {
-                    value = dto.ToString("O");
+                    value = FormatDateTimeOffsetValue(dto, includeTime: true);
                 }
                 else
                 {
@@ -2372,15 +2378,28 @@ public class BuildingsController : ApiControllerBase
 
         if (value is DateTime dt)
         {
-            return dt.ToString("yyyy-MM-dd");
+            return FormatDateTimeValue(dt, property.Name == nameof(Building.StatusSummaryUpdatedAt));
         }
 
         if (value is DateTimeOffset dto)
         {
-            return dto.ToString("O");
+            return FormatDateTimeOffsetValue(dto, includeTime: true);
         }
 
         return value.ToString();
+    }
+
+    private static string FormatDateTimeValue(DateTime value, bool includeTime)
+    {
+        var converted = IsraelTime.Convert((DateTime?)value);
+        var format = includeTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd";
+        return converted?.ToString(format, CultureInfo.InvariantCulture) ?? string.Empty;
+    }
+
+    private static string FormatDateTimeOffsetValue(DateTimeOffset value, bool includeTime)
+    {
+        var format = includeTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd";
+        return IsraelTime.Convert(value).ToString(format, CultureInfo.InvariantCulture);
     }
 
     private static bool ValuesEqual(object? oldValue, object? newValue)
@@ -2862,7 +2881,8 @@ public class BuildingsController : ApiControllerBase
     private sealed record BuildingCardPayload(
         IReadOnlyDictionary<string, string> Replacements,
         byte[]? ImageBytes,
-        string? ImageExtension);
+        string? ImageExtension,
+        byte[]? MapImageBytes);
 
     private static Dictionary<string, string> BuildCardReplacements(Building building)
     {
@@ -2946,7 +2966,8 @@ public class BuildingsController : ApiControllerBase
         string templatePath,
         IReadOnlyDictionary<string, string> replacements,
         byte[]? imageBytes,
-        string? imageExtension)
+        string? imageExtension,
+        byte[]? mapImageBytes)
     {
         const string imageRelId = "rId3";
         const string templateImagePrefix = "ppt/media/image3.";
@@ -2955,6 +2976,7 @@ public class BuildingsController : ApiControllerBase
         const string secondaryImageMarkerName = "אליפסה 31";
         var normalizedImageExtension = NormalizeCardImageExtension(imageExtension);
         var hasImage = imageBytes is { Length: > 0 } && !string.IsNullOrWhiteSpace(normalizedImageExtension);
+        var hasMapImage = mapImageBytes is { Length: > 0 };
         var targetImagePath = normalizedImageExtension is null
             ? null
             : $"ppt/media/image3.{normalizedImageExtension}";
@@ -3009,6 +3031,25 @@ public class BuildingsController : ApiControllerBase
 
                 if (string.Equals(entry.FullName, secondaryImagePath, StringComparison.OrdinalIgnoreCase))
                 {
+                    if (!hasMapImage || mapImageBytes is null)
+                    {
+                        continue;
+                    }
+
+                    byte[] outputMapBytes;
+                    try
+                    {
+                        var templateMapBytes = ReadAllBytes(entry.Open());
+                        outputMapBytes = BuildLetterboxedImage(mapImageBytes, templateMapBytes, "png");
+                    }
+                    catch
+                    {
+                        outputMapBytes = mapImageBytes;
+                    }
+
+                    var mapEntry = outputZip.CreateEntry(secondaryImagePath, CompressionLevel.Optimal);
+                    using var mapEntryStream = mapEntry.Open();
+                    mapEntryStream.Write(outputMapBytes, 0, outputMapBytes.Length);
                     continue;
                 }
 
@@ -3030,11 +3071,18 @@ public class BuildingsController : ApiControllerBase
                     {
                         RemovePictureByRelId(doc, imageRelId);
                     }
-                    RemovePictureByRelId(doc, secondaryImageRelId);
+                    if (!hasMapImage)
+                    {
+                        RemovePictureByRelId(doc, secondaryImageRelId);
+                    }
                     RemoveShapeByName(doc, secondaryImageMarkerName);
                     if (hasImage)
                     {
                         RemovePictureCropByRelId(doc, imageRelId);
+                    }
+                    if (hasMapImage)
+                    {
+                        RemovePictureCropByRelId(doc, secondaryImageRelId);
                     }
                     doc.Save(newEntryStream, System.Xml.Linq.SaveOptions.DisableFormatting);
                 }
@@ -3042,7 +3090,7 @@ public class BuildingsController : ApiControllerBase
                 {
                     var relDoc = XDocument.Load(entryStream);
                     UpdateSlideRelationship(relDoc, imageRelId, hasImage ? targetRelPath : null);
-                    UpdateSlideRelationship(relDoc, secondaryImageRelId, null);
+                    UpdateSlideRelationship(relDoc, secondaryImageRelId, hasMapImage ? "../media/image2.png" : null);
                     relDoc.Save(newEntryStream, System.Xml.Linq.SaveOptions.DisableFormatting);
                 }
                 else
@@ -3071,6 +3119,8 @@ public class BuildingsController : ApiControllerBase
             entry.FullName.StartsWith(templateImagePrefix, StringComparison.OrdinalIgnoreCase));
         var templateImagePath = templateImageEntry?.FullName;
         var templateImageBytes = templateImageEntry is null ? null : ReadAllBytes(templateImageEntry.Open());
+        var templateMapImageEntry = templateZip.GetEntry(secondaryImagePath);
+        var templateMapImageBytes = templateMapImageEntry is null ? null : ReadAllBytes(templateMapImageEntry.Open());
 
         using var slideEntryStream = templateZip.GetEntry("ppt/slides/slide1.xml")?.Open();
         using var slideRelsEntryStream = templateZip.GetEntry("ppt/slides/_rels/slide1.xml.rels")?.Open();
@@ -3144,6 +3194,7 @@ public class BuildingsController : ApiControllerBase
                     var slideIndex = i + 1;
                     var payload = payloads[i];
                     var hasImage = payload.ImageBytes is { Length: > 0 } && !string.IsNullOrWhiteSpace(payload.ImageExtension);
+                    var hasMapImage = payload.MapImageBytes is { Length: > 0 };
 
                     var slideDoc = new XDocument(slideTemplate);
                     ReplaceText(slideDoc, payload.Replacements);
@@ -3151,11 +3202,18 @@ public class BuildingsController : ApiControllerBase
                     {
                         RemovePictureByRelId(slideDoc, imageRelId);
                     }
-                    RemovePictureByRelId(slideDoc, secondaryImageRelId);
+                    if (!hasMapImage)
+                    {
+                        RemovePictureByRelId(slideDoc, secondaryImageRelId);
+                    }
                     RemoveShapeByName(slideDoc, secondaryImageMarkerName);
                     if (hasImage)
                     {
                         RemovePictureCropByRelId(slideDoc, imageRelId);
+                    }
+                    if (hasMapImage)
+                    {
+                        RemovePictureCropByRelId(slideDoc, secondaryImageRelId);
                     }
 
                     var slideEntry = outputZip.CreateEntry($"ppt/slides/slide{slideIndex}.xml", CompressionLevel.Optimal);
@@ -3167,6 +3225,8 @@ public class BuildingsController : ApiControllerBase
                     var slideRelsDoc = new XDocument(slideRelsTemplate);
                     string? imageTarget = null;
                     string? imagePath = null;
+                    string? mapImageTarget = null;
+                    string? mapImagePath = null;
 
                     if (hasImage)
                     {
@@ -3175,8 +3235,14 @@ public class BuildingsController : ApiControllerBase
                         imageTarget = $"../media/image3_{slideIndex}.{extension}";
                     }
 
+                    if (hasMapImage)
+                    {
+                        mapImagePath = $"ppt/media/image2_{slideIndex}.png";
+                        mapImageTarget = $"../media/image2_{slideIndex}.png";
+                    }
+
                     UpdateSlideRelationship(slideRelsDoc, imageRelId, imageTarget);
-                    UpdateSlideRelationship(slideRelsDoc, secondaryImageRelId, null);
+                    UpdateSlideRelationship(slideRelsDoc, secondaryImageRelId, mapImageTarget);
 
                     var slideRelEntry = outputZip.CreateEntry($"ppt/slides/_rels/slide{slideIndex}.xml.rels", CompressionLevel.Optimal);
                     using (var relStream = slideRelEntry.Open())
@@ -3198,6 +3264,19 @@ public class BuildingsController : ApiControllerBase
                         var imageEntry = outputZip.CreateEntry(imagePath!, CompressionLevel.Optimal);
                         using var imageStream = imageEntry.Open();
                         imageStream.Write(outputImageBytes, 0, outputImageBytes.Length);
+                    }
+
+                    if (hasMapImage && payload.MapImageBytes is not null)
+                    {
+                        var outputMapBytes = payload.MapImageBytes;
+                        if (templateMapImageBytes is not null)
+                        {
+                            outputMapBytes = BuildLetterboxedImage(payload.MapImageBytes, templateMapImageBytes, "png");
+                        }
+
+                        var mapImageEntry = outputZip.CreateEntry(mapImagePath!, CompressionLevel.Optimal);
+                        using var mapImageStream = mapImageEntry.Open();
+                        mapImageStream.Write(outputMapBytes, 0, outputMapBytes.Length);
                     }
                 }
             }
