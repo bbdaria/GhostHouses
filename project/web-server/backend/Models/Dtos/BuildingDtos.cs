@@ -44,9 +44,20 @@ public record BuildingDetailDto(
     DateTime? StatusSummaryUpdatedAt,
     string? Complaints,
     string[] Photos,
+    BuildingGisLocationDto GisLocation,
     BuildingExternalDataDto ExternalData,
     IEnumerable<BuildingLogDto> RecentLogs,
     IEnumerable<BuildingFieldDto> Fields);
+
+public record BuildingGisLocationDto(
+    double? Latitude,
+    double? Longitude,
+    int? GushM,
+    int? ParcelM,
+    int? GushS,
+    int? ParcelS,
+    string StreetName,
+    string HouseNumber);
 
 public record BuildingFieldDto(
     string Category,

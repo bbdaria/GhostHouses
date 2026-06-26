@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/AppLayout.jsx';
 import RequireAuth from './components/RequireAuth.jsx';
@@ -12,6 +13,8 @@ import TemplateConverterPage from './pages/TemplateConverterPage.jsx';
 import UserDetailsPage from './pages/UserDetailsPage.jsx';
 import UsersListPage from './pages/UsersListPage.jsx';
 
+const MapPage = lazy(() => import('./pages/MapPage.jsx'));
+
 export default function App() {
   return (
     <Routes>
@@ -21,6 +24,14 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="buildings" replace />} />
           <Route path="buildings" element={<BuildingsPage />} />
+          <Route
+            path="map"
+            element={
+              <Suspense fallback={<p className="muted">טוען מפה...</p>}>
+                <MapPage />
+              </Suspense>
+            }
+          />
           <Route path="streets" element={<StreetsPage />} />
           <Route path="logs" element={<LogsPage />} />
           <Route path="settings" element={<SettingsPage />} />

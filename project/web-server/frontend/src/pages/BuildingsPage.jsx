@@ -2214,6 +2214,16 @@ export default function BuildingsPage() {
                           >
                             יומן
                           </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/map?buildingId=${building.id}`);
+                            }}
+                          >
+                            GIS
+                          </button>
                           {canEdit && (
                             <button
                               type="button"
