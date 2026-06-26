@@ -35,18 +35,15 @@ public class BuildingsController : ApiControllerBase
     private const int MaxPhotoSizeBytes = 5 * 1024 * 1024;
 
     private readonly AppDbContext _context;
-    private readonly IExternalDataService _externalDataService;
     private readonly IAuditService _auditService;
     private readonly IWebHostEnvironment _hostEnvironment;
 
     public BuildingsController(
         AppDbContext context,
-        IExternalDataService externalDataService,
         IAuditService auditService,
         IWebHostEnvironment hostEnvironment)
     {
         _context = context;
-        _externalDataService = externalDataService;
         _auditService = auditService;
         _hostEnvironment = hostEnvironment;
     }
@@ -176,6 +173,28 @@ public class BuildingsController : ApiControllerBase
         return Ok(new PaginatedResult<BuildingSummaryDto>(items, total, filter.Page, filter.PageSize));
     }
 
+    [HttpGet("gis-candidates")]
+    [Authorize(Policy = "Viewer")]
+    public async Task<ActionResult<IEnumerable<BuildingGisCandidateDto>>> GetGisCandidates(CancellationToken cancellationToken)
+    {
+        var buildings = await _context.Buildings
+            .Include(b => b.Street)
+            .AsNoTracking()
+            .OrderBy(b => b.StreetName)
+            .ThenBy(b => b.HouseNumber)
+            .ToListAsync(cancellationToken);
+
+        return Ok(buildings.Select(b => new BuildingGisCandidateDto(
+            b.Id,
+            b.BuildingName,
+            b.Street?.Name ?? b.StreetName,
+            b.HouseNumber,
+            b.Neighborhood,
+            b.ShikumStatus,
+            b.BldSivug,
+            BuildGisLocation(b))));
+    }
+
     [HttpGet("{id:int}")]
     [Authorize(Policy = "Viewer")]
     public async Task<ActionResult<BuildingDetailDto>> GetBuilding(int id, CancellationToken cancellationToken)
@@ -189,7 +208,6 @@ public class BuildingsController : ApiControllerBase
             return NotFound();
         }
 
-        var externalData = await _externalDataService.GetBuildingDataAsync(id, cancellationToken);
         var logs = await _context.BuildingLogs
             .Where(l => l.BuildingId == id)
             .Include(l => l.CreatedByUser)
@@ -240,7 +258,6 @@ public class BuildingsController : ApiControllerBase
             building.Complaints,
             ParsePhotoUrls(building.PhotoUrls),
             BuildGisLocation(building),
-            externalData,
             logs,
             fields);
 
@@ -816,8 +833,6 @@ public class BuildingsController : ApiControllerBase
         foreach (var (building, changes, isCreate) in importLogs)
         {
             var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
-            var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
-
             _context.BuildingLogs.Add(new BuildingLog
             {
                 BuildingId = building.Id,
@@ -835,8 +850,7 @@ public class BuildingsController : ApiControllerBase
                     building.StatusSummary,
                     building.StatusSummaryUpdatedAt,
                     Changes = changes,
-                    Fields = fieldsSnapshot,
-                    ExternalData = externalData
+                    Fields = fieldsSnapshot
                 }),
                 Category = isCreate ? "Create" : "Edit",
                 Severity = "info",
@@ -1289,7 +1303,6 @@ public class BuildingsController : ApiControllerBase
                 foreach (var existing in existingToDelete)
                 {
                     var deleteSnapshot = BuildFieldsSnapshot(existing, includePhotos: true);
-                    var externalData = await _externalDataService.GetBuildingDataAsync(existing.Id, cancellationToken);
                     _context.BuildingLogs.Add(new BuildingLog
                     {
                         BuildingId = existing.Id,
@@ -1307,8 +1320,7 @@ public class BuildingsController : ApiControllerBase
                             existing.StatusSummary,
                             existing.StatusSummaryUpdatedAt,
                             Changes = BuildDeleteChanges(deleteSnapshot),
-                            Fields = deleteSnapshot,
-                            ExternalData = externalData
+                            Fields = deleteSnapshot
                         }),
                         Category = "מחיקה",
                         Severity = "warning",
@@ -1381,8 +1393,6 @@ public class BuildingsController : ApiControllerBase
         foreach (var (building, changes, isCreate) in importLogs)
         {
             var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
-            var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
-
             _context.BuildingLogs.Add(new BuildingLog
             {
                 BuildingId = building.Id,
@@ -1400,8 +1410,7 @@ public class BuildingsController : ApiControllerBase
                     building.StatusSummary,
                     building.StatusSummaryUpdatedAt,
                     Changes = changes,
-                    Fields = fieldsSnapshot,
-                    ExternalData = externalData
+                    Fields = fieldsSnapshot
                 }),
                 Category = isCreate ? "Create" : "Edit",
                 Severity = "info",
@@ -1527,7 +1536,6 @@ public class BuildingsController : ApiControllerBase
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
 
         var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
-        var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
         var createChanges = BuildCreateChanges(building);
         var createSnapshot = new
         {
@@ -1542,8 +1550,7 @@ public class BuildingsController : ApiControllerBase
             building.StatusSummary,
             building.StatusSummaryUpdatedAt,
             Changes = createChanges,
-            Fields = fieldsSnapshot,
-            ExternalData = externalData
+            Fields = fieldsSnapshot
         };
 
         _context.BuildingLogs.Add(new BuildingLog
@@ -1689,7 +1696,6 @@ public class BuildingsController : ApiControllerBase
         }
 
         var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
-        var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
         var changes = BuildCoreChanges(
             oldStreetName,
             oldHouseNumber,
@@ -1703,10 +1709,13 @@ public class BuildingsController : ApiControllerBase
         if (pendingIdChange.HasValue && pendingIdChange.Value != originalId)
         {
             var idProperty = typeof(Building).GetProperty(nameof(Building.Id));
-            var idChange = BuildChange(idProperty, originalId, pendingIdChange.Value);
-            if (idChange is not null)
+            if (idProperty is not null)
             {
-                changes.Add(idChange);
+                var idChange = BuildChange(idProperty, originalId, pendingIdChange.Value);
+                if (idChange is not null)
+                {
+                    changes.Add(idChange);
+                }
             }
         }
 
@@ -1723,8 +1732,7 @@ public class BuildingsController : ApiControllerBase
             building.StatusSummary,
             building.StatusSummaryUpdatedAt,
             Changes = changes,
-            Fields = fieldsSnapshot,
-            ExternalData = externalData
+            Fields = fieldsSnapshot
         };
 
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
@@ -1982,15 +1990,17 @@ public class BuildingsController : ApiControllerBase
         if (idProvided && desiredId.HasValue && desiredId.Value != originalId)
         {
             var idProperty = typeof(Building).GetProperty(nameof(Building.Id));
-            var idChange = BuildChange(idProperty, originalId, desiredId.Value);
-            if (idChange is not null)
+            if (idProperty is not null)
             {
-                changes.Add(idChange);
+                var idChange = BuildChange(idProperty, originalId, desiredId.Value);
+                if (idChange is not null)
+                {
+                    changes.Add(idChange);
+                }
             }
         }
 
         var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
-        var externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
         _context.BuildingLogs.Add(new BuildingLog
         {
@@ -2009,8 +2019,7 @@ public class BuildingsController : ApiControllerBase
                 building.StatusSummary,
                 building.StatusSummaryUpdatedAt,
                 Changes = changes,
-                Fields = fieldsSnapshot,
-                ExternalData = externalData
+                Fields = fieldsSnapshot
             }),
             Category = "Edit",
             Severity = "info",
@@ -2046,7 +2055,7 @@ public class BuildingsController : ApiControllerBase
             .Where(p => p.CanRead)
             .Where(p =>
             {
-                if (p.Name is nameof(Building.ExternalSnapshots) or nameof(Building.Street))
+                if (p.Name is nameof(Building.Street))
                 {
                     return false;
                 }
@@ -2530,7 +2539,7 @@ public class BuildingsController : ApiControllerBase
                 continue;
             }
 
-            if (property.Name is nameof(Building.Id) or nameof(Building.ExternalSnapshots) or nameof(Building.Street))
+            if (property.Name is nameof(Building.Id) or nameof(Building.Street))
             {
                 continue;
             }
@@ -2552,12 +2561,6 @@ public class BuildingsController : ApiControllerBase
 
         _context.Buildings.Add(replacement);
         await _context.SaveChangesAsync(cancellationToken);
-
-        await _context.ExternalSystemSnapshots
-            .Where(snapshot => snapshot.BuildingId == oldId)
-            .ExecuteUpdateAsync(
-                updates => updates.SetProperty(snapshot => snapshot.BuildingId, newId),
-                cancellationToken);
 
         await _context.BuildingLogs
             .Where(log => log.BuildingId == oldId)
@@ -2601,7 +2604,6 @@ public class BuildingsController : ApiControllerBase
 
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
         var fieldsSnapshot = BuildFieldsSnapshot(building, includePhotos: true);
-        var externalData = await _externalDataService.GetBuildingDataAsync(id, cancellationToken);
         var deleteSnapshot = new
         {
             building.Id,
@@ -2615,8 +2617,7 @@ public class BuildingsController : ApiControllerBase
             building.StatusSummary,
             building.StatusSummaryUpdatedAt,
             Changes = BuildDeleteChanges(fieldsSnapshot),
-            Fields = fieldsSnapshot,
-            ExternalData = externalData
+            Fields = fieldsSnapshot
         };
 
         _context.BuildingLogs.Add(new BuildingLog
@@ -2775,21 +2776,6 @@ public class BuildingsController : ApiControllerBase
 
         Guid? actorId = await ResolveActorIdAsync(cancellationToken);
         var restoredFields = BuildFieldsSnapshot(building, includePhotos: true);
-        BuildingExternalDataDto externalData;
-        try
-        {
-            externalData = await _externalDataService.GetBuildingDataAsync(building.Id, cancellationToken);
-        }
-        catch
-        {
-            externalData = new BuildingExternalDataDto(
-                new ExternalSystemSnapshotDto("GIS", "{}", IsraelTime.NowUtc),
-                new ExternalSystemSnapshotDto("Water", "{}", IsraelTime.NowUtc),
-                new ExternalSystemSnapshotDto("Electricity", "{}", IsraelTime.NowUtc),
-                new ExternalSystemSnapshotDto("Tax", "{}", IsraelTime.NowUtc),
-                new ExternalSystemSnapshotDto("CRM106", "{}", IsraelTime.NowUtc));
-        }
-
         var restoreSnapshot = new
         {
             building.Id,
@@ -2803,8 +2789,7 @@ public class BuildingsController : ApiControllerBase
             building.StatusSummary,
             building.StatusSummaryUpdatedAt,
             Changes = BuildCreateChanges(building),
-            Fields = restoredFields,
-            ExternalData = externalData
+            Fields = restoredFields
         };
 
         _context.BuildingLogs.Add(new BuildingLog

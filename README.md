@@ -65,8 +65,20 @@ GhostHouses is a municipal web system for tracking vacant/rehabilitation buildin
 ```bash
 git clone https://github.com/bbdaria/GhostHouses.git
 cd GhostHouses/project
+cp .env.example .env
+# Fill .env with the real secrets from the team shared drive / secure handoff mail.
 docker compose up -d --build
 ```
+
+Before running, make sure these local files exist:
+- `project/.env` with the real database, pgAdmin, and JWT secrets.
+- `project/certs/dev.crt` and `project/certs/dev.key` for HTTPS.
+
+Do not commit `project/.env` or anything under `project/certs/`. They are ignored by git and should be shared only through the team shared drive or secure handoff mail. See `project/HANDOFF_SECRETS.md` for the exact file locations.
+
+On a clean database, the backend creates one initial administrator account: `admin / admin`. Give this account only to the department owner during handoff. They can create the real municipality users and then change or disable the initial admin account.
+
+The deployment server must have outbound internet access so Docker can pull base images and build dependencies during `docker compose up -d --build`.
 
 ### Ports & Networking (local Docker)
 - **Frontend (Nginx)**: `https://localhost:443` (host port 443 -> container 443).
@@ -79,6 +91,8 @@ docker compose up -d --build
 Main command (run from `project/`):
 ```bash
 cd project
+cp .env.example .env
+# Fill .env with the real secrets if this is the first run on this machine.
 docker compose down -v && docker compose up -d --build
 ```
 
@@ -86,24 +100,6 @@ Rebuild without wiping data:
 ```bash
 docker compose down && docker compose up -d --build
 ```
-
-## Offline / No‑Internet Setup
-If you need to run without internet access, use the pre‑pulled image bundle in:
-`project/offline-images/ghosthouses-images.tar`
-
-Commands:
-```bash
-cd project
-docker load -i offline-images/ghosthouses-images.tar
-docker compose down -v
-docker compose up -d --build --pull=never
-```
-If the images were already built once, you can just run:
-```bash
-cd project
-docker compose up -d
-```
-See `project/offline-images/OFFLINE_IMAGES_README.docx` for details.
 
 ## Project Structure
 - `project/web-server/backend` – ASP.NET Core backend
@@ -128,7 +124,7 @@ GitHub Actions runs the issue‑guard workflow on issue events and daily to comm
 
 ## Local TLS Certificates
 The frontend and pgAdmin use local HTTPS. Self‑signed certs live in `project/certs/` (ignored by git).  
-If missing, generate them locally (see `project/certs/README_Certs.docx` for the exact command).
+If missing, get them from the team shared drive / secure handoff mail, or generate new local certificates and place them at `project/certs/dev.crt` and `project/certs/dev.key`.
 
 ---
 Maintained by the GhostHouses team.

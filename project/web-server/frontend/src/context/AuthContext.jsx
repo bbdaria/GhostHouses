@@ -79,6 +79,13 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('authToken');
   };
 
+  const updateProfile = async (form) => {
+    const profile = await api.updateCurrentUser(form);
+    setUser(profile);
+    localStorage.setItem('authUser', JSON.stringify(profile));
+    return profile;
+  };
+
   const value = useMemo(
     () => ({
       token,
@@ -88,6 +95,7 @@ export function AuthProvider({ children }) {
       login,
       verifyOtp,
       refreshProfile,
+      updateProfile,
       logout,
       setOtpChallenge
     }),

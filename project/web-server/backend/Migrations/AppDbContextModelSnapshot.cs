@@ -378,35 +378,6 @@ namespace WebServer.Migrations
                     b.ToTable("BuildingLogs");
                 });
 
-            modelBuilder.Entity("WebServer.Models.ExternalSystemSnapshot", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BuildingId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("RetrievedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SystemName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BuildingId");
-
-                    b.ToTable("ExternalSystemSnapshots");
-                });
-
             modelBuilder.Entity("WebServer.Models.Users.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -475,22 +446,6 @@ namespace WebServer.Migrations
                         .HasForeignKey("CreatedByUserId");
 
                     b.Navigation("CreatedByUser");
-                });
-
-            modelBuilder.Entity("WebServer.Models.ExternalSystemSnapshot", b =>
-                {
-                    b.HasOne("WebServer.Models.Building", "Building")
-                        .WithMany("ExternalSnapshots")
-                        .HasForeignKey("BuildingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Building");
-                });
-
-            modelBuilder.Entity("WebServer.Models.Building", b =>
-                {
-                    b.Navigation("ExternalSnapshots");
                 });
 
             modelBuilder.Entity("WebServer.Models.Street", b =>

@@ -45,9 +45,18 @@ public record BuildingDetailDto(
     string? Complaints,
     string[] Photos,
     BuildingGisLocationDto GisLocation,
-    BuildingExternalDataDto ExternalData,
     IEnumerable<BuildingLogDto> RecentLogs,
     IEnumerable<BuildingFieldDto> Fields);
+
+public record BuildingGisCandidateDto(
+    int Id,
+    string BuildingName,
+    string StreetName,
+    string HouseNumber,
+    string Neighborhood,
+    BuildingStatus ShikumStatus,
+    int? BldSivug,
+    BuildingGisLocationDto GisLocation);
 
 public record BuildingGisLocationDto(
     double? Latitude,
@@ -67,18 +76,6 @@ public record BuildingFieldDto(
     bool IncludeInEventLog,
     string? Value,
     int? RawValue);
-
-public record BuildingExternalDataDto(
-    ExternalSystemSnapshotDto Gis,
-    ExternalSystemSnapshotDto Water,
-    ExternalSystemSnapshotDto Electricity,
-    ExternalSystemSnapshotDto Tax,
-    ExternalSystemSnapshotDto Complaints106);
-
-public record ExternalSystemSnapshotDto(
-    string SystemName,
-    string Payload,
-    DateTimeOffset RetrievedAt);
 
 public record BuildingEditRequest
 {

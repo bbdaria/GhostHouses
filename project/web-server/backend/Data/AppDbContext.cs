@@ -17,7 +17,6 @@ public class AppDbContext : DbContext
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<BuildingLog> BuildingLogs => Set<BuildingLog>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
-    public DbSet<ExternalSystemSnapshot> ExternalSystemSnapshots => Set<ExternalSystemSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

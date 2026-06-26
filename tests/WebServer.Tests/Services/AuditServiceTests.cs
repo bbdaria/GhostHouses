@@ -1,40 +1,33 @@
 using Microsoft.EntityFrameworkCore;
-using WebServer.Data;
-using WebServer.Services;
 using WebServer.Models;
+using WebServer.Services;
+using WebServer.Tests.TestSupport;
+
+namespace WebServer.Tests.Services;
 
 public class AuditServiceTests
 {
-    private AppDbContext CreateDb()
-    {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-
-        return new AppDbContext(options);
-    }
-
     [Fact]
-    public async Task RecordAsync_CreatesAuditEntry()
+    public async Task RecordAsync_PersistsAuditEntryWithSerializedChanges()
     {
-        var db = CreateDb();
+        await using var db = TestDb.Create();
         var service = new AuditService(db);
+        var actorId = Guid.NewGuid();
 
         await service.RecordAsync(
-            userId: Guid.NewGuid(),
-            entityType: "Building",
-            entityId: "10",
-            action: "Create",
-            changes: new { Name = "Test" }
-        );
+            actorId,
+            nameof(Building),
+            "42",
+            "Update",
+            new { Field = "StatusSummary", Old = "old", New = "new" });
 
-        var entry = await db.AuditEntries.FirstOrDefaultAsync();
+        var entry = await db.AuditEntries.SingleAsync();
 
-        Assert.NotNull(entry);
-        Assert.Equal("Building", entry.EntityType);
-        Assert.Equal("10", entry.EntityId);
-        Assert.Equal("Create", entry.Action);
-        Assert.False(string.IsNullOrWhiteSpace(entry.Changes));
+        Assert.Equal(nameof(Building), entry.EntityType);
+        Assert.Equal("42", entry.EntityId);
+        Assert.Equal("Update", entry.Action);
+        Assert.Equal(actorId, entry.PerformedByUserId);
+        Assert.Contains("StatusSummary", entry.Changes);
         Assert.NotEqual(default, entry.CreatedAt);
     }
 }

@@ -20,20 +20,10 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod());
-});
-
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
-builder.Services.AddScoped<IExternalDataService, ExternalDataService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddHostedService<ExternalSyncWorker>();
 builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -50,7 +40,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 });
 
 var jwtSection = builder.Configuration.GetSection("Jwt");
-var signingKey = jwtSection["SigningKey"] ?? "super-secret-key-change-me";
+var signingKey = jwtSection["SigningKey"];
+if (string.IsNullOrWhiteSpace(signingKey) || signingKey.Length < 32)
+{
+    throw new InvalidOperationException("JWT signing key is missing or too short. Set Jwt__SigningKey in project/.env or in the deployment environment.");
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -88,21 +82,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
-var webRoot = app.Environment.WebRootPath;
-if (!string.IsNullOrWhiteSpace(webRoot) && File.Exists(Path.Combine(webRoot, "index.html")))
-{
-    app.UseDefaultFiles();
-    app.UseStaticFiles();
-}
-
 app.MapControllers();
-if (!string.IsNullOrWhiteSpace(webRoot) && File.Exists(Path.Combine(webRoot, "index.html")))
-{
-    app.MapFallbackToFile("index.html");
-}
 
 await SeedData.InitializeAsync(app.Services);
 

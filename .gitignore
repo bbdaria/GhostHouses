@@ -31,11 +31,12 @@ Thumbs.db
 
 # Archives
 *.tar
-project/offline-images/
 
 # Environment files
 .env
 .env.*
+!.env.example
+!**/.env.example
 
 # Local TLS certs
 project/certs/

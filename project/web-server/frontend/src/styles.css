@@ -446,6 +446,24 @@ button.ghost:hover {
   margin: 0;
 }
 
+.gis-panel-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.gis-panel-section + .gis-panel-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+}
+
+.gis-action-row,
+.gis-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .gis-building-summary {
   display: grid;
   gap: 0.75rem;
@@ -465,6 +483,52 @@ button.ghost:hover {
 .gis-building-summary dd {
   margin: 0.15rem 0 0;
   font-weight: 700;
+}
+
+.gis-details-button {
+  justify-content: center;
+  width: 100%;
+}
+
+.gis-results-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.gis-results-list h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.gis-results-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.gis-result-item {
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.45rem;
+  padding: 0.75rem;
+  background: var(--color-surface-muted);
+}
+
+.gis-result-item > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.gis-result-item span,
+.gis-result-item small {
+  color: var(--color-muted);
+}
+
+.gis-result-item .ghost {
+  padding: 0.45rem 0.7rem;
 }
 
 .gis-map-shell {
@@ -1102,47 +1166,6 @@ tbody tr.active {
 
 .details-section p {
   margin: 0;
-}
-
-.external-card {
-  margin-top: 0.75rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-muted);
-  border-radius: 0.45rem;
-  padding: 0.75rem;
-}
-
-.theme-light .external-card {
-  background: var(--color-surface-muted);
-}
-
-.external-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
-}
-
-.external-card dl {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.5rem 1rem;
-  margin: 0;
-}
-
-.external-card dt {
-  color: #9aa4b2;
-  font-size: 0.85rem;
-}
-
-.theme-light .external-card dt {
-  color: #475467;
-}
-
-.external-card dd {
-  margin: 0;
-  font-weight: 600;
 }
 
 .nickname {

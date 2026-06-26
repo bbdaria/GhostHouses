@@ -15,7 +15,6 @@ export default function BuildingModal({
   selectTablesByName,
   selectTablesLoading,
   orderedFieldGroups,
-  externalEntries,
   isRehabStatusRequired,
   isEditRehabStatusRequired,
   isRequiredCreateColumn,
@@ -415,7 +414,6 @@ export default function BuildingModal({
               {building ? (
                 <div className="details-card">
                   <div>
-                    <p className="eyebrow">פרטי מבנה</p>
                     <h3>
                       {building.street} {building.houseNumber}
                     </h3>
@@ -477,42 +475,6 @@ export default function BuildingModal({
                   ) : (
                     <p className="muted">אין שדות להצגה.</p>
                   )}
-
-                  <div className="details-section">
-                    <div className={`details-section__header`}>
-                      <h4>נתונים ממערכות חיצוניות</h4>
-                    </div>
-                    {externalEntries.length === 0 && <p className="muted">אין נתונים.</p>}
-                    {externalEntries.map((entry) => {
-                      const payload = entry.snapshot?.payload;
-                      const parsed = typeof payload === 'string' ? (() => { try { return JSON.parse(payload); } catch { return null; } })() : null;
-                      const status = parsed?.status || null;
-                      const notes = parsed?.notes || null;
-                      const updatedAt = parsed?.updatedAt || null;
-                      return (
-                        <div key={entry.key} className="external-card">
-                          <div className="external-card__header">
-                            <strong>{entry.label}</strong>
-                            <span className="muted small">{formatLogDate(entry.snapshot?.retrievedAt)}</span>
-                          </div>
-                          <dl>
-                            <div>
-                              <dt>סטטוס</dt>
-                              <dd>{displayOrDash(status)}</dd>
-                            </div>
-                            <div>
-                              <dt>עודכן במקור</dt>
-                              <dd>{updatedAt ? formatLogDate(updatedAt) : '—'}</dd>
-                            </div>
-                            <div>
-                              <dt>הערות</dt>
-                              <dd>{displayOrDash(notes)}</dd>
-                            </div>
-                          </dl>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               ) : null}
             </>
