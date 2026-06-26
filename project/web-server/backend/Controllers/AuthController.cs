@@ -17,17 +17,20 @@ public class AuthController : ApiControllerBase
     private readonly IPasswordHasher<AppUser> _passwordHasher;
     private readonly ITwoFactorService _twoFactorService;
     private readonly ITokenService _tokenService;
+    private readonly IAuditService _auditService;
 
     public AuthController(
         AppDbContext context,
         IPasswordHasher<AppUser> passwordHasher,
         ITwoFactorService twoFactorService,
-        ITokenService tokenService)
+        ITokenService tokenService,
+        IAuditService auditService)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _twoFactorService = twoFactorService;
         _tokenService = tokenService;
+        _auditService = auditService;
     }
 
     [HttpPost("login")]
@@ -99,5 +102,60 @@ public class AuthController : ApiControllerBase
         }
 
         return Ok(new UserSummaryDto(user.Id, user.Username, user.Email, user.Role, user.TwoFactorEnabled, user.CreatedAt));
+    }
+
+    [HttpPut("me")]
+    [Authorize(Policy = "Viewer")]
+    public async Task<ActionResult<UserSummaryDto>> UpdateCurrentUser(
+        [FromBody] UpdateCurrentUserRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await GetCurrentAppUser(cancellationToken);
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        user.Email = request.Email.Trim();
+        await _context.SaveChangesAsync(cancellationToken);
+        await _auditService.RecordAsync(user.Id, nameof(AppUser), user.Id.ToString(), "UpdateOwnProfile", new { request.Email }, cancellationToken);
+
+        return Ok(new UserSummaryDto(user.Id, user.Username, user.Email, user.Role, user.TwoFactorEnabled, user.CreatedAt));
+    }
+
+    [HttpPost("me/password")]
+    [Authorize(Policy = "Viewer")]
+    public async Task<ActionResult> ChangeCurrentPassword(
+        [FromBody] ChangeCurrentPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await GetCurrentAppUser(cancellationToken);
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        var passwordResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.CurrentPassword);
+        if (passwordResult == PasswordVerificationResult.Failed)
+        {
+            return BadRequest("Current password is incorrect.");
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
+        await _context.SaveChangesAsync(cancellationToken);
+        await _auditService.RecordAsync(user.Id, nameof(AppUser), user.Id.ToString(), "ChangeOwnPassword", null, cancellationToken);
+
+        return NoContent();
+    }
+
+    private async Task<AppUser?> GetCurrentAppUser(CancellationToken cancellationToken)
+    {
+        var userId = CurrentUserId;
+        if (userId is null)
+        {
+            return null;
+        }
+
+        return await _context.Users.FindAsync(new object[] { userId.Value }, cancellationToken);
     }
 }

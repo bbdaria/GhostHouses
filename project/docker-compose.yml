@@ -13,12 +13,16 @@ services:
       service: backend
     container_name: ghosthouses-backend
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: Production
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
-      POSTGRES_DB: ghosthouses
-      POSTGRES_USER: ghostadmin
-      POSTGRES_PASSWORD: ghostpass123
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in project/.env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in project/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in project/.env}
+      Jwt__Issuer: ${JWT_ISSUER:-ghosthouses}
+      Jwt__Audience: ${JWT_AUDIENCE:-ghosthouses-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in project/.env}
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-120}
     depends_on:
       db:
         condition: service_healthy

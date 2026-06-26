@@ -1,94 +1,56 @@
-using WebServer.Services;
-using WebServer.Models.Users;
 using Microsoft.Extensions.Logging.Abstractions;
+using WebServer.Models.Users;
+using WebServer.Services;
+
+namespace WebServer.Tests.Services;
 
 public class TwoFactorServiceTests
 {
-    private readonly TwoFactorService _service;
-
-    public TwoFactorServiceTests()
+    private static TwoFactorService CreateService()
     {
-        _service = new TwoFactorService(new NullLogger<TwoFactorService>());
+        return new TwoFactorService(new NullLogger<TwoFactorService>());
     }
 
     [Fact]
-    public void IssueCode_ReturnsSixDigitCodeAndToken()
+    public void IssueCode_ReturnsSixDigitCodeAndOpaqueToken()
     {
-        var user = new AppUser { Username = "bayan" };
+        var result = CreateService().IssueCode(new AppUser { Username = "admin" });
 
-        var result = _service.IssueCode(user);
-
-        Assert.NotNull(result.Code);
-        Assert.NotNull(result.Token);
         Assert.Equal(6, result.Code.Length);
-        Assert.True(int.TryParse(result.Code, out _));
+        Assert.True(result.Code.All(char.IsDigit));
         Assert.False(string.IsNullOrWhiteSpace(result.Token));
     }
-}
 
-
-
-
-
-
-using WebServer.Services;
-using WebServer.Models.Users;
-using Microsoft.Extensions.Logging.Abstractions;
-
-public class TwoFactorServiceTests
-{
     [Fact]
-    public void IssueCode_ReturnsCodeAndToken()
+    public void ValidateCode_ReturnsTrue_ForMatchingUnexpiredChallenge()
     {
-        var service = new TwoFactorService(new NullLogger<TwoFactorService>());
-
-        var user = new AppUser { Username = "bayan" };
-
-        var (code, token) = service.IssueCode(user);
-
-        Assert.False(string.IsNullOrWhiteSpace(code));
-        Assert.False(string.IsNullOrWhiteSpace(token));
-        Assert.Equal(6, code.Length);
-    }
-
-
-
-
-
-
-
-        [Fact]
-    public void ValidateCode_ReturnsTrue_ForCorrectValues()
-    {
-        var service = new TwoFactorService(new NullLogger<TwoFactorService>());
-
         var user = new AppUser
         {
             PendingTwoFactorCode = "123456",
-            PendingTwoFactorToken = "abc123",
+            PendingTwoFactorToken = "token",
             PendingTwoFactorExpiry = DateTimeOffset.UtcNow.AddMinutes(5)
         };
 
-        var result = service.ValidateCode(user, "123456", "abc123");
+        var isValid = CreateService().ValidateCode(user, "123456", "token");
 
-        Assert.True(result);
+        Assert.True(isValid);
     }
 
-
-
-        [Fact]
-    public void ValidateCode_ReturnsFalse_ForWrongCodeOrToken()
+    [Fact]
+    public void ValidateCode_ReturnsFalse_ForWrongOrExpiredChallenge()
     {
-        var service = new TwoFactorService(new NullLogger<TwoFactorService>());
-
+        var service = CreateService();
         var user = new AppUser
         {
             PendingTwoFactorCode = "123456",
-            PendingTwoFactorToken = "abc123",
+            PendingTwoFactorToken = "token",
             PendingTwoFactorExpiry = DateTimeOffset.UtcNow.AddMinutes(5)
         };
 
-        Assert.False(service.ValidateCode(user, "999999", "abc123"));
-        Assert.False(service.ValidateCode(user, "123456", "wrongtoken"));
-    }
+        Assert.False(service.ValidateCode(user, "000000", "token"));
+        Assert.False(service.ValidateCode(user, "123456", "wrong-token"));
 
+        user.PendingTwoFactorExpiry = DateTimeOffset.UtcNow.AddMinutes(-1);
+        Assert.False(service.ValidateCode(user, "123456", "token"));
+    }
+}

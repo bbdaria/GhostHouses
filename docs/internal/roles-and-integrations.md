@@ -1,11 +1,11 @@
-# GhostHouses Stage A – Roles & External Integrations
+# GhostHouses Roles & Integrations
 
 ## Roles & Permissions
 
 | Role   | Permissions |
 |--------|-------------|
-| Viewer | Authenticated read-only access. Can search and inspect buildings, see integrated external data, review building logs, and monitor the audit trail. |
-| Editor | Everything Viewer can do + add/update/remove buildings (with safeguards), add/edit building logs, and kick off sync jobs. Editors cannot manage users. |
+| Viewer | Authenticated read-only access. Can search and inspect buildings, open buildings on the GIS map, review building logs, and monitor the audit trail. |
+| Editor | Everything Viewer can do + add/update/remove buildings, import/export building and street data, add/edit building logs, and export building cards. Editors cannot manage users. |
 | Admin  | Full control. Includes Editor capabilities plus user lifecycle (create, update role, toggle 2FA, reset secrets) and log deletion. |
 
 ### Authorization approach
@@ -16,34 +16,32 @@
 
 ## Two-Factor Authentication
 
-1. `POST /api/auth/login` verifies username/password and issues a short-lived challenge token + 6 digit code. For Stage A the code is also echoed in the response/logs to simulate delivery.
+1. `POST /api/auth/login` verifies username/password and issues a short-lived challenge token + 6 digit code. The current handoff build still uses mock OTP delivery, so the code is returned to the UI instead of being sent by SMS/email.
 2. `POST /api/auth/verify-2fa` validates the code and returns a JWT.
 3. Admins can reset a user’s secret from the User Details screen.
 
-## External Data Interfaces (Stage A stubs)
+## GIS Integration
 
-| System          | Data captured (payload sample)                                  | Internal mapping |
-|-----------------|-----------------------------------------------------------------|------------------|
-| GIS             | Coordinates, polygon id, zoning notes                           | `Building.Longitude`, `Building.Latitude`, snapshot payload |
-| CRM-106         | Latest complaints / tickets                                    | `Building.Complaints`, `BuildingLog` entries, snapshots |
-| Water Utility   | `waterConsumption`, `daysSinceWaterConsumption`                 | Building consumption group |
-| Electricity     | `electricityConsumption`, `daysSinceElectricityConsumption`     | Building consumption group |
-| Tax / Arnona    | Property status, debts, arnona usage codes                      | `ArnonaCodeShimush`, `ArnonaDebt` |
+- The GIS map page is implemented in the frontend and uses the Haifa municipality map source.
+- Buildings are mapped from existing building fields, mainly address fields such as street name and house number. No new client-required building fields were added.
+- Users can open the GIS map from navigation, open a selected building on the map from the buildings table, click a building marker, and select an area to see matching buildings.
+- GIS is now an active feature, not a mock external-system snapshot.
 
-`ExternalDataService` produces mock JSON snapshots for each system and stores them in `ExternalSystemSnapshots`. The background worker refreshes the data every 30 minutes so the UI always displays something meaningful.
+## External Municipality Systems
 
-## Sync Hooks
-
-- `ExternalSyncWorker` iterates through buildings on a schedule and calls `ExternalDataService.SnapshotAsync`.
-- Extend `ExternalDataService` with actual HTTP or file integrations when the municipality interfaces become available.
+- Generic external municipality sync is not implemented in the handoff build.
+- The old mock snapshot service was removed so the handed-over system does not contain fake external data.
+- Future municipality integrations should be added as explicit services once the city provides real API/file contracts.
+- When real integrations are added, they should write normal audit entries and update the same building/log models used by the rest of the system.
 
 ## Usage Summary
 
-1. Run `docker compose up -d` to start PostgreSQL, pgAdmin, and the ASP.NET + React web server.
-2. Browse to `http://localhost:8080` → log in with `admin / ChangeMe!123`. The 2FA code appears on screen/logs for Stage A.
+1. From `project/`, run `docker compose down -v && docker compose up -d --build` to start PostgreSQL, pgAdmin, the ASP.NET backend, and the React/Nginx frontend.
+2. Browse to `https://localhost` or the deployed private-network URL. The 2FA code appears on screen because OTP delivery is still mocked.
 3. Explore modules:
    - **Dashboard**: entry point + navigation.
-   - **Buildings**: search/filter, open cards, add new buildings (Editor+), remove with justification.
-   - **Logs**: global view plus per building tab.
+   - **Buildings**: search/filter, open cards, add new buildings (Editor+), delete buildings, and open a building on the GIS map.
+   - **GIS Map**: view mapped buildings, focus a building, and select an area.
+   - **Logs**: global view plus per-building history.
    - **Users**: Admin-only creation, role updates, 2FA resets.
-4. Use pgAdmin (`http://localhost:8081`, `admin@example.com / adminpass123`) to inspect the schema generated by EF Core migrations (`Users`, `Buildings`, `BuildingLogs`, `AuditEntries`, `ExternalSystemSnapshots`).
+4. Use pgAdmin at `https://localhost:8443` with the credentials from `project/.env` to inspect the schema generated by EF Core migrations.

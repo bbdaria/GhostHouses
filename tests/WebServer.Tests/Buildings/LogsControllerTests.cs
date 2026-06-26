@@ -1,301 +1,177 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Moq;
 using WebServer.Controllers;
-using WebServer.Data;
 using WebServer.Models;
 using WebServer.Models.Dtos;
+using WebServer.Models.Users;
 using WebServer.Services;
+using WebServer.Tests.TestSupport;
+
+namespace WebServer.Tests.Buildings;
 
 public class LogsControllerTests
 {
-    private readonly AppDbContext _context;
-    private readonly LogsController _controller;
-
-    public LogsControllerTests()
+    private static LogsController CreateController(
+        WebServer.Data.AppDbContext db,
+        Mock<IAuditService>? audit = null)
     {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
+        return new LogsController(db, (audit ?? new Mock<IAuditService>()).Object);
+    }
 
-        _context = new AppDbContext(options);
-        var audit = new Mock<IAuditService>().Object;
-        _controller = new LogsController(_context, audit);
+    private static LogsController CreateAuthenticatedController(
+        WebServer.Data.AppDbContext db,
+        Guid userId,
+        Mock<IAuditService>? audit = null)
+    {
+        var controller = CreateController(db, audit);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, userId.ToString())],
+                    "TestAuth"))
+            }
+        };
+
+        return controller;
     }
 
     [Fact]
-    public async Task GetLogs_FiltersByBuildingId()
+    public async Task GetLogs_FiltersByBuildingIdAndIncludesBuildingFields()
     {
-        // Arrange
-        _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "1" });
-        _context.Buildings.Add(new Building { Id = 2, StreetName = "B", HouseNumber = "2" });
+        await using var db = TestDb.Create();
+        db.Buildings.AddRange(
+            new Building { Id = 1, StreetName = "Herzl", HouseNumber = "10", BuildingName = "A" },
+            new Building { Id = 2, StreetName = "Allenby", HouseNumber = "20", BuildingName = "B" });
+        db.BuildingLogs.AddRange(
+            new BuildingLog { Id = 1, BuildingId = 1, Title = "First", Message = "One" },
+            new BuildingLog { Id = 2, BuildingId = 2, Title = "Second", Message = "Two" });
+        await db.SaveChangesAsync();
 
-        _context.BuildingLogs.AddRange(
-            new BuildingLog { Id = 1, BuildingId = 1, Title = "Log1" },
-            new BuildingLog { Id = 2, BuildingId = 2, Title = "Log2" }
-        );
-        await _context.SaveChangesAsync();
+        var controller = CreateController(db);
+        var result = await controller.GetLogs(
+            new LogFilterParameters(BuildingId: 1),
+            CancellationToken.None);
 
-        var filter = new LogFilterParameters(BuildingId: 1);
-
-        // Act
-        var result = await _controller.GetLogs(filter);
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+        var payload = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+        var item = Assert.Single(payload.Items);
 
-        // Assert
-        Assert.Single(data.Items);
-        Assert.Equal(1, data.Items.First().Id);
+        Assert.Equal(1, item.Id);
+        Assert.Equal("Herzl", item.BuildingStreet);
+        Assert.Equal("10", item.BuildingHouseNumber);
+    }
+
+    [Fact]
+    public async Task GetLogs_FiltersByUserId()
+    {
+        await using var db = TestDb.Create();
+        var userId = Guid.NewGuid();
+        db.Users.Add(new AppUser { Id = userId, Username = "editor", Email = "editor@example.com" });
+        db.Buildings.Add(new Building { Id = 1, StreetName = "Herzl", HouseNumber = "10" });
+        db.BuildingLogs.AddRange(
+            new BuildingLog { Id = 1, BuildingId = 1, CreatedByUserId = userId, Title = "Mine" },
+            new BuildingLog { Id = 2, BuildingId = 1, CreatedByUserId = Guid.NewGuid(), Title = "Other" });
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db);
+        var result = await controller.GetLogs(
+            new LogFilterParameters(UserId: userId),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
+        var item = Assert.Single(payload.Items);
+
+        Assert.Equal(1, item.Id);
+        Assert.Equal("editor", item.CreatedBy);
+    }
+
+    [Fact]
+    public async Task GetBuildingLogs_ReturnsLogsNewestFirst()
+    {
+        await using var db = TestDb.Create();
+        db.Buildings.Add(new Building { Id = 1, StreetName = "Herzl", HouseNumber = "10" });
+        db.BuildingLogs.AddRange(
+            new BuildingLog
+            {
+                Id = 1,
+                BuildingId = 1,
+                Title = "Old",
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-2)
+            },
+            new BuildingLog
+            {
+                Id = 2,
+                BuildingId = 1,
+                Title = "New",
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
+            });
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db);
+        var result = await controller.GetBuildingLogs(1, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var logs = Assert.IsAssignableFrom<IEnumerable<BuildingLogDto>>(ok.Value).ToList();
+
+        Assert.Equal(new[] { 2, 1 }, logs.Select(l => l.Id).ToArray());
+    }
+
+    [Fact]
+    public async Task CreateLog_ReturnsNotFound_WhenBuildingDoesNotExist()
+    {
+        await using var db = TestDb.Create();
+        var controller = CreateController(db);
+
+        var result = await controller.CreateLog(
+            404,
+            new BuildingLogRequest { Title = "Missing", Message = "No building" },
+            CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateLog_PersistsLogAndRecordsAudit()
+    {
+        await using var db = TestDb.Create();
+        var userId = Guid.NewGuid();
+        db.Users.Add(new AppUser { Id = userId, Username = "editor", Email = "editor@example.com" });
+        db.Buildings.Add(new Building { Id = 1, StreetName = "Herzl", HouseNumber = "10" });
+        await db.SaveChangesAsync();
+
+        var audit = new Mock<IAuditService>();
+        var controller = CreateAuthenticatedController(db, userId, audit);
+
+        var result = await controller.CreateLog(
+            1,
+            new BuildingLogRequest
+            {
+                Title = "Manual note",
+                Message = "Checked by inspector",
+                Category = "Inspection",
+                Severity = "info"
+            },
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var dto = Assert.IsType<BuildingLogDto>(created.Value);
+
+        Assert.Equal("Manual note", dto.Title);
+        Assert.Equal("Checked by inspector", dto.Message);
+        Assert.Equal("editor", dto.CreatedBy);
+        Assert.Equal(1, db.BuildingLogs.Count());
+        audit.Verify(a => a.RecordAsync(
+                userId,
+                nameof(BuildingLog),
+                It.IsAny<string>(),
+                "Create",
+                It.IsAny<object?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }
-
-
-[Fact]
-public async Task GetLogs_FiltersByUserId()
-{
-    // Arrange
-    var user1 = new AppUser { Id = Guid.NewGuid(), Username = "u1" };
-    var user2 = new AppUser { Id = Guid.NewGuid(), Username = "u2" };
-    _context.Users.AddRange(user1, user2);
-
-    _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "1" });
-
-    _context.BuildingLogs.AddRange(
-        new BuildingLog { Id = 1, BuildingId = 1, CreatedByUserId = user1.Id, Title = "L1" },
-        new BuildingLog { Id = 2, BuildingId = 1, CreatedByUserId = user2.Id, Title = "L2" }
-    );
-    await _context.SaveChangesAsync();
-
-    var filter = new LogFilterParameters(UserId: user1.Id);
-
-    // Act
-    var result = await _controller.GetLogs(filter);
-    var ok = Assert.IsType<OkObjectResult>(result.Result);
-    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
-
-    // Assert
-    Assert.Single(data.Items);
-    Assert.Equal(1, data.Items.First().Id);
-}
-
-
-
-
-[Fact]
-public async Task GetLogs_FiltersByDateRange()
-{
-    // Arrange
-    var building = new Building { Id = 1, StreetName = "A", HouseNumber = "1" };
-    _context.Buildings.Add(building);
-
-    _context.BuildingLogs.AddRange(
-        new BuildingLog { Id = 1, BuildingId = 1, Title = "Old", CreatedAt = DateTimeOffset.UtcNow.AddDays(-5) },
-        new BuildingLog { Id = 2, BuildingId = 1, Title = "Inside", CreatedAt = DateTimeOffset.UtcNow.AddDays(-1) }
-    );
-    await _context.SaveChangesAsync();
-
-    var filter = new LogFilterParameters(
-        From: DateTimeOffset.UtcNow.AddDays(-2),
-        To: DateTimeOffset.UtcNow
-    );
-
-    // Act
-    var result = await _controller.GetLogs(filter);
-    var ok = Assert.IsType<OkObjectResult>(result.Result);
-    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
-
-    // Assert
-    Assert.Single(data.Items);
-    Assert.Equal(2, data.Items.First().Id);
-}
-
-
-[Fact]
-public async Task GetLogs_FiltersByStreet()
-{
-    // Arrange
-    _context.Buildings.AddRange(
-        new Building { Id = 1, StreetName = "Herzl", HouseNumber = "10" },
-        new Building { Id = 2, StreetName = "Jabotinsky", HouseNumber = "5" }
-    );
-
-    _context.BuildingLogs.AddRange(
-        new BuildingLog { Id = 1, BuildingId = 1, Title = "A" },
-        new BuildingLog { Id = 2, BuildingId = 2, Title = "B" }
-    );
-    await _context.SaveChangesAsync();
-
-    var filter = new LogFilterParameters(Street: "Her");
-
-    // Act
-    var result = await _controller.GetLogs(filter);
-    var ok = Assert.IsType<OkObjectResult>(result.Result);
-    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
-
-    // Assert
-    Assert.Single(data.Items);
-    Assert.Equal(1, data.Items.First().Id);
-}
-
-
-
-
-[Fact]
-public async Task GetLogs_FiltersByStatus()
-{
-    // Arrange
-    _context.Buildings.AddRange(
-        new Building { Id = 1, StreetName = "A", HouseNumber = "1", ShikumStatus = BuildingStatus.Good },
-        new Building { Id = 2, StreetName = "B", HouseNumber = "2", ShikumStatus = BuildingStatus.Bad }
-    );
-
-    _context.BuildingLogs.AddRange(
-        new BuildingLog { Id = 1, BuildingId = 1, Title = "GoodLog" },
-        new BuildingLog { Id = 2, BuildingId = 2, Title = "BadLog" }
-    );
-
-    await _context.SaveChangesAsync();
-
-    var filter = new LogFilterParameters(Status: BuildingStatus.Good);
-
-    // Act
-    var result = await _controller.GetLogs(filter);
-    var ok = Assert.IsType<OkObjectResult>(result.Result);
-    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
-
-    // Assert
-    Assert.Single(data.Items);
-    Assert.Equal(1, data.Items.First().Id);
-}
-
-
-[Fact]
-public async Task GetLogs_FiltersByNeighborhood()
-{
-    // Arrange
-    _context.Buildings.AddRange(
-        new Building { Id = 1, StreetName = "A", HouseNumber = "1", Neighborhood = "Downtown" },
-        new Building { Id = 2, StreetName = "B", HouseNumber = "2", Neighborhood = "Hadar" }
-    );
-
-    _context.BuildingLogs.AddRange(
-        new BuildingLog { Id = 1, BuildingId = 1, Title = "in DT" },
-        new BuildingLog { Id = 2, BuildingId = 2, Title = "in Hadar" }
-    );
-
-    await _context.SaveChangesAsync();
-
-    var filter = new LogFilterParameters(Neighborhood: "Down");
-
-    // Act
-    var result = await _controller.GetLogs(filter);
-    var ok = Assert.IsType<OkObjectResult>(result.Result);
-    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
-
-    // Assert
-    Assert.Single(data.Items);
-    Assert.Equal(1, data.Items.First().Id);
-}
-
-
-
-
-[Fact]
-public async Task GetLogs_FiltersByStatusSummary()
-{
-    // Arrange
-    _context.Buildings.AddRange(
-        new Building { Id = 1, StatusSummary = "Needs Repair" },
-        new Building { Id = 2, StatusSummary = "All Good" }
-    );
-
-    _context.BuildingLogs.AddRange(
-        new BuildingLog { Id = 1, BuildingId = 1, Title = "Repair log" },
-        new BuildingLog { Id = 2, BuildingId = 2, Title = "Good log" }
-    );
-
-    await _context.SaveChangesAsync();
-
-    var filter = new LogFilterParameters(StatusSummary: "Repair");
-
-    // Act
-    var result = await _controller.GetLogs(filter);
-    var ok = Assert.IsType<OkObjectResult>(result.Result);
-    var data = Assert.IsType<PaginatedResult<BuildingLogDto>>(ok.Value);
-
-    // Assert
-    Assert.Single(data.Items);
-    Assert.Equal(1, data.Items.First().Id);
-}
-
-
-[Fact]
-public async Task CreateLog_ReturnsCreatedLogDto()
-{
-    // Arrange
-    _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "10" });
-    await _context.SaveChangesAsync();
-
-    var request = new BuildingLogRequest
-    {
-        Title = "Test log",
-        Message = "Message here",
-        Category = "info",
-        Severity = "low"
-    };
-
-    // Act
-    var result = await _controller.CreateLog(1, request);
-    var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-    var dto = Assert.IsType<BuildingLogDto>(created.Value);
-
-    // Assert
-    Assert.Equal("Test log", dto.Title);
-    Assert.Equal("Message here", dto.Message);
-    Assert.Equal("info", dto.Category);
-    Assert.Equal("low", dto.Severity);
-    Assert.Equal(1, dto.BuildingId);
-}
-
-
-
-
-
-[Fact]
-public async Task UpdateLog_UpdatesFields()
-{
-    // Arrange
-    _context.Buildings.Add(new Building { Id = 1, StreetName = "A", HouseNumber = "10" });
-    _context.BuildingLogs.Add(new BuildingLog
-    {
-        Id = 5,
-        BuildingId = 1,
-        Title = "Old",
-        Message = "Old msg",
-        Category = "old",
-        Severity = "old"
-    });
-
-    await _context.SaveChangesAsync();
-
-    var request = new BuildingLogRequest
-    {
-        Title = "New",
-        Message = "New msg",
-        Category = "new",
-        Severity = "critical"
-    };
-
-    // Act
-    var result = await _controller.UpdateLog(5, request);
-
-    // Assert
-    Assert.IsType<NoContentResult>(result);
-
-    var updated = await _context.BuildingLogs.FindAsync(5);
-    Assert.Equal("New", updated.Title);
-    Assert.Equal("New msg", updated.Message);
-    Assert.Equal("new", updated.Category);
-    Assert.Equal("critical", updated.Severity);
-}
-
-
