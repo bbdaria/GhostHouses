@@ -41,4 +41,16 @@ export function formatDateTime(value) {
   }
 }
 
-export default { formatDate, formatTime, formatDateTime };
+export function getIsraelDateStamp(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Asia/Jerusalem'
+  }).formatToParts(value instanceof Date ? value : new Date(value));
+
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export default { formatDate, formatTime, formatDateTime, getIsraelDateStamp };
