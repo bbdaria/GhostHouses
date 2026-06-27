@@ -1,5 +1,5 @@
 @startuml
-title GhostHouses Stage B Deployment Environment
+title <b>GhostHouses Stage B Deployment Environment - UML 2.5.1</b>
 
 skinparam shadowing false
 skinparam packageStyle rectangle
@@ -12,19 +12,19 @@ node "Municipality Private Network" {
   node "Municipality Windows Server VM" {
     package "Docker Host (Docker Compose)" as dockerhost {
       package "app-net" as appnet {
-        component "Frontend\nNginx + React build\nInternal port: 443 (HTTPS)\nExternal port: 443 (HTTPS)" as frontend
-        component "Backend API\nASP.NET Core\nInternal port: 8080 (HTTP)\nExternal port: none" as backend
-        component "Mock OTP\nInside backend process\nNo external provider" as otp
+        node "Frontend Container\nNginx + React build\nInternal port: 443 (HTTPS)\nExternal port: 443 (HTTPS)" as frontend
+        node "Backend API Container\nASP.NET Core\nInternal port: 8080 (HTTP)\nExternal port: none" as backend
+        artifact "Mock OTP Module\nInside backend process\nNo external provider" as otp
         frontend -[hidden]right- backend
         backend -[hidden]down- otp
       }
 
       package "db-net" as dbnet {
-        database "PostgreSQL\nInternal port: 5432\nExternal port: none\nVolume: db-data" as db
+        database "PostgreSQL Container\nInternal port: 5432\nExternal port: none\nVolume: db-data" as db
       }
 
       package "admin-net" as adminnet {
-        component "pgAdmin\nDatabase admin UI\nInternal port: 443 (HTTPS)\nExternal port: 8443 (HTTPS)\nVolume: pgadmin-data" as pgadmin
+        node "pgAdmin Container\nDatabase admin UI\nInternal port: 443 (HTTPS)\nExternal port: 8443 (HTTPS)\nVolume: pgadmin-data" as pgadmin
       }
 
       backend .. dbnet : member
@@ -36,8 +36,8 @@ node "Municipality Private Network" {
 }
 
 node "Internet / Public HTTPS" as internet {
-  component "Docker Image Registries\nDocker Hub + Microsoft Container Registry\nBuild/deploy time only" as registries
-  component "Haifa Municipality GIS\nArcGIS public API\nActive runtime integration" as gis
+  node "Docker Image Registries\nDocker Hub + Microsoft Container Registry\nBuild/deploy time only" as registries
+  node "Haifa Municipality GIS\nArcGIS public API\nActive runtime integration" as gis
 }
 
 users --> frontend : HTTPS 443
