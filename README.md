@@ -228,6 +228,21 @@ The codebase uses a small number of practical abstractions where they reduce cou
 
 These choices keep the design simple, but still extensible. The project does not add abstract classes or interfaces for every small helper, only for places where replacement, reuse, or shared behavior is actually needed.
 
+### Robustness to Next Pivot / API Vendor Change
+The system is designed so future client or vendor changes can be handled by replacing focused parts of the code instead of rewriting the whole application.
+
+- **GIS provider changes:** the delivered system uses Haifa Municipality ArcGIS because that is the client-approved integration. GIS snapshot creation is isolated behind `IGisSnapshotService`, and the current implementation is `ArcGisSnapshotService`. If the municipality later changes GIS endpoints or moves to another map provider, the replacement work should stay mainly inside the GIS service implementation.
+- **Proof-of-pivot branch:** the team also built a separate proof branch that uses OpenStreetMap instead of the client GIS provider to demonstrate scalability and vendor flexibility. It is intentionally kept outside the delivered production branches because the client wants the municipality GIS in the delivered product, but it proves that the map provider can pivot without changing the whole system. Placeholder until branch and workflow conventions are finalized: `[replace with final OpenStreetMap proof branch/workflow wording]`.
+- **Municipality scalability:** GIS-based city mapping is a common pattern for municipalities, and the system is not tied directly to Haifa-specific UI logic. The current GIS implementation uses Haifa Municipality ArcGIS, but the integration is isolated behind `IGisSnapshotService`, so another municipality can replace the GIS endpoint or provider with limited code changes. The rest of the system, buildings, streets, users, audit logs, imports, exports, and building cards, is generic enough for municipality asset tracking and would mainly require data-field, validation, and configuration adjustments rather than a full rewrite.
+- **OpenStreetMap scalability option:** the proof-of-pivot branch uses OpenStreetMap, which is a worldwide map provider and can support municipalities that do not expose an ArcGIS service. This shows that the system can support both a municipality-owned GIS provider and a global public map provider, depending on what the deployment environment offers.
+- **OTP provider changes:** OTP is currently mocked for handoff, but the login flow depends on `ITwoFactorService`, not on a concrete SMS/email provider. A real provider can be added later as a new implementation while keeping the controller flow stable.
+- **Additional municipality integrations:** future systems can be added behind new service contracts, following the same pattern as `IGisSnapshotService`, instead of placing external API logic directly inside controllers.
+- **Business-rule changes:** mandatory fields, field-level validation, and import validation are centralized in `BuildingRules` and `StreetRules`. If the client changes a rule, the team changes it in one place and both manual editing and Excel import use the same logic.
+- **Database/schema changes:** persistence is concentrated through `AppDbContext` and EF Core migrations, so schema changes are handled through the data boundary rather than scattered SQL in UI or controller code.
+- **Frontend/backend changes:** the React frontend communicates with the backend through REST API calls. This keeps UI changes separate from backend internals and allows the municipality team to evolve screens without changing the persistence model directly.
+
+This is the main “future proof” point: the project does not assume the current vendor, OTP mechanism, or exact client workflow will stay forever. The architecture keeps likely change points behind interfaces, validation modules, and the EF Core persistence boundary.
+
 ### Reset & Rebuild
 For a full reset, use the clean deployment command above. It deletes Docker volumes, so database data is removed.
 
