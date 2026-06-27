@@ -180,23 +180,15 @@ How we figured these requirements:
 
 #### 2.3 Customer Satisfaction
 ##### 2.3.1 Customer Questionnaire
-A customer questionnaire will be sent to the client for final feedback.
+A Hebrew customer questionnaire was used to collect the client's final feedback, and the signed response is stored as the customer satisfaction evidence.
 
-Placeholder:
-- Questionnaire link: `TODO`
-- Customer reply evidence: `docs/submissions/stage-b/customer-satisfaction/TODO`
+Filled response evidence: `docs/submissions/stage-b/customer-satisfaction/GhostHouses_Customer_Questionnaire_Response.pdf`
 
 ##### 2.3.2 Successful Deployment on Customer Side
 Customer-side deployment is tracked in the deployment User Story: [Issue #94](https://github.com/bbdaria/GhostHouses/issues/94).
 
-The repository is prepared for deployment, and the remaining customer-side completion depends on municipality IT/security approval and server access constraints.
-
 ##### 2.3.3 Exhausting Communication With the Customer Toward Possible Deployment, in Writing
-Written communication evidence will be stored under:
-
-Placeholder: `docs/submissions/stage-b/customer-satisfaction/TODO`
-
-This evidence should include deployment coordination, server requirements, security/nested-virtualization discussion, and written attempts to unblock deployment with the municipality side.
+The written communication trail for deployment is documented in email correspondence with the client side, the municipality dev team, municipality IT/security contacts, and the project supervisors CC'd. This evidence covers the deployment requirements, server preparation, security approval process, nested-virtualization discussion, and our attempts to keep the deployment moving professionally.
 
 #### 2.4 Maintainable Architecture
 ##### 2.4.1 UML Class Diagram
