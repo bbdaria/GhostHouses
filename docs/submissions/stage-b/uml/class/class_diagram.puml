@@ -1,0 +1,193 @@
+@startuml
+title <b>GhostHouses Maintainable Class Design - UML 2.5.1</b>
+
+top to bottom direction
+hide empty members
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam dpi 170
+skinparam class {
+  BackgroundColor<<Abstract>> #D9EAF7
+  BorderColor<<Abstract>> #1F4E79
+  BackgroundColor<<Controller>> #EAF3F8
+  BorderColor<<Controller>> #1F4E79
+  BackgroundColor<<Interface>> #E2F0D9
+  BorderColor<<Interface>> #548235
+  BackgroundColor<<Service>> #C6EFCE
+  BorderColor<<Service>> #006100
+  BackgroundColor<<Data>> #E2F0D9
+  BorderColor<<Data>> #548235
+  BackgroundColor<<Model>> #FCE4D6
+  BorderColor<<Model>> #9E480E
+  BackgroundColor<<External>> #F2F2F2
+  BorderColor<<External>> #666666
+  BackgroundColor<<Mocked>> #FFF2CC
+  BorderColor<<Mocked>> #7F6000
+}
+
+package "API Layer" as API {
+  abstract class ControllerBase <<Abstract>>
+  abstract class ApiControllerBase <<Abstract>> {
+    +CurrentUserId
+    #GetCurrentAppUser()
+  }
+
+  class AuthController <<Controller>> {
+    +Login()
+    +VerifyTwoFactor()
+  }
+
+  class BuildingsController <<Controller>> {
+    +GetBuildings()
+    +CreateBuilding()
+    +UpdateBuilding()
+    +DeleteBuilding()
+    +ExportCards()
+    +ImportPreview()
+  }
+
+  class SupportingControllers <<Controller>> {
+    LogsController
+    UsersController
+    StreetsController
+    SelectTablesController
+    HealthController
+  }
+}
+
+package "Replaceable Service Contracts" as Contracts {
+  interface ITokenService <<Interface>>
+  interface ITwoFactorService <<Interface>>
+  interface IAuditService <<Interface>>
+  interface IGisSnapshotService <<Interface>>
+}
+
+package "Service Implementations" as Services {
+  class TokenService <<Service>>
+  class TwoFactorService <<Mocked>>
+  class AuditService <<Service>>
+  class ArcGisSnapshotService <<Service>>
+}
+
+package "Validation and Import" as Rules {
+  class BuildingRules <<Service>>
+  class StreetRules <<Service>>
+  class BuildingsExcelImporter <<Data>>
+  class StreetsExcelImporter <<Data>>
+}
+
+package "Persistence Boundary" as Persistence {
+  class AppDbContext <<Data>> {
+    +Buildings
+    +Streets
+    +Users
+    +BuildingLogs
+    +AuditEntries
+  }
+}
+
+package "Domain Model" as Domain {
+  class Building <<Model>> {
+    +Id
+    +StreetCode
+    +StreetName
+    +HouseNumber
+    +ShikumStatus
+    +Latitude
+    +Longitude
+  }
+
+  class Street <<Model>> {
+    +StreetId
+    +Name
+  }
+
+  class BuildingLog <<Model>> {
+    +BuildingId
+    +Title
+    +Message
+    +CreatedAt
+  }
+
+  class AuditEntry <<Model>> {
+    +EntityType
+    +EntityId
+    +Action
+    +CreatedAt
+  }
+
+  class AppUser <<Model>> {
+    +Username
+    +Email
+    +Role
+  }
+
+  enum BuildingStatus <<Model>>
+  enum UserRole <<Model>>
+  class Money <<Model>>
+  class FieldSpecAttribute <<Model>>
+}
+
+package "External Systems / Frameworks" as External {
+  class PostgreSQL <<External>>
+  class HaifaArcGisApi <<External>>
+  class JwtFramework <<External>>
+}
+
+' Layout helpers.
+API -[hidden]down- Contracts
+Contracts -[hidden]down- Services
+Services -[hidden]down- Rules
+Rules -[hidden]down- Persistence
+Persistence -[hidden]down- Domain
+Services -[hidden]right- External
+
+' Abstract controller reuse.
+ControllerBase <|-- ApiControllerBase
+ApiControllerBase <|-- AuthController
+ApiControllerBase <|-- BuildingsController
+ApiControllerBase <|-- SupportingControllers
+
+' Controllers depend on stable contracts and boundaries, not implementation details.
+API ..> Contracts : uses interfaces
+API ..> Rules : validation/import
+API ..> Persistence : EF Core access
+
+' Interface-based extension points.
+ITokenService <|.. TokenService
+ITwoFactorService <|.. TwoFactorService
+IAuditService <|.. AuditService
+IGisSnapshotService <|.. ArcGisSnapshotService
+
+' Service boundaries.
+Services ..> Persistence : stores/reads data
+TokenService ..> JwtFramework
+ArcGisSnapshotService ..> HaifaArcGisApi : active GIS API
+
+' Validation is reused by both manual editing and Excel import.
+BuildingsExcelImporter ..> BuildingRules
+StreetsExcelImporter ..> StreetRules
+Rules ..> Domain : validates fields
+
+' Persistence owns the domain entities.
+AppDbContext ..> PostgreSQL
+AppDbContext o-- Building
+AppDbContext o-- Street
+AppDbContext o-- AppUser
+AppDbContext o-- BuildingLog
+AppDbContext o-- AuditEntry
+
+' Core domain relationships.
+Street "1" --> "*" Building : contains
+Building "1" --> "*" BuildingLog : history
+AppUser "0..1" --> "*" BuildingLog : created by
+AppUser --> UserRole
+Building --> BuildingStatus
+Building --> Money : Arnona debt
+Building ..> FieldSpecAttribute : field metadata
+
+@enduml

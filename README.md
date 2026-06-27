@@ -129,6 +129,8 @@ This deployment path is intentionally simple and repeatable:
 ## Deployment Requirements and Dependencies
 This section documents the minimum environment needed to deploy GhostHouses and maps to the deployment grading rubric: deployment UML, software dependencies, and minimal hardware requirements.
 
+The UML diagrams are written in standard UML 2.5.1 style and rendered with PlantUML.
+
 ### Deployment UML
 The Stage B deployment UML is located here:
 - Source: `docs/submissions/stage-b/uml/deployment/deployment_environment.puml`
@@ -188,6 +190,43 @@ How we figured these requirements:
 - Building-card exports and GIS snapshots are heavier than normal page views, so 8 GB RAM gives safe headroom.
 - The system is for internal municipality users, not high-volume public traffic, so 4 vCPU and 8 GB RAM are enough for the expected workload.
 - 100 GB SSD gives room for the repository, Docker images, database volume, pgAdmin volume, logs, uploaded images, generated exports, and growth margin.
+
+## Maintainable Architecture
+This section documents the architecture evidence for the maintainability grading rubric.
+
+### UML Class Diagram
+The Stage B class UML is located here:
+- Source: `docs/submissions/stage-b/uml/class/class_diagram.puml`
+- Rendered image: `docs/submissions/stage-b/uml/class/class_diagram.png`
+
+The diagram was rebuilt from the current codebase as a presentation-friendly UML class diagram. It shows the main maintainability decisions without listing every DTO or helper record:
+- API layer: controllers, common controller bases, and the separation between authenticated API controllers and simpler controllers.
+- Service layer: replaceable contracts for audit, JWT, OTP, and GIS behavior.
+- Validation/import layer: shared building and street rules reused by manual editing and Excel import.
+- Persistence layer: `AppDbContext` as the EF Core boundary for PostgreSQL entities.
+- Domain layer: the main business entities and relationships used by the system.
+
+Why this matters for maintainability:
+- The diagram shows the important abstract classes directly, especially `ControllerBase` and `ApiControllerBase`, so shared controller behavior is visible instead of hidden in text.
+- It shows interface contracts separately from implementations, which makes it clear where future replacement is possible.
+- It shows that business entities are not mixed into controllers or deployment code, they remain in the domain layer.
+- It shows the persistence boundary explicitly, so database access is concentrated through `AppDbContext`.
+- It shows the active GIS integration and mocked OTP boundary without making either one look like a hard-coded dependency.
+
+### Good Use of Abstract Classes and Design Patterns
+The codebase uses a small number of practical abstractions where they reduce coupling or prepare the system for realistic change:
+
+- **Template-style controller base:** `ApiControllerBase` extends ASP.NET `ControllerBase` and centralizes shared authenticated API behavior, especially current-user access. This keeps repeated authentication/user lookup logic out of individual controllers.
+- **Dependency Injection:** ASP.NET Core injects services through constructors, so controllers depend on contracts and framework-managed dependencies instead of creating concrete objects directly.
+- **Interface-based service replacement:** `IAuditService`, `ITokenService`, `ITwoFactorService`, and `IGisSnapshotService` hide implementation details behind stable contracts. This is important because audit logging, JWT creation, OTP delivery, and GIS access are exactly the areas most likely to change after handoff.
+- **Strategy-like integration boundary:** GIS snapshot generation is isolated behind `IGisSnapshotService`. The current implementation uses Haifa ArcGIS, but a future municipality GIS provider can be swapped by replacing the service implementation instead of rewriting controllers or export logic.
+- **Adapter boundary for mocked OTP:** OTP is currently mocked in `TwoFactorService`, but the login flow calls `ITwoFactorService`. A real SMS/email provider can be adapted later without changing the controller flow.
+- **Centralized validation:** `BuildingRules` and `StreetRules` are shared by API actions and Excel import logic, so mandatory fields and business rules stay consistent across manual editing and bulk import.
+- **Persistence boundary:** `AppDbContext` is the single EF Core gateway to PostgreSQL. Controllers and services work through this boundary instead of spreading database access details across unrelated code.
+- **High cohesion:** each main area has one clear responsibility: controllers handle HTTP requests and authorization, services handle application behavior, rules handle validation, import helpers handle Excel parsing, `AppDbContext` handles persistence, and domain models represent business data.
+- **Low coupling:** controllers depend on service interfaces and stable boundaries instead of concrete external systems. For example, the building workflow calls `IGisSnapshotService` instead of directly depending on ArcGIS details, and the login flow calls `ITwoFactorService` instead of depending on a specific OTP provider.
+
+These choices keep the design simple, but still extensible. The project does not add abstract classes or interfaces for every small helper, only for places where replacement, reuse, or shared behavior is actually needed.
 
 ### Reset & Rebuild
 For a full reset, use the clean deployment command above. It deletes Docker volumes, so database data is removed.
