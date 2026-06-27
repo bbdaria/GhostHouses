@@ -168,6 +168,27 @@ GhostHouses is deployed through Docker Compose, so the server does not need manu
 
 No real external OTP provider is required for this deployment because OTP is currently mocked inside the backend.
 
+### Minimal Hardware Requirements
+Recommended deployment VM:
+
+| Resource | Requirement |
+| --- | --- |
+| CPU | 4 vCPU |
+| RAM | 8 GB |
+| Storage | 100 GB SSD |
+| OS | Windows Server VM |
+| Runtime | Docker + Docker Compose |
+| Virtualization | Nested virtualization enabled if Docker Desktop / WSL 2 is used |
+| Network | Municipality LAN access, inbound HTTPS 443, admin HTTPS 8443, outbound HTTPS 443 |
+
+How we figured these requirements:
+- The deployment runs four containers: frontend, backend, PostgreSQL, and pgAdmin.
+- Docker Desktop / WSL 2 on a Windows Server VM adds virtualization overhead.
+- PostgreSQL needs persistent storage for building data, logs, users, uploaded images, and future growth.
+- Building-card exports and GIS snapshots are heavier than normal page views, so 8 GB RAM gives safe headroom.
+- The system is for internal municipality users, not high-volume public traffic, so 4 vCPU and 8 GB RAM are enough for the expected workload.
+- 100 GB SSD gives room for the repository, Docker images, database volume, pgAdmin volume, logs, uploaded images, generated exports, and growth margin.
+
 ### Reset & Rebuild
 For a full reset, use the clean deployment command above. It deletes Docker volumes, so database data is removed.
 
