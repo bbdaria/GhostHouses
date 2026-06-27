@@ -1,5 +1,20 @@
 # GhostHouses
-Yearly Project (2340311) @ Technion (2026)
+Technion, Faculty of Computer Science
+
+2025-2026-Winter Semester - 02340311 - Yearly Project in Software Eng.-Stage A
+
+2025-2026-Spring Semester - 02340312 - Yearly Project in Software Eng.-Stage B
+
+## Team
+**Supervisor:** [Daria Bebin](https://github.com/bbdaria)
+
+**Team members:**
+- [Kareem Araide](https://github.com/KareemAraide)
+- [Benny](https://github.com/StrBenny)
+- [Carole Lasmar](https://github.com/carolelasmar)
+- [Yara Zeineh](https://github.com/YaraZeineh)
+- [bkillercode](https://github.com/bkillercode)
+- [L54](https://github.com/L54)
 
 ## Project Overview
 GhostHouses is a municipal web system for tracking vacant/rehabilitation buildings. It supports structured data entry, import/export workflows, an audit log, and presentation‑ready building cards. The system is built with a .NET backend, React frontend, and PostgreSQL, and is fully containerized for local development.
