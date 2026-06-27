@@ -232,7 +232,7 @@ These choices keep the design simple, but still extensible. The project does not
 The system is designed so future client or vendor changes can be handled by replacing focused parts of the code instead of rewriting the whole application.
 
 - **GIS provider changes:** the delivered system uses Haifa Municipality ArcGIS because that is the client-approved integration. GIS snapshot creation is isolated behind `IGisSnapshotService`, and the current implementation is `ArcGisSnapshotService`. If the municipality later changes GIS endpoints or moves to another map provider, the replacement work should stay mainly inside the GIS service implementation.
-- **Proof-of-pivot branch:** the team also built a separate proof branch that uses OpenStreetMap instead of the client GIS provider to demonstrate scalability and vendor flexibility. It is intentionally kept outside the delivered production branches because the client wants the municipality GIS in the delivered product, but it proves that the map provider can pivot without changing the whole system. Placeholder until branch and workflow conventions are finalized: `[replace with final OpenStreetMap proof branch/workflow wording]`.
+- **Proof-of-pivot branch:** the team also built a separate proof branch that uses OpenStreetMap instead of the client GIS provider to demonstrate scalability and vendor flexibility. It is intentionally kept outside the delivered production branches because the client wants the municipality GIS in the delivered product, but it proves that the map provider can pivot without changing the whole system. The isolated proof lives under `feature/map-provider-flexibility/main` and `feature/map-provider-flexibility/#92-openstreetmap-provider-proof`, and it is not merged into `develop`, `release/*`, or `main`.
 - **Municipality scalability:** GIS-based city mapping is a common pattern for municipalities, and the system is not tied directly to Haifa-specific UI logic. The current GIS implementation uses Haifa Municipality ArcGIS, but the integration is isolated behind `IGisSnapshotService`, so another municipality can replace the GIS endpoint or provider with limited code changes. The rest of the system, buildings, streets, users, audit logs, imports, exports, and building cards, is generic enough for municipality asset tracking and would mainly require data-field, validation, and configuration adjustments rather than a full rewrite.
 - **OpenStreetMap scalability option:** the proof-of-pivot branch uses OpenStreetMap, which is a worldwide map provider and can support municipalities that do not expose an ArcGIS service. This shows that the system can support both a municipality-owned GIS provider and a global public map provider, depending on what the deployment environment offers.
 - **OTP provider changes:** OTP is currently mocked for handoff, but the login flow depends on `ITwoFactorService`, not on a concrete SMS/email provider. A real provider can be added later as a new implementation while keeping the controller flow stable.
@@ -275,11 +275,20 @@ Documentation note:
 
 ## Conventions & Workflow
 See `docs/CONVENTIONS.md` for:
-- Branch naming (`Issues/#<issue-number>-<slug>`)
+- Branch naming (`feature/<feature>/#<issue-number>-<slug>`)
 - Issue → branch mapping
 - Required metadata (milestone, labels, parent User Story)
 - Status definitions (Backlog / Current Sprint / Doing / Candidate / Done)
 - Approval rules and time tracking
+
+Branch structure used for handoff and grading:
+- `main` is reserved for final production/handover history.
+- `develop` is the delivered integration branch.
+- `feature/<feature>/main` groups related implementation work.
+- `feature/<feature>/#<issue-number>-<slug>` is the branch linked to one implementation issue.
+- `release/stage-a/sprint-1-mvp`, `release/stage-a/sprint-2-final`, `release/stage-b/sprint-1-deployment`, `release/stage-b/sprint-2-gis`, and `release/stage-b/sprint-3-final` are release checkpoints from `develop`.
+- The normal implementation flow is `develop` -> `feature/<feature>/main` -> `feature/<feature>/#<issue>-<slug>` -> `feature/<feature>/main` -> `develop`.
+- The OpenStreetMap provider proof stays isolated under `feature/map-provider-flexibility/*` because it demonstrates scalability without changing the client-approved GIS delivery.
 
 ## CI/CD
 GitHub Actions runs the issue‑guard workflow on issue events and daily to comment on missing required metadata. Build/test pipelines are run locally by the team.
