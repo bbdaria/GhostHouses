@@ -36,7 +36,7 @@ It is written in English and kept in the repo to stay versioned with the code.
 - One issue per branch. No mixing unrelated changes.
 - Commit messages must mention the issue number so it links in GitHub.
   Example: `Issue #19: add conventions document`.
-- Merge to `dev` only after the issue is **Done** and approved.
+- Merge to `develop` only after the issue is **Done** and approved.
 - If an issue is **Canceled**, close it and do not merge.
 - Issue guard enforces that non‑User‑Story issues have a linked Development branch matching the naming pattern above.
 
@@ -87,7 +87,7 @@ It is written in English and kept in the repo to stay versioned with the code.
 - **Current Sprint**: planned to be picked up this sprint.
 - **Doing**: actively being worked on.
 - **Candidate**: finished, waiting approval.
-- **Done**: finished and approved (merge to `dev`). Non‑User Story issues moved to Done must have an assignee.
+- **Done**: finished and approved (merge to `develop`). Non‑User Story issues moved to Done must have an assignee.
 - **Canceled**: canceled (close the issue). Assignee not required.
 
 ### Updates and Time Tracking
