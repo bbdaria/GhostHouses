@@ -10,7 +10,12 @@ It is written in English and kept in the repo to stay versioned with the code.
 ## 2) Repository Structure
 - `project/web-server/backend`: ASP.NET Core backend.
 - `project/web-server/frontend`: React frontend.
-- `docs/`: project documentation and submission files.
+- `docs/`: project documentation, organized by purpose.
+- `docs/technical/`: current technical/project documentation.
+- `docs/data-and-templates/`: Excel/PPTX templates and sample/reference data.
+- `docs/hld/`: original HLD material.
+- `docs/notes/`: meeting/client notes.
+- `docs/submissions/stage-a/`: Stage A submission, rehearsal, and UML artifacts.
 - `tests/`: automated tests (if/when added).
 
 ## 3) Coding Conventions
@@ -103,6 +108,11 @@ It is written in English and kept in the repo to stay versioned with the code.
 - Issues move from Candidate → Done only after approval.
 
 ## 7) Documentation Standards
-- Keep docs in `docs/`.
+- Keep docs in `docs/`, under the folder that matches their purpose.
+- Put stable technical documentation in `docs/technical/`.
+- Put import/export samples and templates in `docs/data-and-templates/`.
+- Put HLD material in `docs/hld/`.
+- Put meeting/client notes in `docs/notes/`.
+- Put course submission artifacts in `docs/submissions/<stage>/`.
 - If a document is required for submission, keep the source in Markdown when possible
   and export to other formats only if needed by the course.

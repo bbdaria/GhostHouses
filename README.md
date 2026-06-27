@@ -113,12 +113,16 @@ docker compose down && docker compose up -d --build
 ## Project Structure
 - `project/web-server/backend` – ASP.NET Core backend
 - `project/web-server/frontend` – React frontend
-- `docs/` – project documentation and submission files
+- `docs/` – project documentation, organized by purpose
 - `tests/` – automated tests
 - `.github/` – GitHub workflows and templates
 
-Documentation note: Stage A submission artifacts (docx + UML) live under `docs/Stage A submission/`.
-Internal technical notes live under `docs/internal/`.
+Documentation note:
+- `docs/technical/` contains current technical/project documentation.
+- `docs/data-and-templates/` contains Excel/PPTX templates and sample/reference data.
+- `docs/hld/` contains the original HLD material.
+- `docs/notes/` contains meeting/client notes.
+- `docs/submissions/stage-a/` contains Stage A submission artifacts, rehearsal notes, and UML files.
 
 ## Conventions & Workflow
 See `docs/CONVENTIONS.md` for:
