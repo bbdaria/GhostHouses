@@ -89,6 +89,21 @@ On a clean database, the backend creates one initial administrator account: `adm
 
 The deployment server must have outbound internet access so Docker can pull base images and build dependencies during `docker compose up -d --build`.
 
+### Deployment simplicity
+Deployment is handled through one top-level Docker Compose file: `project/docker-compose.yml`. From the `project/` folder, one command builds and starts the full system:
+
+```bash
+docker compose down -v && docker compose up -d --build
+```
+
+This deployment path is intentionally simple and repeatable:
+- One command runs the full stack: frontend, backend, PostgreSQL, and pgAdmin.
+- Docker Compose builds the project services and pulls required public images when needed.
+- PostgreSQL starts with a health check before the backend is used.
+- Docker networks are created automatically with the intended isolation: `app-net`, `db-net`, and `admin-net`.
+- `down -v` resets the database and pgAdmin volumes, which gives a clean deployment state when needed.
+- The only required local files are the documented `project/.env`, `project/certs/dev.crt`, and `project/certs/dev.key`.
+
 ### Ports & Networking (local Docker)
 - **Frontend (Nginx)**: `https://localhost:443` (host port 443 -> container 443).
 - **Backend (ASP.NET Core)**: internal only, `http://backend:8080` (no host port mapping).
@@ -97,12 +112,13 @@ The deployment server must have outbound internet access so Docker can pull base
 - Networks: `app-net` (frontend ↔ backend), `db-net` (backend ↔ db), `admin-net` (pgAdmin ↔ db).
 
 ### Reset & Rebuild
-Main command (run from `project/`):
+For a full reset, use the clean deployment command above. It deletes Docker volumes, so database data is removed.
+
+On first run, prepare the local environment file:
 ```bash
 cd project
 cp .env.example .env
 # Fill .env with the real secrets if this is the first run on this machine.
-docker compose down -v && docker compose up -d --build
 ```
 
 Rebuild without wiping data:
