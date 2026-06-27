@@ -16,7 +16,7 @@ It is written in English and kept in the repo to stay versioned with the code.
 - `docs/hld/`: original HLD material.
 - `docs/notes/`: meeting/client notes.
 - `docs/submissions/stage-a/`: Stage A submission, rehearsal, and UML artifacts.
-- `tests/`: automated tests (if/when added).
+- `tests/`: automated backend tests.
 
 ## 3) Coding Conventions
 ### Backend (C# / ASP.NET Core)
@@ -52,12 +52,22 @@ It is written in English and kept in the repo to stay versioned with the code.
 - Normal flow: `develop` -> `feature/<feature>/main` -> `feature/<feature>/#<issue>-<slug>` -> `feature/<feature>/main` -> `develop`.
 - Release branches are checkpoints from `develop`; they are not used for day-to-day development.
 - Merge to `develop` only after the issue is **Done** and approved.
+- Code changes must pass the GitHub Actions CI workflow before being merged to `develop`.
 - If an issue is **Canceled**, close it and do not merge.
 - Issue guard enforces that non‑User‑Story issues have exactly one linked Development branch matching `feature/<feature>/#<issue-number>-<short-slug>`.
 - User Story issues must not have a linked Development branch.
 - Proof or scalability branches that should not reach production, such as the OpenStreetMap provider proof, must stay outside `develop`, `release/*`, and `main`.
 
-## 5) Issue Management
+## 5) Automated Testing and CI
+- CI workflow file: `.github/workflows/ci.yml`.
+- CI runs on pushes to `develop`, `feature/**`, and `release/**`, on pull requests into `develop`, and manually through `workflow_dispatch`.
+- Backend checks restore, build, and run `tests/WebServer.Tests` with .NET 8 and xUnit.
+- Frontend checks install dependencies with `npm ci` and run the Vite production build.
+- Docker checks validate the Compose configuration with CI-only dummy secrets and build the backend/frontend Docker images.
+- CI is the code-quality gate. Issue guard is the GitHub/project-management metadata gate.
+- The repository default branch should be `develop` while `main` is intentionally empty before final production/handover.
+
+## 6) Issue Management
 ### Automated checks (comment-only)
 - Issue guard comments when **Label** or **Milestone** is missing.
 - Issue guard comments when **Project (GhostHouses)** or **Status** is missing.
