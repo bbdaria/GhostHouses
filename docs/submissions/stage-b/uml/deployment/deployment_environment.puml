@@ -1,0 +1,66 @@
+@startuml
+title GhostHouses Stage B Deployment Environment
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam defaultFontName Arial
+skinparam wrapWidth 220
+left to right direction
+
+actor "Municipality Users\n(private network)" as users
+actor "IT / DB Admin" as admin
+
+cloud "Public registries\n(build time only)" as registries {
+  component "Docker Hub\nnode:20\nnginx:alpine" as dockerhub
+  component "Microsoft Container Registry\n.NET SDK/ASP.NET 8" as mcr
+}
+
+node "Municipality Windows Server VM" as vm {
+  frame "Docker Compose\nproject/docker-compose.yml" as compose {
+    component "Frontend container\nNginx + React build\nHost port: 443 HTTPS\nContainer port: 443 HTTPS\nNetwork: app-net" as frontend
+
+    component "Backend container\nASP.NET Core API\nHost port: none\nContainer port: 8080 HTTP\nNetworks: app-net + db-net" as backend
+
+    database "PostgreSQL container\nDatabase\nHost port: none\nContainer port: 5432 TCP\nNetworks: db-net + admin-net\nVolume: db-data" as postgres
+
+    component "pgAdmin container\nDatabase admin UI\nHost port: 8443 HTTPS\nContainer port: 443 HTTPS\nNetwork: admin-net\nVolume: pgadmin-data" as pgadmin
+  }
+}
+
+users --> frontend : HTTPS 443
+admin --> pgadmin : HTTPS 8443
+
+frontend --> backend : HTTP 8080\n/api requests
+backend --> postgres : PostgreSQL 5432\nEF Core / Npgsql
+pgadmin --> postgres : PostgreSQL 5432\nadmin access
+
+registries ..> compose : docker compose up -d --build\npull/build dependencies
+
+note right of frontend
+Only public application entry point.
+Normal users do not access backend or DB directly.
+end note
+
+note bottom of backend
+Internal-only API.
+No host port mapping.
+end note
+
+note bottom of postgres
+Internal-only database.
+No host port mapping.
+end note
+
+legend bottom
+|= Docker Network |= Members |= Purpose |
+| app-net | Frontend, Backend | Web app to API only |
+| db-net | Backend, PostgreSQL | API to database only |
+| admin-net | pgAdmin, PostgreSQL | Database administration only |
+
+External exposed ports:
+Frontend HTTPS 443, pgAdmin HTTPS 8443.
+Backend 8080 and PostgreSQL 5432 are internal to Docker.
+endlegend
+
+@enduml
