@@ -311,5 +311,9 @@ The issue-guard workflow is defined in `.github/workflows/issue-guard.yml`. It r
 The frontend and pgAdmin use local HTTPS. Self‑signed certs live in `project/certs/` (ignored by git).  
 If missing, get them from the team shared drive / secure handoff mail, or generate new local certificates and place them at `project/certs/dev.crt` and `project/certs/dev.key`.
 
+## License
+This repository is licensed under the Creative Commons Attribution 4.0 International license (`CC-BY-4.0`).
+See `LICENSE.md` for the full license text.
+
 ---
 Maintained by the GhostHouses team.
