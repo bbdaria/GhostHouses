@@ -135,15 +135,18 @@ The Stage B deployment UML is located here:
 - Rendered image: `docs/submissions/stage-b/uml/deployment/deployment_environment.png`
 
 The diagram shows the complete Docker-based runtime environment:
-- Municipality users access only the frontend over HTTPS on port 443.
+- Municipality users access the system only from inside the municipality network, through the frontend over HTTPS on port 443.
 - The frontend container serves the React application through Nginx.
 - The backend container runs the ASP.NET Core API internally on port 8080 and is not exposed directly outside Docker.
 - PostgreSQL runs internally on port 5432 and is not exposed directly outside Docker.
-- pgAdmin is exposed separately over HTTPS on port 8443 for IT/database administration only.
+- pgAdmin is exposed separately over HTTPS on port 8443 for IT/database administration only, also inside the municipality network.
 - Docker networks isolate traffic by purpose:
   - `app-net`: frontend to backend.
   - `db-net`: backend to PostgreSQL.
   - `admin-net`: pgAdmin to PostgreSQL.
+- The deployment server has outbound internet access so Docker can pull public base images during build/deployment.
+- The backend has outbound HTTPS access to the public Haifa Municipality GIS / ArcGIS API, which is an active integration.
+- OTP is mocked inside the backend for this deployment, so there is no external OTP provider or network dependency shown in the UML.
 
 ### Reset & Rebuild
 For a full reset, use the clean deployment command above. It deletes Docker volumes, so database data is removed.

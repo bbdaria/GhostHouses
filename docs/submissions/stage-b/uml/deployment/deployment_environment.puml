@@ -3,64 +3,55 @@ title GhostHouses Stage B Deployment Environment
 
 skinparam shadowing false
 skinparam packageStyle rectangle
-skinparam componentStyle rectangle
-skinparam defaultFontName Arial
-skinparam wrapWidth 220
 left to right direction
 
-actor "Municipality Users\n(private network)" as users
-actor "IT / DB Admin" as admin
+node "Municipality Private Network" {
+  actor "Municipality Users" as users
+  actor "IT / DB Admin" as itadmin
 
-cloud "Public registries\n(build time only)" as registries {
-  component "Docker Hub\nnode:20\nnginx:alpine" as dockerhub
-  component "Microsoft Container Registry\n.NET SDK/ASP.NET 8" as mcr
-}
+  node "Municipality Windows Server VM" {
+    package "Docker Host (Docker Compose)" as dockerhost {
+      package "app-net" as appnet {
+        component "Frontend\nNginx + React build\nInternal port: 443 (HTTPS)\nExternal port: 443 (HTTPS)" as frontend
+        component "Backend API\nASP.NET Core\nInternal port: 8080 (HTTP)\nExternal port: none" as backend
+        component "Mock OTP\nInside backend process\nNo external provider" as otp
+        frontend -[hidden]right- backend
+        backend -[hidden]down- otp
+      }
 
-node "Municipality Windows Server VM" as vm {
-  frame "Docker Compose\nproject/docker-compose.yml" as compose {
-    component "Frontend container\nNginx + React build\nHost port: 443 HTTPS\nContainer port: 443 HTTPS\nNetwork: app-net" as frontend
+      package "db-net" as dbnet {
+        database "PostgreSQL\nInternal port: 5432\nExternal port: none\nVolume: db-data" as db
+      }
 
-    component "Backend container\nASP.NET Core API\nHost port: none\nContainer port: 8080 HTTP\nNetworks: app-net + db-net" as backend
+      package "admin-net" as adminnet {
+        component "pgAdmin\nDatabase admin UI\nInternal port: 443 (HTTPS)\nExternal port: 8443 (HTTPS)\nVolume: pgadmin-data" as pgadmin
+      }
 
-    database "PostgreSQL container\nDatabase\nHost port: none\nContainer port: 5432 TCP\nNetworks: db-net + admin-net\nVolume: db-data" as postgres
-
-    component "pgAdmin container\nDatabase admin UI\nHost port: 8443 HTTPS\nContainer port: 443 HTTPS\nNetwork: admin-net\nVolume: pgadmin-data" as pgadmin
+      backend .. dbnet : member
+      db .. adminnet : member
+      backend -[hidden]right- db
+      db -[hidden]right- pgadmin
+    }
   }
 }
 
+node "Internet / Public HTTPS" as internet {
+  component "Docker Image Registries\nDocker Hub + Microsoft Container Registry\nBuild/deploy time only" as registries
+  component "Haifa Municipality GIS\nArcGIS public API\nActive runtime integration" as gis
+}
+
 users --> frontend : HTTPS 443
-admin --> pgadmin : HTTPS 8443
+itadmin --> pgadmin : HTTPS 8443
 
-frontend --> backend : HTTP 8080\n/api requests
-backend --> postgres : PostgreSQL 5432\nEF Core / Npgsql
-pgadmin --> postgres : PostgreSQL 5432\nadmin access
+frontend --> backend : HTTP 8080 (/api)
+backend --> frontend : HTTPS 443 (reachable)
+backend --> otp : internal mock\nOTP code
+backend --> db : PostgreSQL 5432
+pgadmin --> db : PostgreSQL 5432 (admin)
+db --> backend : TCP 8080 (reachable)
+db --> pgadmin : TCP 443 (reachable)
 
-registries ..> compose : docker compose up -d --build\npull/build dependencies
-
-note right of frontend
-Only public application entry point.
-Normal users do not access backend or DB directly.
-end note
-
-note bottom of backend
-Internal-only API.
-No host port mapping.
-end note
-
-note bottom of postgres
-Internal-only database.
-No host port mapping.
-end note
-
-legend bottom
-|= Docker Network |= Members |= Purpose |
-| app-net | Frontend, Backend | Web app to API only |
-| db-net | Backend, PostgreSQL | API to database only |
-| admin-net | pgAdmin, PostgreSQL | Database administration only |
-
-External exposed ports:
-Frontend HTTPS 443, pgAdmin HTTPS 8443.
-Backend 8080 and PostgreSQL 5432 are internal to Docker.
-endlegend
+backend -down-> gis : outbound HTTPS 443\nGIS data + map snapshots
+dockerhost .down.> registries : outbound HTTPS 443\nimage pull at build/deploy
 
 @enduml
