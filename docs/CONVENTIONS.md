@@ -69,6 +69,7 @@ It is written in English and kept in the repo to stay versioned with the code.
   ```
 - If the User Story is **open**, at least one Acceptance Criteria checkbox must be **unchecked**.
 - If the User Story is **closed** and Status is **Done**, **all** Acceptance Criteria checkboxes must be **checked**.
+- If the User Story is **closed** and Status is **Canceled**, its Acceptance Criteria should still be checked, but the text should describe the cancellation decision or the replacement approach instead of pretending the original feature was implemented.
 - Do **not** set a parent issue (they are the parent).
 - Can have multiple implementation issues linked as sub-issues.
 - Must still include milestone, status, and time-tracked updates.
@@ -81,11 +82,31 @@ It is written in English and kept in the repo to stay versioned with the code.
 ### Implementation Issues (Non‑User Story)
 - Must have a **User Story** parent issue (and that parent must be labeled `User Story`).
 - Title and body must be clear and specific.
+- Body must use exactly these top-level sections:
+  ```
+  ## Summary
+  ...
+
+  ## Scope
+  - ...
+
+  ## Notes
+  - ...
+  ```
+- Do not write `Parent User Story` inside the body. Use GitHub's parent/sub-issue relationship instead.
 - Milestone is required.
 - Labels are required.
 - Must be in the **GhostHouses** project with a **Status** value.
 - Must have **exactly one** linked Development branch.
 - Time-tracked updates are required on every progress comment.
+- A closed non-User-Story issue must have at least one closing/progress comment with a short description line followed by `Time spent: ...`.
+  Example:
+  ```
+  Implemented the filtered Excel export and verified that the exported file matches the visible table data.
+
+  Time spent: 2 hours
+  ```
+- Cross-cutting work should be linked to the correct User Story. For example, deployment work belongs under a deployment User Story, while GIS or external-system integration work belongs under the relevant map/integration User Story.
 
 ### Status Usage (Project)
 - **Backlog**: not planned for the current sprint.
