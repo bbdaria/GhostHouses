@@ -331,7 +331,7 @@ The CI workflow checks:
 The issue-guard workflow is defined in `.github/workflows/issue-guard.yml`. It checks GitHub/project-management metadata, while CI checks code and deployment readiness.
 
 ##### 3.2.4 Readme.md
-This README is structured as both a handoff guide and a grading evidence map. It includes:
+This README is structured as both a handoff guide and a Project Delivery reference. It includes:
 - Project overview and team information.
 - Current capabilities.
 - Installation and clean deployment commands.
@@ -353,7 +353,7 @@ Full license text: `LICENSE.md`.
 - `project/db-server`: PostgreSQL and pgAdmin compose configuration.
 - `docs/`: project documentation.
 - `docs/submissions/stage-a/`: Stage A submission artifacts.
-- `docs/submissions/stage-b/`: Stage B grading evidence, UML files, and future customer evidence.
+- `docs/submissions/stage-b/`: Stage B project delivery artifacts, UML files, and future customer evidence.
 - `tests/`: automated backend tests.
 - `.github/workflows/`: GitHub Actions workflows.
 
