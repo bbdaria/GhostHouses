@@ -88,13 +88,61 @@ Presentation source files are stored under `docs/submissions/stage-b/presentatio
 - Rendered PDF: `docs/submissions/stage-b/presentation/StageB_Presentation.pdf`
 
 ##### 1.2.1 User Stories to Use Cases to Issues to Sprints
-Placeholder: presentation notes for mapping user stories, use cases, issues, and sprint/release checkpoints will be added here.
+The diagram shows how our main actors connect to permissions, use cases, GitHub User Story issues, and the sprint branches where the work was delivered. It is written in UML 2.5.1 style and rendered with PlantUML.
+
+- Source: `docs/submissions/stage-b/uml/use-cases/use_cases_to_sprints.puml`
+- Rendered image: `docs/submissions/stage-b/uml/use-cases/use_cases_to_sprints.png`
+
+The diagram is intentionally presentation-level: it keeps the main flow readable as actors -> permissions -> use cases -> User Story issues -> sprint branches. Detailed implementation sub-issues, time-tracked comments, and branch history remain traceable in GitHub.
 
 ##### 1.2.2 Architecture - What Is Abstract, Where We Committed to Concrete, and Why
-Placeholder: presentation notes for architecture decisions will be added here.
+We use the class UML to explain the main architecture decisions: what we kept abstract, what we implemented concretely, and why. It is written in UML 2.5.1 style and rendered with PlantUML.
+
+- Source: `docs/submissions/stage-b/uml/class/class_diagram.puml`
+- Rendered image: `docs/submissions/stage-b/uml/class/class_diagram.png`
+
+What is abstract:
+- Controller reuse is abstracted through `ApiControllerBase`, which centralizes shared authenticated API behavior.
+- Replaceable service contracts isolate important extension points: `ITokenService`, `ITwoFactorService`, `IAuditService`, and `IGisSnapshotService`.
+- GIS snapshot generation is behind `IGisSnapshotService`, so a different GIS provider can replace ArcGIS without changing controllers or building-card export flow.
+- OTP is behind `ITwoFactorService`, so the mocked OTP delivery can be replaced by a real SMS/email provider after handoff.
+- Building and street validation are centralized in `BuildingRules` and `StreetRules`, so manual editing and Excel import follow the same business rules.
+
+Where we committed to concrete technology:
+- PostgreSQL is the concrete database, accessed through EF Core and `AppDbContext`.
+- ASP.NET Core is the backend API framework.
+- React/Vite is the frontend implementation.
+- ArcGIS is the active GIS provider for the municipality map and building-card snapshots.
+- Docker Compose is the deployment unit for frontend, backend, PostgreSQL, and pgAdmin.
+
+Why this split fits the project:
+- Stable project decisions, such as PostgreSQL, ASP.NET Core, React, and Docker Compose, are concrete because they define the runtime system.
+- Riskier or more likely-to-change boundaries, such as OTP delivery, GIS provider, audit behavior, and token generation, are kept behind interfaces so they can be replaced without rewriting the full application.
 
 ##### 1.2.3 Customer-Side Deployment Woes and How We Overcame / Did Our Best
-Placeholder: presentation notes for customer-side deployment blockers, communication, and mitigation attempts will be added here.
+We use the deployment UML to explain how GhostHouses is intended to run inside the municipality environment, what blocked the deployment, and what we prepared to move it forward. It is written in UML 2.5.1 style and rendered with PlantUML.
+
+- Source: `docs/submissions/stage-b/uml/deployment/deployment_environment.puml`
+- Rendered image: `docs/submissions/stage-b/uml/deployment/deployment_environment.png`
+- Deployment User Story: [Issue #94](https://github.com/bbdaria/GhostHouses/issues/94)
+
+What the deployment UML shows:
+- Municipality users access the system only from inside the municipality private network over HTTPS 443.
+- pgAdmin is separated for IT/database administration over HTTPS 8443.
+- The backend and PostgreSQL are internal Docker services with no direct external port mapping.
+- Docker networks isolate frontend/backend traffic, backend/database traffic, and pgAdmin/database traffic.
+- The backend has outbound HTTPS access to the Haifa Municipality GIS / ArcGIS API.
+- OTP remains mocked inside the backend for handoff, so there is no external OTP provider dependency.
+
+Main deployment blocker:
+- The target environment is a municipality Windows Server VM.
+- Running the delivered Docker Compose stack on that VM depends on Docker/WSL support, which may require nested virtualization approval from municipality security/IT.
+
+How we handled it:
+- Prepared a one-command Docker Compose deployment from `project/`.
+- Documented required ports, software dependencies, hardware expectations, secrets, and certificates.
+- Prepared alternatives with the supervisor in case nested virtualization is not approved.
+- Continued written communication with the client side, dev team, IT/security contacts, and supervisors to move deployment forward professionally.
 
 ### 2. Deployment
 #### 2.1 Deployment Simplicity
