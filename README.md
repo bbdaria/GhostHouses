@@ -81,9 +81,9 @@ GhostHouses is a municipal web system for tracking vacant/rehabilitation buildin
 - **Backend:** ASP.NET Core (.NET 8, C#)
 - **Frontend:** React (Vite)
 - **Database:** PostgreSQL
-- **Testing:** xUnit (WebServer.Tests) for backend unit tests (run locally).
+- **Testing:** xUnit (`tests/WebServer.Tests`) for backend automated tests, plus frontend production build validation.
 - **Containerization:** Docker + Docker Compose
-- **CI/CD:** GitHub Actions (issue guard comment-only workflow)
+- **CI/CD:** GitHub Actions for issue guard, backend tests, frontend build, and Docker Compose build validation.
 
 ## Installation & Running
 ```bash
@@ -283,7 +283,7 @@ See `docs/CONVENTIONS.md` for:
 
 Branch structure used for handoff and grading:
 - `main` is reserved for final production/handover history.
-- `develop` is the delivered integration branch.
+- `develop` is the delivered integration branch and should be the GitHub default branch while `main` is intentionally empty.
 - `feature/<feature>/main` groups related implementation work.
 - `feature/<feature>/#<issue-number>-<slug>` is the branch linked to one implementation issue.
 - `release/stage-a/sprint-1-mvp`, `release/stage-a/sprint-2-final`, `release/stage-b/sprint-1-deployment`, `release/stage-b/sprint-2-gis`, and `release/stage-b/sprint-3-final` are release checkpoints from `develop`.
@@ -291,7 +291,21 @@ Branch structure used for handoff and grading:
 - The OpenStreetMap provider proof stays isolated under `feature/map-provider-flexibility/*` because it demonstrates scalability without changing the client-approved GIS delivery.
 
 ## CI/CD
-GitHub Actions runs the issue‑guard workflow on issue events and daily to comment on missing required metadata. Build/test pipelines are run locally by the team.
+GitHub Actions is used for both project-process validation and code validation.
+
+### 3.2.3 Automated Testing
+The automated testing workflow is defined in `.github/workflows/ci.yml`.
+
+It runs on pushes to `develop`, `feature/**`, and `release/**`, on pull requests into `develop`, and manually through `workflow_dispatch`.
+
+The CI workflow checks:
+- **Backend build and tests:** restores, builds, and runs `tests/WebServer.Tests` with .NET 8 and xUnit.
+- **Frontend build:** installs dependencies with `npm ci` and runs the Vite production build.
+- **Docker Compose build readiness:** validates the Compose configuration with CI-only dummy secrets, then builds the backend and frontend Docker images.
+
+This gives a clear commit-to-delivery gate: implementation branches must be buildable and testable before work is merged through the Git workflow into `develop` and then captured by release checkpoint branches.
+
+The issue-guard workflow is defined in `.github/workflows/issue-guard.yml`. It runs on issue events, daily, and manually to comment when GitHub issue metadata is missing or inconsistent. Issue guard checks project management quality, while CI checks code and deployment readiness.
 
 ## Local TLS Certificates
 The frontend and pgAdmin use local HTTPS. Self‑signed certs live in `project/certs/` (ignored by git).  
