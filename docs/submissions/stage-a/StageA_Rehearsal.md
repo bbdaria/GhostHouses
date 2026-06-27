@@ -227,7 +227,7 @@ The repo is structured for handoff and long-term maintenance:
 - `docs/CONVENTIONS.md` defines branch naming, issue metadata, statuses, and approval rules.
 - `issue-guard.yml` enforces metadata rules through automated comments (missing labels, parent story, project status, and branch linkage).
 - README includes a real feature list, setup steps, and pointers to documentation.
-- Stage A submission artifacts are committed under `docs/Stage A submission/`.
+- Stage A submission artifacts are committed under `docs/submissions/stage-a/`.
 - Issue guard runs on issue events and daily (scheduled) so drift is caught automatically.
 
 What to say:
@@ -249,7 +249,7 @@ Plain-language summary:
 - Temporary client testing environment: hosted on a team member’s PC kept online, with router port‑forwarding (443 → 443) and a **free** No‑IP dynamic DNS address (a service that gives a stable hostname even when the public IP changes). The client currently uses `https://ghosthouses.myddns.me/`.
 - Current port layout: Frontend HTTPS 443 (public), backend internal 8080 (not exposed), PostgreSQL 5432 (internal), pgAdmin HTTPS 8443 (admin‑only).
 - Network isolation: `app-net` (frontend↔backend), `db-net` (backend↔db), `admin-net` (pgAdmin↔db).
-- For a visual network breakdown, see `docs/Stage A submission/uml/network_split.puml`.
+- For a visual network breakdown, see `docs/submissions/stage-a/uml/network_split.puml`.
 
 ### Planned deployment flow
 - Dev branch for ongoing work, merge to main for stable releases.
@@ -358,7 +358,7 @@ Use case diagram is color‑coded as requested:
 - Planned = Yellow  
 - Backlog only = Red  
 - Canceled/removed = Gray  
-Files: `docs/Stage A submission/uml/use_case.puml` and `docs/Stage A submission/uml/use_case.png`.
+Files: `docs/submissions/stage-a/uml/use_case.puml` and `docs/submissions/stage-a/uml/use_case.png`.
 
 What to say:
 - “We marked every use case by status so it’s clear what was delivered in Stage A, what is planned for Stage B, and what is only backlog.”
@@ -372,7 +372,7 @@ Plain-language summary:
 
 ## 10) UML: Class Diagram
 Class diagram matches the implementation (see point 2).  
-Files: `docs/Stage A submission/uml/class_diagram.puml` and `docs/Stage A submission/uml/class_diagram.png`.
+Files: `docs/submissions/stage-a/uml/class_diagram.puml` and `docs/submissions/stage-a/uml/class_diagram.png`.
 
 What to say:
 - “This class diagram is implementation‑accurate, not just conceptual HLD. Planned components are marked separately.”
@@ -392,10 +392,10 @@ React/Vite: React is the frontend UI library, Vite is the build/dev tool that bu
 ASP.NET Core: Microsoft’s backend web framework for building APIs and handling business logic.
 EF Core: .NET’s Object‑Relational Mapper (ORM) that lets us work with the DB using C# classes instead of raw SQL.  
 LINQ: a C# query language used to filter/sort/project data in code, EF Core translates LINQ queries into SQL.
-File: `docs/Stage A submission/uml/deployment_desired.puml` / `.png`.
+File: `docs/submissions/stage-a/uml/deployment_desired.puml` / `.png`.
 
 Detailed network view and ports:
-- See `docs/Stage A submission/uml/network_split.puml` for the concrete Docker network split and ports.
+- See `docs/submissions/stage-a/uml/network_split.puml` for the concrete Docker network split and ports.
 - Networks: app‑net (frontend ↔ backend), db‑net (backend ↔ PostgreSQL), admin‑net (pgAdmin ↔ PostgreSQL).
 - Ports: Frontend HTTPS 443 (public), Backend API 8080 (internal), PostgreSQL 5432 (internal), pgAdmin HTTPS 8443 (admin only).
 - Why we split networks: reduce reachability, enforce least‑privilege, and keep admin tools isolated from the app path.
@@ -419,9 +419,9 @@ No‑IP provides a stable DNS name (DNS maps a name to an IP address) while the 
 Port‑forwarding is the router rule that maps external traffic to an internal machine/port.  
 Ports: Frontend HTTPS 443 (host‑mapped), Backend API 8080 (internal only), PostgreSQL 5432 (internal), pgAdmin HTTPS 8443 (IT/admin only).  
 Network split mirrors the desired setup: app‑net (frontend ↔ backend), db‑net (backend ↔ DB), admin‑net (pgAdmin ↔ DB).  
-The server to network membership table is shown in `docs/Stage A submission/uml/network_split.puml` to make the network split explicit.  
+The server to network membership table is shown in `docs/submissions/stage-a/uml/network_split.puml` to make the network split explicit.
 pgAdmin is a web UI for database administration (monitoring, queries, backups), it’s used by IT/DB admins, not end users.
-File: `docs/Stage A submission/uml/deployment_current.puml` / `.png`.
+File: `docs/submissions/stage-a/uml/deployment_current.puml` / `.png`.
 
 What to say:
 - “This diagram shows the temporary environment we use today while we wait for the official Windows Server deployment.”
