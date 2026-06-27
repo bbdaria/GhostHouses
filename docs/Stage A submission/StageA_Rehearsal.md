@@ -88,11 +88,11 @@ Rubric Q&A (GitHub and repo quality):
 - Question: Do they have a clear repo and README?  
   Answer: Yes, README explains how to run the stack and where the backend, frontend, and docs live, it includes deployment and local run instructions.
 - Question: Do they have a good branching system?  
-  Answer: Yes, we use main for stable releases, dev for ongoing work, and per‑issue branches following a fixed naming convention.
+  Answer: Yes, we use main for stable releases, develop for ongoing work, and per‑issue branches following a fixed naming convention.
 
 Rubric Q&A (testing and deployment workflow):
 - Question: Do they have a workflow from commit to deployment?  
-  Answer: Yes, we work per issue, review and test manually, then merge to dev, then to main for stable releases, deployment is Docker‑based, and daily issue‑guard checks enforce process rules.  
+  Answer: Yes, we work per issue, review and test manually, then merge to develop, then to main for stable releases, deployment is Docker‑based, and daily issue‑guard checks enforce process rules.
   Important note: deployment to the client Windows Server is delayed by client IT availability, so we use a temporary host for testing, this is a process constraint, not a design issue.
 
 Rubric Q&A (PoC):
@@ -257,7 +257,7 @@ Plain-language summary:
 - Deployment target is **client Windows Server**, which requires coordination with client IT (access, domain, HTTPS, credentials).
 
 What to say:
-- “What stayed the same from HLD: GitHub‑based workflow (dev for ongoing work, main for stable releases), Dockerized stack, and the planned CI/CD path. What changed: we can’t deploy to the client’s Windows Server yet, so we run a temporary host (team PC + port‑forwarding + free No‑IP). Port‑forwarding routes outside traffic to our internal host, No‑IP provides a stable DNS name. It’s worse for long‑term reliability, but better for short‑term progress because it keeps client testing active.”
+- “What stayed the same from HLD: GitHub‑based workflow (develop for ongoing work, main for stable releases), Dockerized stack, and the planned CI/CD path. What changed: we can’t deploy to the client’s Windows Server yet, so we run a temporary host (team PC + port‑forwarding + free No‑IP). Port‑forwarding routes outside traffic to our internal host, No‑IP provides a stable DNS name. It’s worse for long‑term reliability, but better for short‑term progress because it keeps client testing active.”
 
 Plain-language summary:
 - We can build and run the system reliably, but we still need client IT to host it officially.
