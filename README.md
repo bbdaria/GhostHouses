@@ -148,6 +148,26 @@ The diagram shows the complete Docker-based runtime environment:
 - The backend has outbound HTTPS access to the public Haifa Municipality GIS / ArcGIS API, which is an active integration.
 - OTP is mocked inside the backend for this deployment, so there is no external OTP provider or network dependency shown in the UML.
 
+### Software Dependencies
+GhostHouses is deployed through Docker Compose, so the server does not need manual installation of .NET, Node.js, PostgreSQL, or Nginx. Those dependencies are provided by Docker images during build and runtime.
+
+| Dependency | Version / Source | Why it is needed |
+| --- | --- | --- |
+| Windows Server VM | Municipality-provided server | Target deployment host |
+| Docker + Docker Compose | Installed on the server | Builds and runs the full application stack |
+| WSL 2 / nested virtualization | Needed if Docker Desktop is used on a Windows Server VM | Required for Linux containers on Docker Desktop |
+| PostgreSQL image | `postgres:16` | Application database |
+| pgAdmin image | `dpage/pgadmin4:latest` | Database administration UI for IT/DB admins |
+| .NET SDK image | `mcr.microsoft.com/dotnet/sdk:8.0` | Builds the ASP.NET Core backend |
+| ASP.NET runtime image | `mcr.microsoft.com/dotnet/aspnet:8.0` | Runs the backend container |
+| Node image | `node:20` | Builds the React/Vite frontend |
+| Nginx image | `nginx:alpine` | Serves the built frontend over HTTPS |
+| TLS certificate and key | `project/certs/dev.crt`, `project/certs/dev.key` | Enables HTTPS for frontend and pgAdmin |
+| Environment file | `project/.env` | Provides database, pgAdmin, and JWT configuration |
+| Outbound HTTPS access | Port 443 | Pulls Docker images during build/deployment and calls the Haifa Municipality GIS API at runtime |
+
+No real external OTP provider is required for this deployment because OTP is currently mocked inside the backend.
+
 ### Reset & Rebuild
 For a full reset, use the clean deployment command above. It deletes Docker volumes, so database data is removed.
 
