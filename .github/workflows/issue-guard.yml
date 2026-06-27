@@ -210,7 +210,9 @@ jobs:
 
                 const parent = result?.repository?.issue?.parent;
                 const linkedBranches = result?.repository?.issue?.linkedBranches?.nodes || [];
-                const expectedPrefix = `Issues/#${issueNumber}-`;
+                const expectedBranchPattern = new RegExp(
+                  `^feature\\/[A-Za-z0-9._-]+\\/#${issueNumber}-[A-Za-z0-9._-]+$`
+                );
 
                 if (!parent) {
                   missing.push('- Parent issue is missing (must be a User Story).');
@@ -230,10 +232,10 @@ jobs:
                   missing.push('- Development branch must be a single branch (remove extra linked branches).');
                 } else {
                   const hasMatchingBranch = linkedBranches.some(
-                    (node) => (node?.ref?.name || '').startsWith(expectedPrefix)
+                    (node) => expectedBranchPattern.test(node?.ref?.name || '')
                   );
                   if (!hasMatchingBranch) {
-                    missing.push(`- Development branch name must start with "${expectedPrefix}".`);
+                    missing.push(`- Development branch name must match "feature/<feature>/#${issueNumber}-<slug>".`);
                   }
                 }
               } catch (error) {
@@ -617,7 +619,9 @@ jobs:
                   missing.push('- User Story issues must not have a Development branch linked (remove the branch).');
                 }
               } else {
-                const expectedPrefix = `Issues/#${issueNumber}-`;
+                const expectedBranchPattern = new RegExp(
+                  `^feature\\/[A-Za-z0-9._-]+\\/#${issueNumber}-[A-Za-z0-9._-]+$`
+                );
                 if (!parent) {
                   missing.push('- Parent issue is missing (must be a User Story).');
                 } else {
@@ -635,10 +639,10 @@ jobs:
                   missing.push('- Development branch must be a single branch (remove extra linked branches).');
                 } else {
                   const hasMatchingBranch = linkedBranches.some(
-                    (node) => (node?.ref?.name || '').startsWith(expectedPrefix)
+                    (node) => expectedBranchPattern.test(node?.ref?.name || '')
                   );
                   if (!hasMatchingBranch) {
-                    missing.push(`- Development branch name must start with "${expectedPrefix}".`);
+                    missing.push(`- Development branch name must match "feature/<feature>/#${issueNumber}-<slug>".`);
                   }
                 }
               }

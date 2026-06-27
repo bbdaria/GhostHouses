@@ -37,13 +37,25 @@ It is written in English and kept in the repo to stay versioned with the code.
 - Maintain RTL alignment and spacing consistency.
 
 ## 4) Git Workflow
-- Branch naming: `Issues/#<issue-number>-<short-slug>` (example: `Issues/#19-convention-doc`).
-- One issue per branch. No mixing unrelated changes.
+- Permanent branches: `main` and `develop`.
+- `main` is reserved for final production/handover history. Do not merge directly into `main` until final approval.
+- `develop` is the integration branch for delivered work.
+- Feature group branches use `feature/<feature>/main`.
+  Example: `feature/gis/main`.
+- Issue branches use `feature/<feature>/#<issue-number>-<short-slug>`.
+  Example: `feature/gis/#88-gis-map-page`.
+- Release checkpoint branches use `release/stage-a/sprint-<number>-<name>` or `release/stage-b/sprint-<number>-<name>`.
+  Example: `release/stage-b/sprint-2-gis`.
+- One implementation issue per issue branch. No mixing unrelated changes.
 - Commit messages must mention the issue number so it links in GitHub.
   Example: `Issue #19: add conventions document`.
+- Normal flow: `develop` -> `feature/<feature>/main` -> `feature/<feature>/#<issue>-<slug>` -> `feature/<feature>/main` -> `develop`.
+- Release branches are checkpoints from `develop`; they are not used for day-to-day development.
 - Merge to `develop` only after the issue is **Done** and approved.
 - If an issue is **Canceled**, close it and do not merge.
-- Issue guard enforces that non‑User‑Story issues have a linked Development branch matching the naming pattern above.
+- Issue guard enforces that non‑User‑Story issues have exactly one linked Development branch matching `feature/<feature>/#<issue-number>-<short-slug>`.
+- User Story issues must not have a linked Development branch.
+- Proof or scalability branches that should not reach production, such as the OpenStreetMap provider proof, must stay outside `develop`, `release/*`, and `main`.
 
 ## 5) Issue Management
 ### Automated checks (comment-only)
@@ -97,7 +109,7 @@ It is written in English and kept in the repo to stay versioned with the code.
 - Milestone is required.
 - Labels are required.
 - Must be in the **GhostHouses** project with a **Status** value.
-- Must have **exactly one** linked Development branch.
+- Must have **exactly one** linked Development branch named `feature/<feature>/#<issue-number>-<short-slug>`.
 - Time-tracked updates are required on every progress comment.
 - A closed non-User-Story issue must have at least one closing/progress comment with a short description line followed by `Time spent: ...`.
   Example:
