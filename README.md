@@ -126,6 +126,25 @@ This deployment path is intentionally simple and repeatable:
 - **pgAdmin**: `https://localhost:8443` (host port 8443 -> container 443).
 - Networks: `app-net` (frontend ↔ backend), `db-net` (backend ↔ db), `admin-net` (pgAdmin ↔ db).
 
+## Deployment Requirements and Dependencies
+This section documents the minimum environment needed to deploy GhostHouses and maps to the deployment grading rubric: deployment UML, software dependencies, and minimal hardware requirements.
+
+### Deployment UML
+The Stage B deployment UML is located here:
+- Source: `docs/submissions/stage-b/uml/deployment/deployment_environment.puml`
+- Rendered image: `docs/submissions/stage-b/uml/deployment/deployment_environment.png`
+
+The diagram shows the complete Docker-based runtime environment:
+- Municipality users access only the frontend over HTTPS on port 443.
+- The frontend container serves the React application through Nginx.
+- The backend container runs the ASP.NET Core API internally on port 8080 and is not exposed directly outside Docker.
+- PostgreSQL runs internally on port 5432 and is not exposed directly outside Docker.
+- pgAdmin is exposed separately over HTTPS on port 8443 for IT/database administration only.
+- Docker networks isolate traffic by purpose:
+  - `app-net`: frontend to backend.
+  - `db-net`: backend to PostgreSQL.
+  - `admin-net`: pgAdmin to PostgreSQL.
+
 ### Reset & Rebuild
 For a full reset, use the clean deployment command above. It deletes Docker volumes, so database data is removed.
 
@@ -154,6 +173,7 @@ Documentation note:
 - `docs/hld/` contains the original HLD material.
 - `docs/notes/` contains meeting/client notes.
 - `docs/submissions/stage-a/` contains Stage A submission artifacts, rehearsal notes, and UML files.
+- `docs/submissions/stage-b/` contains Stage B submission and deployment-grading artifacts.
 
 ## Conventions & Workflow
 See `docs/CONVENTIONS.md` for:

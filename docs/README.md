@@ -11,3 +11,4 @@ This folder is organized by purpose so project handoff, course submission files,
 - `hld/`: original HLD documents and related HLD source material.
 - `notes/`: meeting notes, client notes, and temporary review material that should not be mixed with final submissions.
 - `submissions/stage-a/`: Stage A rehearsal material, submitted Stage A document/PDF, examiner spreadsheet, draft files, and UML diagrams.
+- `submissions/stage-b/`: Stage B submission and deployment-grading artifacts.
