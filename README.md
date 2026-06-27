@@ -79,7 +79,7 @@ On a clean database, the backend creates one initial administrator account: `adm
 Poster files are stored under `docs/submissions/stage-b/poster/`.
 
 - Required template: `docs/submissions/stage-b/poster/Yearly Poster Pattern 97x67.pptx`
-- Project poster working copy: `docs/submissions/stage-b/poster/GhostHouses_Poster.pptx`
+- Project's poster: `docs/submissions/stage-b/poster/GhostHouses_Poster.pptx`
 
 #### 1.2 Presentation
 Presentation source files are stored under `docs/submissions/stage-b/presentation/`.
