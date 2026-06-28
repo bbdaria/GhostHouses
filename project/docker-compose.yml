@@ -1,0 +1,66 @@
+services:
+  db:
+    extends:
+      file: ./db-server/docker-compose.yml
+      service: db
+    networks:
+      - db-net
+      - admin-net
+
+  backend:
+    extends:
+      file: ./web-server/docker-compose.yml
+      service: backend
+    container_name: ghosthouses-backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in project/.env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in project/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in project/.env}
+      Jwt__Issuer: ${JWT_ISSUER:-ghosthouses}
+      Jwt__Audience: ${JWT_AUDIENCE:-ghosthouses-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in project/.env}
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-120}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-net
+      - db-net
+
+  frontend:
+    extends:
+      file: ./web-server/docker-compose.yml
+      service: frontend
+    container_name: ghosthouses-frontend
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "443:443"
+    volumes:
+      - ./certs/dev.crt:/etc/nginx/certs/server.crt:ro
+      - ./certs/dev.key:/etc/nginx/certs/server.key:ro
+    networks:
+      - app-net
+
+  pgadmin:
+    extends:
+      file: ./db-server/docker-compose.yml
+      service: pgadmin
+    depends_on:
+      db:
+        condition: service_started
+    networks:
+      - admin-net
+
+volumes:
+  db-data:
+  pgadmin-data:
+
+networks:
+  app-net:
+  db-net:
+  admin-net:

@@ -1,0 +1,44 @@
+@startuml
+skinparam shadowing false
+skinparam packageStyle rectangle
+left to right direction
+
+actor "Outside Users" as outside
+actor "IT / DB Admin" as admin
+
+package "Docker Host (Docker)" {
+  package "app-net" as appnet {
+    component "Frontend\nInternal port: 443 (HTTPS)\nExternal port: 443 (HTTPS)" as fe
+    component "Backend\nInternal port: 8080\nExternal port: none" as be
+  }
+
+  package "db-net" as dbnet {
+    database "PostgreSQL\nInternal port: 5432\nExternal port: none" as db
+  }
+
+  package "admin-net" as adminnet {
+    component "pgAdmin\nInternal port: 443 (HTTPS)\nExternal port: 8443 (HTTPS)" as pg
+  }
+
+  be .. dbnet : member
+  db .. adminnet : member
+}
+
+outside --> fe : HTTPS 443
+admin --> pg : HTTPS 8443
+
+fe --> be : HTTP 8080 (/api)
+be --> fe : HTTPS 443 (reachable)
+be --> db : PostgreSQL 5432
+pg --> db : PostgreSQL 5432 (admin)
+db --> be : TCP 8080 (reachable)
+db --> pg : TCP 443 (reachable)
+
+legend bottom
+|= Server\\Network |= app-net |= db-net |= admin-net |
+| Frontend | v | x | x |
+| Backend | v | v | x |
+| PostgreSQL | x | v | v |
+| pgAdmin | x | x | v |
+endlegend
+@enduml

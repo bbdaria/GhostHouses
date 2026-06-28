@@ -1,0 +1,52 @@
+@startuml
+skinparam shadowing false
+skinparam packageStyle rectangle
+left to right direction
+
+actor "Municipality Users" as users
+actor "IT / DB Admin" as itadmin
+cloud "Internet" as internet
+component "No‑IP DNS\nghosthouses.myddns.me" as noip
+node "Home Router\n(port forward :443 → 443)" as router
+
+node "Team PC (temporary host)" {
+  package "Docker Host (Docker)" {
+    package "app-net" as appnet {
+      component "Frontend\nInternal port: 443 (HTTPS)\nExternal port: 443 (HTTPS)" as web
+      component "Backend API\nInternal port: 8080\nExternal port: none" as api
+    }
+
+    package "db-net" as dbnet {
+      database "PostgreSQL\nInternal port: 5432\nExternal port: none" as db
+    }
+
+    package "admin-net" as adminnet {
+      component "pgAdmin\nInternal port: 443 (HTTPS)\nExternal port: 8443 (HTTPS)" as pgadmin
+    }
+
+    api .. dbnet : member
+    db .. adminnet : member
+  }
+
+  component "Mock Auth Server" as mockauth <<mock>>
+  component "Mock Municipal Services" as mocksvc <<mock>>
+}
+
+users --> internet : HTTPS 443
+internet --> noip : DNS
+noip --> router : DNS + port forward
+router --> web : HTTPS 443
+
+itadmin --> pgadmin : HTTPS 8443
+
+web --> api : HTTPS 8080 (/api)
+api --> web : HTTPS 443 (reachable)
+api --> db : PostgreSQL 5432
+pgadmin --> db : PostgreSQL 5432 (admin)
+db --> api : TCP 8080 (reachable)
+db --> pgadmin : TCP 443 (reachable)
+
+api ..> mockauth : mocked
+api ..> mocksvc : mocked
+
+@enduml

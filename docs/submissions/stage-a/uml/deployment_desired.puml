@@ -1,0 +1,47 @@
+@startuml
+skinparam shadowing false
+skinparam packageStyle rectangle
+left to right direction
+
+actor "Municipality Users" as users
+actor "IT / DB Admin" as itadmin
+
+node "Municipality Network" {
+  package "Docker Host (Docker)" {
+    package "app-net" as appnet {
+      component "Frontend\nInternal port: 443 (HTTPS)\nExternal port: 443 (HTTPS)" as web
+      component "Backend API\nInternal port: 8080\nExternal port: none" as api
+    }
+
+    package "db-net" as dbnet {
+      database "PostgreSQL\nInternal port: 5432\nExternal port: none" as db
+    }
+
+    package "admin-net" as adminnet {
+      component "pgAdmin\nInternal port: 443 (HTTPS)\nExternal port: 8443 (HTTPS)" as pgadmin
+    }
+
+    api .. dbnet : member
+    db .. adminnet : member
+  }
+}
+
+node "Existing Municipality Services (planned)" as external {
+  component "Auth Server" as auth
+  component "Other Municipal Services" as services
+}
+
+users --> web : HTTPS 443
+itadmin --> pgadmin : HTTPS 8443
+
+web --> api : HTTPS 8080 (/api)
+api --> web : HTTPS 443 (reachable)
+api --> db : PostgreSQL 5432
+pgadmin --> db : PostgreSQL 5432 (admin)
+db --> api : TCP 8080 (reachable)
+db --> pgadmin : TCP 443 (reachable)
+
+api ..> auth : planned integration
+api ..> services : planned integration
+
+@enduml
