@@ -1,0 +1,156 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{default}
+
+\title{GhostHouses}
+\subtitle{Stage B Presentation\\2025-2026-Spring Semester\\02340312 - Yearly Project in Software Eng.-Stage B}
+\author[GhostHouses Team]{GhostHouses Team}
+\institute[Technion CS]{Technion, Faculty of Computer Science}
+\date{}
+
+\AtBeginSection[]{
+  \begin{frame}
+    \centering
+    \vfill
+    {\Huge \insertsectionhead}
+    \vfill
+  \end{frame}
+}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Agenda}
+  \tableofcontents
+\end{frame}
+
+\section{User Stories to Use Cases to Issues to Sprints}
+\begin{frame}{Traceability UML}
+  \centering
+  \includegraphics[
+    width=\textwidth,
+    height=0.78\textheight,
+    keepaspectratio
+  ]{../uml/use-cases/use_cases_to_sprints.png}
+\end{frame}
+
+\begin{frame}{User Stories to Use Cases to Issues to Sprints}
+  \begin{itemize}
+    \item We grouped the backlog by actors, permission levels, and real user-facing use cases.
+    \item Each use case maps to readable GitHub User Story issues, not only issue numbers.
+    \item The diagram keeps implementation sub-issues out of the slide so the presentation stays readable.
+    \item Release branches capture sprint checkpoints: Stage A MVP, Stage A final, Stage B deployment, Stage B GIS, and the final handoff state.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Branch Management / Issue Management}
+  \begin{itemize}
+    \item \textbf{Branch management:} branches are organized around \texttt{develop}, feature branches, and release checkpoints.
+    \item \textbf{Branch management:} feature work follows \texttt{develop} $\rightarrow$ \texttt{feature/\textless feature\textgreater/main} $\rightarrow$ \texttt{feature/\textless feature\textgreater/\#\textless issue\textgreater-\textless slug\textgreater} $\rightarrow$ \texttt{feature/\textless feature\textgreater/main} $\rightarrow$ \texttt{develop}.
+    \item \textbf{Issue management:} User Story issues describe user value and acceptance criteria.
+    \item \textbf{Issue management:} implementation issues are linked to one parent User Story and one development branch.
+    \item \textbf{Issue management:} closed implementation issues include a short completion comment with a \texttt{Time spent} line.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Automated Tests / Readme.md / License}
+  \begin{itemize}
+    \item \textbf{Automated tests:} GitHub Actions runs backend build/tests, frontend build, and Docker Compose build readiness.
+    \item \textbf{Automated tests:} Issue Guard checks labels, milestone, project status, parent links, branches, and User Story acceptance criteria.
+    \item \textbf{Readme.md:} the README is structured as a handoff guide with a clear Project Delivery section.
+    \item \textbf{License:} the repository includes a Creative Commons Attribution 4.0 International license.
+  \end{itemize}
+\end{frame}
+
+\section{Architecture}
+\begin{frame}{UML Class Diagram}
+  \centering
+  \includegraphics[
+    width=\textwidth,
+    height=0.78\textheight,
+    keepaspectratio
+  ]{../uml/class/class_diagram.png}
+\end{frame}
+
+\begin{frame}{Good Use of Abstract Classes and Design Patterns}
+  \begin{itemize}
+    \item Abstract boundaries: service contracts for JWT, OTP, audit logging, and GIS snapshots.
+    \item Concrete commitments: ASP.NET Core backend, React frontend, PostgreSQL database, ArcGIS GIS provider, and Docker Compose deployment.
+    \item The external-risk areas stay behind interfaces, so OTP delivery or GIS provider changes do not require rewriting controllers or the domain model.
+    \item Stable runtime choices are concrete because they define how the municipality receives and operates the system.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Good Use of Abstract Classes and Design Patterns}
+  \begin{itemize}
+    \item \texttt{ApiControllerBase} centralizes authenticated API behavior.
+    \item \texttt{BuildingRules} and \texttt{StreetRules} keep manual editing and Excel import aligned to one source of truth.
+    \item \texttt{AppDbContext} is the persistence boundary for PostgreSQL entities.
+    \item High cohesion: controllers, services, validation rules, import helpers, and models each have a clear responsibility.
+    \item Low coupling: controllers depend on service contracts and stable boundaries instead of direct external systems.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Robustness to Next Pivot / API Vendor Change}
+  \begin{itemize}
+    \item \textbf{Future proof:} \texttt{IGisSnapshotService} protects building-card export from a future GIS vendor change.
+    \item The delivered system uses Haifa Municipality ArcGIS because it is the client-approved provider.
+    \item A separate OpenStreetMap proof branch demonstrates that the map provider can be replaced without changing the production delivery.
+    \item OTP is mocked for handoff, but the flow depends on \texttt{ITwoFactorService}, so a real SMS/email provider can replace it later.
+    \item Centralized business rules make future municipality field or validation changes safer.
+  \end{itemize}
+\end{frame}
+
+\section{Customer-Side Deployment}
+\begin{frame}{Deployment UML}
+  \centering
+  \includegraphics[
+    width=\textwidth,
+    height=0.78\textheight,
+    keepaspectratio
+  ]{../uml/deployment/deployment_environment.png}
+\end{frame}
+
+\begin{frame}{Customer-Side Deployment}
+  \begin{itemize}
+    \item The municipality environment is a Windows Server VM inside the private municipality network.
+    \item The intended deployment is a Docker Compose stack: frontend, backend, PostgreSQL, and pgAdmin.
+    \item Municipality users access only the frontend through HTTPS 443.
+    \item IT/database administration uses pgAdmin through HTTPS 8443.
+    \item Backend and database stay internal to Docker networks and are not exposed directly.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Customer-Side Deployment Woes and Mitigation}
+  \begin{itemize}
+    \item Main blocker: Docker Desktop / WSL 2 on the municipality Windows Server VM may require nested virtualization approval.
+    \item We prepared the deployment as one repeatable command from \texttt{project/}: \texttt{docker compose down -v \&\& docker compose up -d --build}.
+    \item We documented ports, software dependencies, hardware expectations, secrets, certificates, and network access.
+    \item We prepared fallback plans with the supervisor if nested virtualization is not approved.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Exhausting Communication With the Customer}
+  \begin{itemize}
+    \item \textbf{Exhausting communication with the customer toward possible deployment, in writing:} deployment communication is documented with the client side, municipality dev team, IT/security contacts, and supervisors.
+    \item The written trail covers deployment requirements, server preparation, security approval, and nested virtualization discussion.
+    \item The client-side blocker is not application readiness, it is approval and infrastructure constraints in the municipality environment.
+    \item We kept the system ready for handoff while continuing to coordinate professionally with the municipality side.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \centering
+  \vfill
+  {\Huge Thank You}
+  \vspace{0.5cm}
+
+  {\large GhostHouses Team}
+  \vfill
+\end{frame}
+
+\end{document}

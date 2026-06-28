@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16
+    container_name: ghosthouses-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in project/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in project/.env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in project/.env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ghosthouses-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?Set PGADMIN_DEFAULT_EMAIL in project/.env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Set PGADMIN_DEFAULT_PASSWORD in project/.env}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_ENABLE_TLS: 'True'
+      PGADMIN_LISTEN_PORT: '443'
+    ports:
+      - "8443:443"
+    depends_on:
+      db:
+        condition: service_started
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ../certs/dev.crt:/certs/server.cert:ro
+      - ../certs/dev.key:/certs/server.key:ro
+
+volumes:
+  db-data:
+  pgadmin-data:

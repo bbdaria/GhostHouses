@@ -1,0 +1,74 @@
+@startuml
+left to right direction
+skinparam usecase {
+  BackgroundColor<<Implemented>> #C6EFCE
+  BorderColor<<Implemented>> #006100
+  BackgroundColor<<Planned>> #FFF2CC
+  BorderColor<<Planned>> #7F6000
+  BackgroundColor<<Backlog>> #F8CBAD
+  BorderColor<<Backlog>> #9C0006
+  BackgroundColor<<Canceled>> #D9D9D9
+  BorderColor<<Canceled>> #7F7F7F
+}
+
+actor "User - Viewer" as Viewer
+actor "User - Editor" as Editor
+actor "Admin" as Admin
+
+rectangle "GhostHouses" {
+  usecase "Viewer Permissions" as VIEW_PERM <<Implemented>>
+  usecase "Editor Permissions" as EDIT_PERM <<Implemented>>
+  usecase "Admin Permissions" as ADMIN_PERM <<Planned>>
+  usecase "Edit user permissions" as EDIT_USERS <<Planned>>
+
+  usecase "Login (2FA)" as LOGIN <<Planned>>
+  usecase "View building details (Added)" as VIEW_BUILD <<Implemented>>
+  usecase "View field logs and changes" as LOGS <<Implemented>>
+  usecase "Search and filter the database" as SEARCH <<Implemented>>
+  usecase "Produce building card" as CARD <<Implemented>>
+  usecase "Export building cards (PPTX) (Added)" as CARD_PPTX <<Implemented>>
+  usecase "Export buildings (Excel) (Added)" as EXPORT_BLD <<Implemented>>
+  usecase "Import buildings (Excel/ZIP) (Added)" as IMPORT_BLD <<Implemented>>
+  usecase "Update existing buildings" as UPDATE <<Implemented>>
+  usecase "Add and remove buildings" as DELETE <<Implemented>>
+  usecase "Delete logs (Canceled)" as LOG_ADMIN <<Canceled>>
+
+  usecase "Manage streets (add/edit/import/export) (Added)" as STREETS <<Implemented>>
+  usecase "Manage users (mock) (Added)" as USERS <<Planned>>
+  usecase "Reset OTP (mock) (Added)" as OTP_RESET <<Planned>>
+  usecase "Template converter (Added)" as CONVERT <<Implemented>>
+
+  database "Internal servers (mock; deployment planned)" as Internal
+}
+
+Viewer --> VIEW_PERM
+Editor --> VIEW_PERM
+Editor --> EDIT_PERM
+Admin --> VIEW_PERM
+Admin --> EDIT_PERM
+Admin --> ADMIN_PERM
+
+VIEW_PERM --> LOGIN
+VIEW_PERM --> VIEW_BUILD
+VIEW_PERM --> LOGS
+VIEW_PERM --> SEARCH
+VIEW_PERM --> CARD
+VIEW_PERM --> CARD_PPTX
+VIEW_PERM --> EXPORT_BLD
+
+EDIT_PERM --> UPDATE
+EDIT_PERM --> DELETE
+EDIT_PERM --> IMPORT_BLD
+EDIT_PERM --> STREETS
+EDIT_PERM --> EXPORT_BLD
+
+ADMIN_PERM --> EDIT_USERS
+ADMIN_PERM --> USERS
+ADMIN_PERM --> OTP_RESET
+ADMIN_PERM --> LOG_ADMIN
+ADMIN_PERM --> CONVERT
+
+
+database "Outside servers (planned)" as Outside
+Outside ..> Internal : status sync
+@enduml

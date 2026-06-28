@@ -1,0 +1,112 @@
+@startuml
+title User Stories to Use Cases to Issues to Sprints - UML 2.5.1
+
+left to right direction
+
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam DefaultFontName Arial
+skinparam packageStyle rectangle
+skinparam ArrowColor #334155
+skinparam ArrowFontColor #334155
+skinparam ActorBorderColor #0F172A
+skinparam ActorFontColor #0F172A
+skinparam UsecaseBorderColor #1D4ED8
+skinparam UsecaseBackgroundColor #DBEAFE
+skinparam UsecaseFontColor #0F172A
+skinparam ArtifactBorderColor #475569
+skinparam ArtifactBackgroundColor #F8FAFC
+skinparam ArtifactFontColor #0F172A
+skinparam RectangleBorderColor #94A3B8
+skinparam RectangleBackgroundColor #FFFFFF
+
+rectangle "Actors" {
+  actor "Viewer" as Viewer
+  actor "Editor" as Editor
+  actor "Admin" as Admin
+  actor "Municipality\nIT / Dev Team" as IT
+}
+
+rectangle "Permissions" {
+  usecase "Viewer\nPermission" as P_VIEW
+  usecase "Editor\nPermission" as P_EDIT
+  usecase "Admin\nPermission" as P_ADMIN
+  usecase "Deployment\nResponsibility" as P_DEPLOY
+}
+
+rectangle "Use Cases" {
+  usecase "Access control\nand permissions" as UC_ACCESS
+  usecase "Search and view\nbuilding records" as UC_VIEW
+  usecase "Manage building\nrepository" as UC_MANAGE
+  usecase "Import / export\nbuilding data" as UC_DATA
+  usecase "Produce\nbuilding cards" as UC_CARDS
+  usecase "Review\naudit trail" as UC_LOGS
+  usecase "Use GIS\nmap context" as UC_GIS
+  usecase "Deploy inside\nmunicipality network" as UC_DEPLOY
+  usecase "Prove map provider\nflexibility" as UC_PROVIDER
+}
+
+rectangle "User Story Issues" {
+  artifact "US #20/#21/#22\nAs an admin, I want role-based access,\n2FA login, and permission control\nso only authorized users can use the system." as US_ACCESS
+  artifact "US #23/#24/#25\nAs a viewer, I want to view, search,\nfilter, and open building details\nso I can review records quickly." as US_VIEW
+  artifact "US #27/#28/#29\nAs an editor, I want to add, update,\nand safely remove buildings\nso the repository stays current." as US_MANAGE
+  artifact "US #76\nAs municipality staff, I want to export\nand restore building data\nso local backup is possible." as US_DATA
+  artifact "US #26\nAs a viewer, I want to produce\na building card image\nso it can be used in presentations." as US_CARDS
+  artifact "US #30/#31/#32/#34\nAs a viewer/editor/admin, I want logs\nand audit history so building changes\nremain accountable." as US_LOGS
+  artifact "US #35/#84/#85\nAs a viewer/editor, I want GIS map context\nand area selection so records connect\nto real locations." as US_GIS
+  artifact "US #94\nAs municipality staff, I want GhostHouses\ndeployed on the municipality server\nso it can be used internally." as US_DEPLOY
+  artifact "US #91\nAs a viewer, I want an OpenStreetMap proof\nso the team can demonstrate\nmap-provider flexibility." as US_PROVIDER
+}
+
+rectangle "Sprints / Branches" {
+  artifact "release/stage-a/sprint-2-final\nrelease/stage-b/sprint-3-final" as S_ACCESS
+  artifact "release/stage-a/sprint-2-final\nrelease/stage-b/sprint-3-final" as S_VIEW
+  artifact "release/stage-a/sprint-1-mvp\nrelease/stage-a/sprint-2-final" as S_MANAGE
+  artifact "release/stage-a/sprint-1-mvp\nrelease/stage-a/sprint-2-final" as S_DATA
+  artifact "release/stage-a/sprint-2-final\nrelease/stage-b/sprint-2-gis\nrelease/stage-b/sprint-3-final" as S_CARDS
+  artifact "release/stage-a/sprint-2-final" as S_LOGS
+  artifact "release/stage-b/sprint-2-gis" as S_GIS
+  artifact "release/stage-b/sprint-1-deployment" as S_DEPLOY
+  artifact "feature/map-provider-flexibility/main\nnot merged to production releases" as S_PROVIDER
+}
+
+Viewer --> P_VIEW
+Editor --> P_VIEW
+Editor --> P_EDIT
+Admin --> P_VIEW
+Admin --> P_EDIT
+Admin --> P_ADMIN
+IT --> P_DEPLOY
+
+P_ADMIN --> UC_ACCESS
+P_VIEW --> UC_VIEW
+P_EDIT --> UC_MANAGE
+P_EDIT --> UC_DATA
+P_VIEW --> UC_CARDS
+P_VIEW --> UC_LOGS
+P_EDIT --> UC_LOGS
+P_VIEW --> UC_GIS
+P_EDIT --> UC_GIS
+P_DEPLOY --> UC_DEPLOY
+P_DEPLOY --> UC_PROVIDER
+
+UC_ACCESS ..> US_ACCESS : traces to
+UC_VIEW ..> US_VIEW : traces to
+UC_MANAGE ..> US_MANAGE : traces to
+UC_DATA ..> US_DATA : traces to
+UC_CARDS ..> US_CARDS : traces to
+UC_LOGS ..> US_LOGS : traces to
+UC_GIS ..> US_GIS : traces to
+UC_DEPLOY ..> US_DEPLOY : traces to
+UC_PROVIDER ..> US_PROVIDER : traces to
+
+US_ACCESS ..> S_ACCESS : delivered in
+US_VIEW ..> S_VIEW : delivered in
+US_MANAGE ..> S_MANAGE : delivered in
+US_DATA ..> S_DATA : delivered in
+US_CARDS ..> S_CARDS : delivered in
+US_LOGS ..> S_LOGS : delivered in
+US_GIS ..> S_GIS : delivered in
+US_DEPLOY ..> S_DEPLOY : tracked in
+US_PROVIDER ..> S_PROVIDER : proof branch
+@enduml

@@ -1,0 +1,91 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<Implemented>> #C6EFCE
+  BorderColor<<Implemented>> #006100
+  BackgroundColor<<Planned>> #FFF2CC
+  BorderColor<<Planned>> #7F6000
+}
+
+package Controllers {
+  abstract class ApiControllerBase <<Implemented>>
+  class AuthController <<Implemented>>
+  class BuildingsController <<Implemented>>
+  class LogsController <<Implemented>>
+  class StreetsController <<Implemented>>
+  class UsersController <<Implemented>>
+  class SelectTablesController <<Implemented>>
+  class HealthController <<Implemented>>
+}
+
+package Services {
+  class AuditService <<Implemented>>
+  class BuildingRules <<Implemented>>
+  class StreetRules <<Implemented>>
+  class TokenService <<Implemented>>
+  class TwoFactorService <<Implemented>>
+  class ExternalDataService <<Planned>>
+  class ExternalSyncWorker <<Planned>>
+}
+
+package Data {
+  class AppDbContext <<Implemented>>
+  class SelectTables <<Implemented>>
+  class BuildingsExcelImporter <<Implemented>>
+  class StreetsExcelImporter <<Implemented>>
+}
+
+package Models {
+  class Building <<Implemented>>
+  class Street <<Implemented>>
+  class BuildingLog <<Implemented>>
+  class AuditEntry <<Implemented>>
+  class ExternalSystemSnapshot <<Planned>>
+  class AppUser <<Implemented>>
+}
+
+ApiControllerBase <|-- AuthController
+ApiControllerBase <|-- BuildingsController
+ApiControllerBase <|-- LogsController
+ApiControllerBase <|-- StreetsController
+ApiControllerBase <|-- UsersController
+ApiControllerBase <|-- SelectTablesController
+ApiControllerBase <|-- HealthController
+
+AuthController --> TokenService
+AuthController --> TwoFactorService
+AuthController --> AppDbContext
+
+BuildingsController --> AppDbContext
+BuildingsController --> AuditService
+BuildingsController --> BuildingRules
+BuildingsController --> BuildingsExcelImporter
+BuildingsController --> SelectTables
+
+LogsController --> AppDbContext
+LogsController --> AuditService
+
+StreetsController --> AppDbContext
+StreetsController --> StreetRules
+StreetsController --> StreetsExcelImporter
+
+UsersController --> AppDbContext
+UsersController --> AuditService
+UsersController --> TokenService
+
+AuditService --> AppDbContext
+ExternalDataService --> ExternalSystemSnapshot
+ExternalSyncWorker --> ExternalDataService
+ExternalSyncWorker --> AppDbContext
+
+AppDbContext --> Building
+AppDbContext --> Street
+AppDbContext --> BuildingLog
+AppDbContext --> AuditEntry
+AppDbContext --> AppUser
+
+Building "*" --> "1" Street
+Building "1" --> "*" BuildingLog
+AppUser "1" --> "*" BuildingLog
+
+@enduml

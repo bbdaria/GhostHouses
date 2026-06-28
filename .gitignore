@@ -1,0 +1,45 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.user
+*.suo
+.vs/
+*.tmp
+*.bak
+*.cache
+
+# .NET build outputs
+**/bin/
+**/obj/
+*.userosscache
+*.sln.docstates
+*.sln
+
+# Node/Vite
+**/node_modules/
+**/dist/
+**/.vite/
+
+# Logs
+*.log
+
+# Archives
+*.tar
+
+# Environment files
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Local TLS certs
+project/certs/
+
+# Git filter-branch temp
+.git-rewrite*
