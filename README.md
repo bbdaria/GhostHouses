@@ -81,6 +81,13 @@ Poster files are stored under `docs/submissions/stage-b/poster/`.
 - Required template: `docs/submissions/stage-b/poster/Yearly Poster Pattern 97x67.pptx`
 - Project's poster: `docs/submissions/stage-b/poster/GhostHouses_Poster.pptx`
 
+Poster assets are organized under:
+- `docs/submissions/stage-b/poster/assets/logo/`
+- `docs/submissions/stage-b/poster/assets/title-tagline/`
+- `docs/submissions/stage-b/poster/assets/description/`
+- `docs/submissions/stage-b/poster/assets/grid/`
+- `docs/submissions/stage-b/poster/assets/team/`
+
 #### 1.2 Presentation
 Presentation source files are stored under `docs/submissions/stage-b/presentation/`.
 
@@ -90,8 +97,9 @@ Presentation source files are stored under `docs/submissions/stage-b/presentatio
 ##### 1.2.1 User Stories to Use Cases to Issues to Sprints
 The diagram shows how our main actors connect to permissions, use cases, GitHub User Story issues, and the sprint branches where the work was delivered. It is written in UML 2.5.1 style and rendered with PlantUML.
 
-- Source: `docs/submissions/stage-b/uml/use-cases/use_cases_to_sprints.puml`
-- Rendered image: `docs/submissions/stage-b/uml/use-cases/use_cases_to_sprints.png`
+- Source: `docs/submissions/stage-b/uml/use-cases/presentation/use_cases_to_sprints.puml`
+- Rendered image: `docs/submissions/stage-b/uml/use-cases/presentation/use_cases_to_sprints.png`
+- Vector render: `docs/submissions/stage-b/uml/use-cases/presentation/use_cases_to_sprints.pdf`
 
 The diagram is intentionally presentation-level: it keeps the main flow readable as actors -> permissions -> use cases -> User Story issues -> sprint branches. Detailed implementation sub-issues, time-tracked comments, and branch history remain traceable in GitHub.
 
@@ -100,6 +108,7 @@ We use the class UML to explain the main architecture decisions: what we kept ab
 
 - Source: `docs/submissions/stage-b/uml/class/class_diagram.puml`
 - Rendered image: `docs/submissions/stage-b/uml/class/class_diagram.png`
+- Vector render: `docs/submissions/stage-b/uml/class/class_diagram.pdf`
 
 What is abstract:
 - Controller reuse is abstracted through `ApiControllerBase`, which centralizes shared authenticated API behavior.
@@ -124,13 +133,14 @@ We use the deployment UML to explain how GhostHouses is intended to run inside t
 
 - Source: `docs/submissions/stage-b/uml/deployment/deployment_environment.puml`
 - Rendered image: `docs/submissions/stage-b/uml/deployment/deployment_environment.png`
+- Vector render: `docs/submissions/stage-b/uml/deployment/deployment_environment.pdf`
 - Deployment User Story: [Issue #94](https://github.com/bbdaria/GhostHouses/issues/94)
 
 What the deployment UML shows:
-- Municipality users access the system only from inside the municipality private network over HTTPS 443.
-- pgAdmin is separated for IT/database administration over HTTPS 8443.
-- The backend and PostgreSQL are internal Docker services with no direct external port mapping.
-- Docker networks isolate frontend/backend traffic, backend/database traffic, and pgAdmin/database traffic.
+- Municipality user and IT admin workstations connect to the deployed system through browser execution environments.
+- The frontend, backend, PostgreSQL, and pgAdmin run as Docker execution environments on the municipality Windows Server VM.
+- Deployed artifacts are shown inside their runtime containers.
+- Communication paths show HTTPS, HTTP, PostgreSQL, and the relevant Docker networks without exposing port labels in the UML diagram.
 - The backend has outbound HTTPS access to the Haifa Municipality GIS / ArcGIS API.
 - OTP remains mocked inside the backend for handoff, so there is no external OTP provider dependency.
 
@@ -176,14 +186,15 @@ The Stage B deployment UML is written in UML 2.5.1 style and rendered with Plant
 
 - Source: `docs/submissions/stage-b/uml/deployment/deployment_environment.puml`
 - Rendered image: `docs/submissions/stage-b/uml/deployment/deployment_environment.png`
+- Vector render: `docs/submissions/stage-b/uml/deployment/deployment_environment.pdf`
 
 The diagram shows:
-- Municipality users access the system only from inside the municipality private network through HTTPS on port 443.
+- Municipality user and IT admin workstations access the deployed system through browser execution environments.
 - The frontend container serves the React application through Nginx.
-- The backend container runs the ASP.NET Core API internally on port 8080 and is not exposed directly outside Docker.
-- PostgreSQL runs internally on port 5432 and is not exposed directly outside Docker.
-- pgAdmin is exposed separately over HTTPS on port 8443 for IT/database administration.
-- Docker networks isolate traffic by purpose: `app-net`, `db-net`, and `admin-net`.
+- The backend container runs the ASP.NET Core API internally and is not exposed directly outside Docker.
+- PostgreSQL runs internally and is not exposed directly outside Docker.
+- pgAdmin is separated for IT/database administration.
+- Docker communication paths are labeled by purpose: `app-net`, `db-net`, and `admin-net`.
 - The backend has outbound HTTPS access to the public Haifa Municipality GIS / ArcGIS API.
 - OTP is mocked inside the backend for this delivery, so there is no external OTP provider dependency.
 
@@ -244,6 +255,7 @@ The Stage B class UML is written in UML 2.5.1 style and rendered with PlantUML.
 
 - Source: `docs/submissions/stage-b/uml/class/class_diagram.puml`
 - Rendered image: `docs/submissions/stage-b/uml/class/class_diagram.png`
+- Vector render: `docs/submissions/stage-b/uml/class/class_diagram.pdf`
 
 The diagram shows:
 - API layer: controllers, common controller bases, and the separation between authenticated API controllers and simpler controllers.
