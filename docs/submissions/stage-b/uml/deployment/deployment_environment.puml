@@ -1,57 +1,60 @@
 @startuml
-title <b>GhostHouses Stage B Deployment Environment - UML 2.5.1</b>
 
 skinparam shadowing false
-skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
+skinparam DefaultFontName Arial
+skinparam ArrowColor #334155
+skinparam NodeBorderColor #1D4ED8
+skinparam NodeBackgroundColor #DBEAFE
+skinparam NodeFontColor #0F172A
+skinparam ArtifactBorderColor #1D4ED8
+skinparam ArtifactBackgroundColor #DBEAFE
+skinparam ArtifactFontColor #0F172A
 left to right direction
 
-node "Municipality Private Network" {
-  actor "Municipality Users" as users
-  actor "IT / DB Admin" as itadmin
+node "«device»\nMunicipality User Workstation" as userWorkstation #EFF6FF {
+  node "«executionEnvironment»\nWeb Browser" as userBrowser #DBEAFE
+}
 
-  node "Municipality Windows Server VM" {
-    package "Docker Host (Docker Compose)" as dockerhost {
-      package "app-net" as appnet {
-        node "Frontend Container\nNginx + React build\nInternal port: 443 (HTTPS)\nExternal port: 443 (HTTPS)" as frontend
-        node "Backend API Container\nASP.NET Core\nInternal port: 8080 (HTTP)\nExternal port: none" as backend
-        artifact "Mock OTP Module\nInside backend process\nNo external provider" as otp
-        frontend -[hidden]right- backend
-        backend -[hidden]down- otp
-      }
+node "«device»\nIT Admin Workstation" as adminWorkstation #FFF7ED {
+  node "«executionEnvironment»\nWeb Browser" as adminBrowser #FFEDD5
+}
 
-      package "db-net" as dbnet {
-        database "PostgreSQL Container\nInternal port: 5432\nExternal port: none\nVolume: db-data" as db
-      }
+node "«device»\nMunicipality Windows Server VM" as serverVm #F8FAFC {
+  node "«executionEnvironment»\nDocker Engine\nDocker Compose" as dockerEngine #FFFFFF {
+    node "«executionEnvironment»\nFrontend Container\nNginx" as frontend #DBEAFE {
+      artifact "«artifact»\nReact static build" as reactBuild #EFF6FF
+    }
 
-      package "admin-net" as adminnet {
-        node "pgAdmin Container\nDatabase admin UI\nInternal port: 443 (HTTPS)\nExternal port: 8443 (HTTPS)\nVolume: pgadmin-data" as pgadmin
-      }
+    node "«executionEnvironment»\nBackend API Container\nASP.NET Core\nmocked 2FA" as backend #EDE9FE {
+      artifact "«artifact»\nGhostHouses API executable" as apiArtifact #F5F3FF
+    }
 
-      backend .. dbnet : member
-      db .. adminnet : member
-      backend -[hidden]right- db
-      db -[hidden]right- pgadmin
+    node "«executionEnvironment»\nPostgreSQL Container" as postgres #DCFCE7 {
+      artifact "«artifact»\nPostgreSQL data volume" as dbVolume #ECFDF5
+    }
+
+    node "«executionEnvironment»\npgAdmin Container" as pgadmin #FFEDD5 {
+      artifact "«artifact»\npgAdmin data volume" as pgadminVolume #FFF7ED
     }
   }
 }
 
-node "Internet / Public HTTPS" as internet {
-  node "Docker Image Registries\nDocker Hub + Microsoft Container Registry\nBuild/deploy time only" as registries
-  node "Haifa Municipality GIS\nArcGIS public API\nActive runtime integration" as gis
-}
+node "«executionEnvironment»\nHaifa Municipality GIS\nArcGIS public API" as gis #CCFBF1
+node "«executionEnvironment»\nDocker Image Registries\nDocker Hub + Microsoft Container Registry" as registries #F1F5F9
 
-users --> frontend : HTTPS 443
-itadmin --> pgadmin : HTTPS 8443
+userBrowser -- frontend : HTTPS
+adminBrowser -- pgadmin : HTTPS
 
-frontend --> backend : HTTP 8080 (/api)
-backend --> frontend : HTTPS 443 (reachable)
-backend --> otp : internal mock\nOTP code
-backend --> db : PostgreSQL 5432
-pgadmin --> db : PostgreSQL 5432 (admin)
-db --> backend : TCP 8080 (reachable)
-db --> pgadmin : TCP 443 (reachable)
+frontend -- backend : HTTP (/api)\napp-net
+backend -- postgres : PostgreSQL\ndb-net
+pgadmin -- postgres : PostgreSQL\nadmin-net / db-net
 
-backend -down-> gis : outbound HTTPS 443\nGIS data + map snapshots
-dockerhost .down.> registries : outbound HTTPS 443\nimage pull at build/deploy
+backend -- gis : outbound HTTPS\nGIS data + map snapshots
+dockerEngine -- registries : outbound HTTPS\nimage pull at build/deploy
+
+frontend -[hidden]right- backend
+backend -[hidden]right- postgres
+postgres -[hidden]right- pgadmin
 
 @enduml

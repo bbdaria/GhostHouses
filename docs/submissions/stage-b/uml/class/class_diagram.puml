@@ -1,193 +1,308 @@
 @startuml
-title <b>GhostHouses Maintainable Class Design - UML 2.5.1</b>
-
-top to bottom direction
-hide empty members
+hide circle
 skinparam shadowing false
-skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
+skinparam DefaultFontName Arial
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
-skinparam nodesep 45
-skinparam ranksep 50
-skinparam dpi 170
-skinparam class {
-  BackgroundColor<<Abstract>> #D9EAF7
-  BorderColor<<Abstract>> #1F4E79
-  BackgroundColor<<Controller>> #EAF3F8
-  BorderColor<<Controller>> #1F4E79
-  BackgroundColor<<Interface>> #E2F0D9
-  BorderColor<<Interface>> #548235
-  BackgroundColor<<Service>> #C6EFCE
-  BorderColor<<Service>> #006100
-  BackgroundColor<<Data>> #E2F0D9
-  BorderColor<<Data>> #548235
-  BackgroundColor<<Model>> #FCE4D6
-  BorderColor<<Model>> #9E480E
-  BackgroundColor<<External>> #F2F2F2
-  BorderColor<<External>> #666666
-  BackgroundColor<<Mocked>> #FFF2CC
-  BorderColor<<Mocked>> #7F6000
+skinparam ArrowColor #334155
+skinparam ClassBorderColor #1D4ED8
+skinparam ClassBackgroundColor #DBEAFE
+skinparam ClassFontColor #0F172A
+skinparam ClassAttributeFontColor #0F172A
+skinparam ClassStereotypeFontColor #0F172A
+skinparam InterfaceBorderColor #1D4ED8
+skinparam InterfaceBackgroundColor #DBEAFE
+skinparam InterfaceFontColor #0F172A
+skinparam EnumBorderColor #1D4ED8
+skinparam EnumBackgroundColor #DBEAFE
+skinparam EnumFontColor #0F172A
+
+class Building {
+  +Id : int
+  +BuildingName : string
+  +StreetCode : int?
+  +StreetName : string
+  +HouseNumber : string
+  +BldSivug : int?
+  +ShikumStatus : BuildingStatus
+  +StatusSummary : string
+  +Longitude : double?
+  +Latitude : double?
+  +GushM : int?
+  +ParcelM : int?
+  +GushS : int?
+  +ParcelS : int?
+  +OwnerDetails : string?
+  +HolderDetails : string?
+  +ArnonaDept : Money?
 }
 
-package "API Layer" as API {
-  abstract class ControllerBase <<Abstract>>
-  abstract class ApiControllerBase <<Abstract>> {
-    +CurrentUserId
-    #GetCurrentAppUser()
-  }
-
-  class AuthController <<Controller>> {
-    +Login()
-    +VerifyTwoFactor()
-  }
-
-  class BuildingsController <<Controller>> {
-    +GetBuildings()
-    +CreateBuilding()
-    +UpdateBuilding()
-    +DeleteBuilding()
-    +ExportCards()
-    +ImportPreview()
-  }
-
-  class SupportingControllers <<Controller>> {
-    LogsController
-    UsersController
-    StreetsController
-    SelectTablesController
-    HealthController
-  }
+class Street {
+  +StreetId : int
+  +Name : string
+  +Buildings : ICollection<Building>
 }
 
-package "Replaceable Service Contracts" as Contracts {
-  interface ITokenService <<Interface>>
-  interface ITwoFactorService <<Interface>>
-  interface IAuditService <<Interface>>
-  interface IGisSnapshotService <<Interface>>
+class BuildingLog {
+  +Id : int
+  +BuildingId : int
+  +CreatedByUserId : Guid?
+  +Title : string
+  +Message : string
+  +Category : string
+  +Severity : string
+  +CreatedAt : DateTimeOffset
+  +UpdatedAt : DateTimeOffset?
 }
 
-package "Service Implementations" as Services {
-  class TokenService <<Service>>
-  class TwoFactorService <<Mocked>>
-  class AuditService <<Service>>
-  class ArcGisSnapshotService <<Service>>
+class AppUser {
+  +Id : Guid
+  +Username : string
+  +Email : string
+  +PasswordHash : string
+  +Role : UserRole
+  +TwoFactorEnabled : bool
+  +CreatedAt : DateTimeOffset
+  +LastLoginAt : DateTimeOffset?
 }
 
-package "Validation and Import" as Rules {
-  class BuildingRules <<Service>>
-  class StreetRules <<Service>>
-  class BuildingsExcelImporter <<Data>>
-  class StreetsExcelImporter <<Data>>
+class AuditEntry {
+  +Id : int
+  +EntityType : string
+  +EntityId : string
+  +Action : string
+  +Changes : string
+  +PerformedByUserId : Guid?
+  +CreatedAt : DateTimeOffset
 }
 
-package "Persistence Boundary" as Persistence {
-  class AppDbContext <<Data>> {
-    +Buildings
-    +Streets
-    +Users
-    +BuildingLogs
-    +AuditEntries
-  }
+class Money <<dataType>> {
+  +Amount : decimal
 }
 
-package "Domain Model" as Domain {
-  class Building <<Model>> {
-    +Id
-    +StreetCode
-    +StreetName
-    +HouseNumber
-    +ShikumStatus
-    +Latitude
-    +Longitude
-  }
-
-  class Street <<Model>> {
-    +StreetId
-    +Name
-  }
-
-  class BuildingLog <<Model>> {
-    +BuildingId
-    +Title
-    +Message
-    +CreatedAt
-  }
-
-  class AuditEntry <<Model>> {
-    +EntityType
-    +EntityId
-    +Action
-    +CreatedAt
-  }
-
-  class AppUser <<Model>> {
-    +Username
-    +Email
-    +Role
-  }
-
-  enum BuildingStatus <<Model>>
-  enum UserRole <<Model>>
-  class Money <<Model>>
-  class FieldSpecAttribute <<Model>>
+class FieldSpecAttribute {
+  +Category : string
+  +FieldName : string
+  +SelectTableName : string?
+  +IncludeInEventLog : bool
 }
 
-package "External Systems / Frameworks" as External {
-  class PostgreSQL <<External>>
-  class HaifaArcGisApi <<External>>
-  class JwtFramework <<External>>
+enum BuildingStatus <<enumeration>> {
+  Unknown
+  MappingBarriersAndSolution
+  OwnershipTransfer
+  DevelopmentBarriers
+  OwnerConsideringAction
+  PreparingRehabPlan
+  PlanApprovedPreparingExecution
+  InExecution
+  OccupancyProcess
 }
 
-' Layout helpers.
-API -[hidden]down- Contracts
-Contracts -[hidden]down- Services
-Services -[hidden]down- Rules
-Rules -[hidden]down- Persistence
-Persistence -[hidden]down- Domain
-Services -[hidden]right- External
+enum UserRole <<enumeration>> {
+  Viewer
+  Editor
+  Admin
+}
 
-' Abstract controller reuse.
+class AppDbContext {
+  +Buildings : DbSet<Building>
+  +Streets : DbSet<Street>
+  +Users : DbSet<AppUser>
+  +BuildingLogs : DbSet<BuildingLog>
+  +AuditEntries : DbSet<AuditEntry>
+}
+
+interface ITokenService <<interface>> {
+  +CreateToken() : string
+}
+
+class TokenService {
+  +CreateToken() : string
+}
+
+interface ITwoFactorService <<interface>> {
+  +IssueCode() : (string, string)
+  +ValidateCode() : bool
+}
+
+class TwoFactorService {
+  +IssueCode() : (string, string)
+  +ValidateCode() : bool
+}
+
+interface IAuditService <<interface>> {
+  +RecordAsync() : Task
+}
+
+class AuditService {
+  +RecordAsync() : Task
+}
+
+interface IGisSnapshotService <<interface>> {
+  +CreateBuildingSnapshotAsync() : Task<byte[]?>
+}
+
+class ArcGisSnapshotService {
+  +CreateBuildingSnapshotAsync() : Task<byte[]?>
+}
+
+class BuildingRules {
+  {static} +ResolveRehabSivugValue() : int?
+  {static} +TryParseStreetId() : int?
+  {static} +TryResolveSelectValue() : int?
+  {static} +ConvertFieldValue() : object?
+}
+
+class StreetRules {
+  {static} +ReservedNoStreetId : int
+  {static} +TryParseStreetId() : int?
+  {static} +ValidateValues() : ValidationResult
+}
+
+class BuildingsExcelImporter {
+  {static} +ReadBuildingsFromStream() : IReadOnlyList<Building>
+  {static} +SeedFromFileAsync() : Task
+}
+
+class StreetsExcelImporter {
+  {static} +ReadStreetsFromStream() : IReadOnlyList<Street>
+  {static} +SeedFromFileAsync() : Task
+}
+
+class SelectTables {
+  {static} +GetOptions() : IReadOnlyList<SelectOption>
+  {static} +GetAllTables() : IReadOnlyDictionary<string, IReadOnlyList<SelectOption>>
+}
+
+class SelectOption <<dataType>> {
+  +Value : int
+  +Label : string
+}
+
+abstract class ControllerBase
+
+abstract class ApiControllerBase {
+  #CurrentUserId : Guid?
+}
+
+class AuthController {
+  +Login() : ActionResult<LoginChallengeResponse>
+  +VerifyTwoFactor() : ActionResult<AuthenticatedUserResponse>
+  +GetCurrentUser() : ActionResult<UserSummaryDto>
+}
+
+class BuildingsController {
+  +GetBuildings() : ActionResult<PaginatedResult<BuildingSummaryDto>>
+  +GetBuilding() : ActionResult<BuildingDetailDto>
+  +CreateBuilding() : ActionResult<BuildingSummaryDto>
+  +UpdateBuilding() : ActionResult
+  +DeleteBuilding() : ActionResult
+  +RestoreBuilding() : ActionResult<BuildingSummaryDto>
+  +ExportBuildingCard() : IActionResult
+  +ExportBuildingCards() : IActionResult
+  +ImportBuildingsPreview() : ActionResult<ImportPreviewResponse>
+  +ImportBuildingsApply() : IActionResult
+  +ConvertBuildingsTemplate() : IActionResult
+}
+
+class LogsController {
+  +GetLogs() : ActionResult<PaginatedResult<BuildingLogDto>>
+  +GetBuildingLogs() : ActionResult<IEnumerable<BuildingLogDto>>
+  +CreateLog() : ActionResult<BuildingLogDto>
+  +UpdateLog() : ActionResult
+}
+
+class UsersController {
+  +GetUsers() : ActionResult<IEnumerable<UserSummaryDto>>
+  +GetUser() : ActionResult<UserSummaryDto>
+  +CreateUser() : ActionResult<UserSummaryDto>
+  +UpdateUser() : ActionResult
+  +ResetTwoFactor() : ActionResult
+  +SetPassword() : ActionResult
+}
+
+class StreetsController {
+  +GetAll() : ActionResult<IEnumerable<StreetDto>>
+  +Get() : ActionResult<StreetDto>
+  +Create() : ActionResult<StreetDto>
+  +Update() : ActionResult
+  +Delete() : ActionResult
+  +PreviewImport() : ActionResult<StreetImportPreviewResponse>
+  +ApplyImport() : IActionResult
+  +ConvertStreetsTemplate() : IActionResult
+}
+
+class SelectTablesController {
+  +GetByName() : ActionResult<IEnumerable<SelectOption>>
+  +GetAll() : ActionResult<IDictionary<string, IReadOnlyList<SelectOption>>>
+}
+
+class HealthController {
+  +GetDatabaseHealth() : IActionResult
+}
+
 ControllerBase <|-- ApiControllerBase
+ControllerBase <|-- HealthController
+ControllerBase <|-- SelectTablesController
+ControllerBase <|-- StreetsController
 ApiControllerBase <|-- AuthController
 ApiControllerBase <|-- BuildingsController
-ApiControllerBase <|-- SupportingControllers
+ApiControllerBase <|-- LogsController
+ApiControllerBase <|-- UsersController
 
-' Controllers depend on stable contracts and boundaries, not implementation details.
-API ..> Contracts : uses interfaces
-API ..> Rules : validation/import
-API ..> Persistence : EF Core access
-
-' Interface-based extension points.
 ITokenService <|.. TokenService
 ITwoFactorService <|.. TwoFactorService
 IAuditService <|.. AuditService
 IGisSnapshotService <|.. ArcGisSnapshotService
 
-' Service boundaries.
-Services ..> Persistence : stores/reads data
-TokenService ..> JwtFramework
-ArcGisSnapshotService ..> HaifaArcGisApi : active GIS API
-
-' Validation is reused by both manual editing and Excel import.
-BuildingsExcelImporter ..> BuildingRules
-StreetsExcelImporter ..> StreetRules
-Rules ..> Domain : validates fields
-
-' Persistence owns the domain entities.
-AppDbContext ..> PostgreSQL
-AppDbContext o-- Building
-AppDbContext o-- Street
-AppDbContext o-- AppUser
-AppDbContext o-- BuildingLog
-AppDbContext o-- AuditEntry
-
-' Core domain relationships.
-Street "1" --> "*" Building : contains
-Building "1" --> "*" BuildingLog : history
-AppUser "0..1" --> "*" BuildingLog : created by
+Street "1" -- "0..*" Building
+Building "1" -- "0..*" BuildingLog
+AppUser "0..1" -- "0..*" BuildingLog
 AppUser --> UserRole
 Building --> BuildingStatus
-Building --> Money : Arnona debt
-Building ..> FieldSpecAttribute : field metadata
+Building --> Money
+Building ..> FieldSpecAttribute
+
+AppDbContext ..> Building
+AppDbContext ..> Street
+AppDbContext ..> AppUser
+AppDbContext ..> BuildingLog
+AppDbContext ..> AuditEntry
+
+AuthController ..> AppDbContext
+AuthController ..> AppUser
+AuthController ..> ITokenService
+AuthController ..> ITwoFactorService
+AuthController ..> IAuditService
+
+BuildingsController ..> AppDbContext
+BuildingsController ..> IAuditService
+BuildingsController ..> IGisSnapshotService
+BuildingsController ..> BuildingRules
+BuildingsController ..> BuildingsExcelImporter
+
+LogsController ..> AppDbContext
+LogsController ..> IAuditService
+UsersController ..> AppDbContext
+UsersController ..> IAuditService
+StreetsController ..> AppDbContext
+StreetsController ..> StreetRules
+StreetsController ..> StreetsExcelImporter
+SelectTablesController ..> SelectTables
+HealthController ..> AppDbContext
+
+AuditService ..> AppDbContext
+ArcGisSnapshotService ..> AppDbContext
+ArcGisSnapshotService ..> Building
+TokenService ..> AppUser
+TwoFactorService ..> AppUser
+
+BuildingsExcelImporter ..> Building
+StreetsExcelImporter ..> Street
+BuildingRules ..> SelectTables
+BuildingRules ..> FieldSpecAttribute
+SelectTables o-- SelectOption
 
 @enduml
