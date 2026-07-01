@@ -3521,7 +3521,7 @@ public class BuildingsController : ApiControllerBase
         var resizedHeight = Math.Max(1, (int)Math.Round(source.Height * scale));
 
         using var resized = source.Clone(context => context.Resize(resizedWidth, resizedHeight));
-        using var canvas = new Image<Rgba32>(targetWidth, targetHeight, Color.Black);
+        using var canvas = new Image<Rgba32>(targetWidth, targetHeight, Color.White);
         var offsetX = (targetWidth - resizedWidth) / 2;
         var offsetY = (targetHeight - resizedHeight) / 2;
         canvas.Mutate(context => context.DrawImage(resized, new Point(offsetX, offsetY), 1f));
