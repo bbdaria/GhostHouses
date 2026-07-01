@@ -1,0 +1,71 @@
+@startuml
+
+left to right direction
+
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam DefaultFontName Arial
+skinparam ArrowColor #334155
+skinparam ActorBorderColor #0F172A
+skinparam ActorFontColor #0F172A
+skinparam UsecaseBorderColor #1D4ED8
+skinparam UsecaseBackgroundColor #DBEAFE
+skinparam UsecaseFontColor #0F172A
+skinparam RectangleBorderColor #94A3B8
+skinparam RectangleBackgroundColor #FFFFFF
+
+actor "Viewer" as Viewer
+actor "Editor" as Editor
+actor "Admin" as Admin
+actor "Municipality\nIT / Dev Team" as IT
+
+rectangle "GhostHouses" as GhostHouses {
+  usecase "Login to\nsystem" as UC_LOGIN
+  usecase "Search and filter\nbuilding records" as UC_SEARCH
+  usecase "View building\ndetails" as UC_DETAILS
+  usecase "View field logs\nand changes" as UC_LOGS
+  usecase "Produce\nbuilding cards" as UC_PRODUCE_CARDS
+  usecase "Export\nbuilding cards" as UC_EXPORT_CARDS
+  usecase "View building on\nmunicipal GIS map" as UC_GIS_VIEW
+  usecase "Use GIS area\nselection" as UC_GIS_AREA
+
+  usecase "Add and remove\nbuildings" as UC_ADD_REMOVE
+  usecase "Update existing\nbuildings" as UC_UPDATE
+  usecase "Restore removed\nbuildings" as UC_RESTORE
+  usecase "Export buildings\ntable" as UC_EXPORT_TABLE
+  usecase "Import legacy\nbuilding data" as UC_IMPORT
+  usecase "Convert legacy\nbuilding template" as UC_CONVERT
+  usecase "Manage streets" as UC_STREETS
+
+  usecase "Manage users" as UC_USERS
+  usecase "Edit user\npermissions" as UC_PERMISSIONS
+
+  usecase "Deploy inside\nmunicipality network" as UC_DEPLOY
+}
+
+Viewer <|-- Editor
+Editor <|-- Admin
+
+Viewer -- UC_LOGIN
+Viewer -- UC_SEARCH
+Viewer -- UC_DETAILS
+Viewer -- UC_LOGS
+Viewer -- UC_PRODUCE_CARDS
+Viewer -- UC_EXPORT_CARDS
+Viewer -- UC_GIS_VIEW
+Viewer -- UC_GIS_AREA
+
+Editor -- UC_ADD_REMOVE
+Editor -- UC_UPDATE
+Editor -- UC_RESTORE
+Editor -- UC_EXPORT_TABLE
+Editor -- UC_IMPORT
+Editor -- UC_CONVERT
+Editor -- UC_STREETS
+
+Admin -- UC_USERS
+Admin -- UC_PERMISSIONS
+
+IT -- UC_DEPLOY
+
+@enduml
