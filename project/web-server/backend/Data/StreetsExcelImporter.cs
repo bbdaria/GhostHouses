@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Xml;
 using System.Xml.Linq;
+using Microsoft.EntityFrameworkCore;
 using WebServer.Models;
 
 namespace WebServer.Data;
@@ -19,7 +21,17 @@ public static class StreetsExcelImporter
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
             return ReadStreetsFromArchive(archive, ref error);
         }
-        catch (Exception ex)
+        catch (InvalidDataException ex)
+        {
+            error = $"Failed to read streets Excel: {ex.Message}";
+            return Array.Empty<Street>();
+        }
+        catch (IOException ex)
+        {
+            error = $"Failed to read streets Excel: {ex.Message}";
+            return Array.Empty<Street>();
+        }
+        catch (XmlException ex)
         {
             error = $"Failed to read streets Excel: {ex.Message}";
             return Array.Empty<Street>();
@@ -58,7 +70,23 @@ public static class StreetsExcelImporter
 
             Console.WriteLine($"[StreetsExcelImporter] Seeded {newStreets.Count} streets from '{filePath}'.");
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            Console.WriteLine($"[StreetsExcelImporter] Error while seeding streets from '{filePath}': {ex}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Console.WriteLine($"[StreetsExcelImporter] Error while seeding streets from '{filePath}': {ex}");
+        }
+        catch (InvalidDataException ex)
+        {
+            Console.WriteLine($"[StreetsExcelImporter] Error while seeding streets from '{filePath}': {ex}");
+        }
+        catch (XmlException ex)
+        {
+            Console.WriteLine($"[StreetsExcelImporter] Error while seeding streets from '{filePath}': {ex}");
+        }
+        catch (DbUpdateException ex)
         {
             Console.WriteLine($"[StreetsExcelImporter] Error while seeding streets from '{filePath}': {ex}");
         }
@@ -150,12 +178,10 @@ public static class StreetsExcelImporter
                 {
                     name = raw;
                 }
-                else if (headerText == "מזהה רחוב *")
+                else if (headerText == "מזהה רחוב *" &&
+                         int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var sid))
                 {
-                    if (int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var sid))
-                    {
-                        streetId = sid;
-                    }
+                    streetId = sid;
                 }
             }
 

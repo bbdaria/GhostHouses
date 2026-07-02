@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { ROLE_LABELS } from '../i18n.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 import { applyTheme, getStoredTheme } from '../utils/theme.js';

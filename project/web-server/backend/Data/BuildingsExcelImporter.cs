@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
+using System.Xml;
 using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
 using WebServer.Models;
@@ -122,7 +123,23 @@ public static class BuildingsExcelImporter
 
             Console.WriteLine($"[BuildingsExcelImporter] Seeded {buildings.Count} buildings from '{filePath}'.");
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            Console.WriteLine($"[BuildingsExcelImporter] Error while seeding buildings from '{filePath}': {ex}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Console.WriteLine($"[BuildingsExcelImporter] Error while seeding buildings from '{filePath}': {ex}");
+        }
+        catch (InvalidDataException ex)
+        {
+            Console.WriteLine($"[BuildingsExcelImporter] Error while seeding buildings from '{filePath}': {ex}");
+        }
+        catch (XmlException ex)
+        {
+            Console.WriteLine($"[BuildingsExcelImporter] Error while seeding buildings from '{filePath}': {ex}");
+        }
+        catch (DbUpdateException ex)
         {
             Console.WriteLine($"[BuildingsExcelImporter] Error while seeding buildings from '{filePath}': {ex}");
         }
@@ -136,7 +153,17 @@ public static class BuildingsExcelImporter
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
             return ReadBuildingsFromArchive(archive, ref error);
         }
-        catch (Exception ex)
+        catch (InvalidDataException ex)
+        {
+            error = $"Failed to read buildings Excel: {ex.Message}";
+            return Array.Empty<Building>();
+        }
+        catch (IOException ex)
+        {
+            error = $"Failed to read buildings Excel: {ex.Message}";
+            return Array.Empty<Building>();
+        }
+        catch (XmlException ex)
         {
             error = $"Failed to read buildings Excel: {ex.Message}";
             return Array.Empty<Building>();
@@ -509,16 +536,11 @@ public static class BuildingsExcelImporter
                 return dt;
             }
 
-            if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+            if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) &&
+                d >= -657435.0 &&
+                d <= 2958465.99999999)
             {
-                try
-                {
-                    return DateTime.FromOADate(d);
-                }
-                catch
-                {
-                    // Ignore invalid OADate values.
-                }
+                return DateTime.FromOADate(d);
             }
 
             return null;
@@ -542,12 +564,10 @@ public static class BuildingsExcelImporter
                 // Fall through to generic enum parsing as a last resort.
             }
 
-            if (int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var enumInt))
+            if (int.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var enumInt) &&
+                Enum.IsDefined(underlying, enumInt))
             {
-                if (Enum.IsDefined(underlying, enumInt))
-                {
-                    return Enum.ToObject(underlying, enumInt);
-                }
+                return Enum.ToObject(underlying, enumInt);
             }
 
             try
@@ -555,7 +575,7 @@ public static class BuildingsExcelImporter
                 var parsed = Enum.Parse(underlying, raw, ignoreCase: true);
                 return parsed;
             }
-            catch
+            catch (ArgumentException)
             {
                 return null;
             }

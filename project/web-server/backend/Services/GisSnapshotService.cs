@@ -71,11 +71,19 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
         {
             throw;
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to create GIS snapshot for building {BuildingId}", building.Id);
-            return null;
-        }
+        catch (HttpRequestException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (JsonException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (InvalidOperationException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (IOException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (NotSupportedException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (UnknownImageFormatException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (InvalidImageContentException ex) { return LogSnapshotFailure(building.Id, ex); }
+    }
+
+    private byte[]? LogSnapshotFailure(int buildingId, Exception ex)
+    {
+        _logger.LogWarning(ex, "Failed to create GIS snapshot for building {BuildingId}", buildingId);
+        return null;
     }
 
     private async Task<ResolvedGisGeometry?> ResolveGeometryAsync(Building building, CancellationToken cancellationToken)
@@ -123,11 +131,10 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
         var candidates = await _context.Buildings
             .AsNoTracking()
             .Where(building => building.Id != buildingId)
-            .Where(building =>
-                (building.Longitude.HasValue && building.Latitude.HasValue) ||
-                (building.GushM.HasValue && building.ParcelM.HasValue) ||
-                (building.GushS.HasValue && building.ParcelS.HasValue) ||
-                (!string.IsNullOrWhiteSpace(building.StreetName) && !string.IsNullOrWhiteSpace(building.HouseNumber)))
+            .Where(building => HasDirectCoordinates(building) ||
+                               HasMunicipalParcel(building) ||
+                               HasTaxParcel(building) ||
+                               HasAddress(building))
             .OrderBy(building => building.Id)
             .Take(NearbyCandidateLimit)
             .ToListAsync(cancellationToken);
@@ -150,6 +157,19 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
 
         return geometries;
     }
+
+    private static bool HasDirectCoordinates(Building building) =>
+        building.Longitude.HasValue && building.Latitude.HasValue;
+
+    private static bool HasMunicipalParcel(Building building) =>
+        building.GushM.HasValue && building.ParcelM.HasValue;
+
+    private static bool HasTaxParcel(Building building) =>
+        building.GushS.HasValue && building.ParcelS.HasValue;
+
+    private static bool HasAddress(Building building) =>
+        !string.IsNullOrWhiteSpace(building.StreetName) &&
+        !string.IsNullOrWhiteSpace(building.HouseNumber);
 
     private async Task<GisGeometry?> QueryPolygonAsync(Uri layerUri, string? where, CancellationToken cancellationToken)
     {

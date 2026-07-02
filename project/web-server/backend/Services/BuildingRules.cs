@@ -279,7 +279,7 @@ public static class BuildingRules
                 {
                     return DateTime.FromOADate(oa).Date;
                 }
-                catch
+                catch (ArgumentException)
                 {
                     // ignored
                 }
@@ -296,10 +296,10 @@ public static class BuildingRules
                 {
                     return Enum.ToObject(underlying, enumInt);
                 }
-                catch
-                {
-                    return new InvalidFieldValue("ערך אינו חוקי.");
-                }
+                    catch (ArgumentException)
+                    {
+                        return new InvalidFieldValue("ערך אינו חוקי.");
+                    }
             }
 
             var fieldSpec = property.GetCustomAttribute<FieldSpecAttribute>();
@@ -322,7 +322,7 @@ public static class BuildingRules
             {
                 return Enum.Parse(underlying, raw, ignoreCase: true);
             }
-            catch
+            catch (ArgumentException)
             {
                 return new InvalidFieldValue("ערך אינו חוקי.");
             }
