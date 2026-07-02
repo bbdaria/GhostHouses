@@ -131,11 +131,10 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
         var candidates = await _context.Buildings
             .AsNoTracking()
             .Where(building => building.Id != buildingId)
-            .Where(building =>
-                (building.Longitude.HasValue && building.Latitude.HasValue) ||
-                (building.GushM.HasValue && building.ParcelM.HasValue) ||
-                (building.GushS.HasValue && building.ParcelS.HasValue) ||
-                (!string.IsNullOrWhiteSpace(building.StreetName) && !string.IsNullOrWhiteSpace(building.HouseNumber)))
+            .Where(building => HasDirectCoordinates(building) ||
+                               HasMunicipalParcel(building) ||
+                               HasTaxParcel(building) ||
+                               HasAddress(building))
             .OrderBy(building => building.Id)
             .Take(NearbyCandidateLimit)
             .ToListAsync(cancellationToken);
@@ -158,6 +157,19 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
 
         return geometries;
     }
+
+    private static bool HasDirectCoordinates(Building building) =>
+        building.Longitude.HasValue && building.Latitude.HasValue;
+
+    private static bool HasMunicipalParcel(Building building) =>
+        building.GushM.HasValue && building.ParcelM.HasValue;
+
+    private static bool HasTaxParcel(Building building) =>
+        building.GushS.HasValue && building.ParcelS.HasValue;
+
+    private static bool HasAddress(Building building) =>
+        !string.IsNullOrWhiteSpace(building.StreetName) &&
+        !string.IsNullOrWhiteSpace(building.HouseNumber);
 
     private async Task<GisGeometry?> QueryPolygonAsync(Uri layerUri, string? where, CancellationToken cancellationToken)
     {

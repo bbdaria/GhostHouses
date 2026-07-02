@@ -538,13 +538,9 @@ public static class BuildingsExcelImporter
 
             if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
             {
-                try
+                if (d >= -657435.0 && d <= 2958465.99999999)
                 {
                     return DateTime.FromOADate(d);
-                }
-                catch
-                {
-                    // Ignore invalid OADate values.
                 }
             }
 

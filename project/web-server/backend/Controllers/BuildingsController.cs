@@ -2967,12 +2967,12 @@ public class BuildingsController : ApiControllerBase
         var normalizedImageExtension = NormalizeCardImageExtension(imageExtension);
         var hasImage = imageBytes is { Length: > 0 } && !string.IsNullOrWhiteSpace(normalizedImageExtension);
         var hasMapImage = mapImageBytes is { Length: > 0 };
-        var targetImagePath = normalizedImageExtension is null
-            ? null
-            : $"ppt/media/image3.{normalizedImageExtension}";
-        var targetRelPath = normalizedImageExtension is null
-            ? null
-            : $"../media/image3.{normalizedImageExtension}";
+        var targetImagePath = hasImage
+            ? $"ppt/media/image3.{normalizedImageExtension}"
+            : null;
+        var targetRelPath = hasImage
+            ? $"../media/image3.{normalizedImageExtension}"
+            : null;
 
         using var templateStream = System.IO.File.OpenRead(templatePath);
         using var templateZip = new ZipArchive(templateStream, ZipArchiveMode.Read);
@@ -2994,7 +2994,7 @@ public class BuildingsController : ApiControllerBase
                 if (!string.IsNullOrWhiteSpace(templateImagePath) &&
                     string.Equals(entry.FullName, templateImagePath, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!hasImage || targetImagePath is null)
+                    if (!hasImage)
                     {
                         continue;
                     }
@@ -3007,7 +3007,7 @@ public class BuildingsController : ApiControllerBase
                         templateImageBytes,
                         outputImageExtension);
 
-                    var imageEntry = outputZip.CreateEntry(targetImagePath, CompressionLevel.Optimal);
+                    var imageEntry = outputZip.CreateEntry(targetImagePath!, CompressionLevel.Optimal);
                     using var imageEntryStream = imageEntry.Open();
                     imageEntryStream.Write(outputImageBytes, 0, outputImageBytes.Length);
                     continue;
