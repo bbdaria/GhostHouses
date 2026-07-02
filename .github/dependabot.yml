@@ -21,6 +21,21 @@ updates:
       - dependency-name: SixLabors.ImageSharp
         update-types:
           - "version-update:semver-major"
+      - dependency-name: Microsoft.AspNetCore.Authentication.JwtBearer
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.EntityFrameworkCore.Design
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.EntityFrameworkCore.Tools
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.Extensions.Caching.Memory
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Npgsql.EntityFrameworkCore.PostgreSQL
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: npm
     directory: /project/web-server/frontend
