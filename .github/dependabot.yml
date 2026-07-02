@@ -17,6 +17,11 @@ updates:
       day: sunday
       time: "06:15"
     open-pull-requests-limit: 5
+    groups:
+      ef-core:
+        patterns:
+          - Microsoft.EntityFrameworkCore*
+          - Npgsql.EntityFrameworkCore.PostgreSQL
     ignore:
       - dependency-name: SixLabors.ImageSharp
         update-types:
