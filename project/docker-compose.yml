@@ -23,6 +23,7 @@ services:
       Jwt__Audience: ${JWT_AUDIENCE:-ghosthouses-clients}
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in project/.env}
       Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-120}
+      Swagger__Enabled: ${SWAGGER_ENABLED:-true}
     depends_on:
       db:
         condition: service_healthy
