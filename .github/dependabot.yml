@@ -32,6 +32,12 @@ updates:
       - dependency-name: Microsoft.EntityFrameworkCore.Design
         update-types:
           - "version-update:semver-major"
+      - dependency-name: Microsoft.EntityFrameworkCore
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.EntityFrameworkCore.Relational
+        update-types:
+          - "version-update:semver-major"
       - dependency-name: Microsoft.EntityFrameworkCore.Tools
         update-types:
           - "version-update:semver-major"
