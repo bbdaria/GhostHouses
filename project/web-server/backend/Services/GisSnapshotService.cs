@@ -131,10 +131,12 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
         var candidates = await _context.Buildings
             .AsNoTracking()
             .Where(building => building.Id != buildingId)
-            .Where(building => HasDirectCoordinates(building) ||
-                               HasMunicipalParcel(building) ||
-                               HasTaxParcel(building) ||
-                               HasAddress(building))
+            .Where(building =>
+                (building.Longitude.HasValue && building.Latitude.HasValue) ||
+                (building.GushM.HasValue && building.ParcelM.HasValue) ||
+                (building.GushS.HasValue && building.ParcelS.HasValue) ||
+                (building.StreetName != null && building.StreetName != string.Empty &&
+                 building.HouseNumber != null && building.HouseNumber != string.Empty))
             .OrderBy(building => building.Id)
             .Take(NearbyCandidateLimit)
             .ToListAsync(cancellationToken);
