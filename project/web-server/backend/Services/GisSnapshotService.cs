@@ -128,22 +128,53 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
         GisBounds bbox,
         CancellationToken cancellationToken)
     {
-        var candidates = await _context.Buildings
+        var baseCandidateQuery = _context.Buildings
             .AsNoTracking()
-            .Where(building => building.Id != buildingId)
-            .Where(building =>
-                (building.Longitude.HasValue && building.Latitude.HasValue) ||
-                (building.GushM.HasValue && building.ParcelM.HasValue) ||
-                (building.GushS.HasValue && building.ParcelS.HasValue) ||
-                (building.StreetName != null && building.StreetName != string.Empty &&
-                 building.HouseNumber != null && building.HouseNumber != string.Empty))
-            .OrderBy(building => building.Id)
+            .Where(building => building.Id != buildingId);
+
+        var directCoordinateIds = baseCandidateQuery
+            .Where(building => building.Longitude.HasValue)
+            .Where(building => building.Latitude.HasValue)
+            .Select(building => building.Id);
+
+        var municipalParcelIds = baseCandidateQuery
+            .Where(building => building.GushM.HasValue)
+            .Where(building => building.ParcelM.HasValue)
+            .Select(building => building.Id);
+
+        var taxParcelIds = baseCandidateQuery
+            .Where(building => building.GushS.HasValue)
+            .Where(building => building.ParcelS.HasValue)
+            .Select(building => building.Id);
+
+        var addressIds = baseCandidateQuery
+            .Where(building => building.StreetName != null)
+            .Where(building => building.StreetName != string.Empty)
+            .Where(building => building.HouseNumber != null)
+            .Where(building => building.HouseNumber != string.Empty)
+            .Select(building => building.Id);
+
+        var candidateIds = await directCoordinateIds
+            .Union(municipalParcelIds)
+            .Union(taxParcelIds)
+            .Union(addressIds)
+            .OrderBy(id => id)
             .Take(NearbyCandidateLimit)
             .ToListAsync(cancellationToken);
 
+        var candidates = await _context.Buildings
+            .AsNoTracking()
+            .Where(building => candidateIds.Contains(building.Id))
+            .ToDictionaryAsync(building => building.Id, cancellationToken);
+
         var geometries = new List<GisGeometry>();
-        foreach (var candidate in candidates)
+        foreach (var candidateId in candidateIds)
         {
+            if (!candidates.TryGetValue(candidateId, out var candidate))
+            {
+                continue;
+            }
+
             var resolved = await ResolveGeometryAsync(candidate, cancellationToken);
             if (resolved is null || !GeometryIntersectsBounds(resolved.Geometry, bbox))
             {
@@ -159,19 +190,6 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
 
         return geometries;
     }
-
-    private static bool HasDirectCoordinates(Building building) =>
-        building.Longitude.HasValue && building.Latitude.HasValue;
-
-    private static bool HasMunicipalParcel(Building building) =>
-        building.GushM.HasValue && building.ParcelM.HasValue;
-
-    private static bool HasTaxParcel(Building building) =>
-        building.GushS.HasValue && building.ParcelS.HasValue;
-
-    private static bool HasAddress(Building building) =>
-        !string.IsNullOrWhiteSpace(building.StreetName) &&
-        !string.IsNullOrWhiteSpace(building.HouseNumber);
 
     private async Task<GisGeometry?> QueryPolygonAsync(Uri layerUri, string? where, CancellationToken cancellationToken)
     {
