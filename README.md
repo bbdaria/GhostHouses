@@ -358,6 +358,20 @@ This repository is licensed under the Creative Commons Attribution 4.0 Internati
 
 Full license text: `LICENSE.md`.
 
+## Security Readiness Addendum
+As part of deployment readiness, the project includes static code analysis, dependency monitoring, and GitHub security controls. These measures improve reviewability and help catch common code, dependency, and secret-handling issues early, but they do not replace a full security code review or an application penetration test on a running system.
+
+Security-readiness evidence is documented in `docs/submissions/stage-b/deployment-security/security-readiness.md`.
+
+Current repository-side controls include:
+- CodeQL static analysis configuration for the C# backend and JavaScript/TypeScript frontend.
+- Dependabot configuration for GitHub Actions, NuGet, npm, and Docker base images.
+- A vulnerability reporting policy in `SECURITY.md`.
+- Existing CI for backend tests, frontend build, and Docker Compose build readiness.
+- Secret handling rules through `.gitignore`, `project/HANDOFF_SECRETS.md`, and local-only `.env` / certificate paths.
+
+Controls that still require repository-owner or administrator settings are documented separately: Dependabot alerts/security updates, secret scanning, push protection, branch protection/rulesets, and repository visibility justification.
+
 ## Project Structure
 - `project/web-server/backend`: ASP.NET Core backend.
 - `project/web-server/frontend`: React frontend.
