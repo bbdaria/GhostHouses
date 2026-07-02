@@ -71,11 +71,19 @@ public sealed class ArcGisSnapshotService : IGisSnapshotService
         {
             throw;
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to create GIS snapshot for building {BuildingId}", building.Id);
-            return null;
-        }
+        catch (HttpRequestException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (JsonException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (InvalidOperationException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (IOException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (NotSupportedException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (UnknownImageFormatException ex) { return LogSnapshotFailure(building.Id, ex); }
+        catch (InvalidImageContentException ex) { return LogSnapshotFailure(building.Id, ex); }
+    }
+
+    private byte[]? LogSnapshotFailure(int buildingId, Exception ex)
+    {
+        _logger.LogWarning(ex, "Failed to create GIS snapshot for building {BuildingId}", buildingId);
+        return null;
     }
 
     private async Task<ResolvedGisGeometry?> ResolveGeometryAsync(Building building, CancellationToken cancellationToken)
