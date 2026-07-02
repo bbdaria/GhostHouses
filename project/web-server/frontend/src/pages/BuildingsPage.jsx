@@ -3,10 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
 import BuildingModal from '../components/BuildingModal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
+import { STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 import { BUILDING_FIELD_PLACEHOLDERS, LAST_BUILDING_KEY } from '../constants.js';
-import { formatDate, formatDateTime, getIsraelDateStamp } from '../utils/formatDate.js';
+import { formatDateTime, getIsraelDateStamp } from '../utils/formatDate.js';
 
 const initialFilters = {
   streetId: '',
