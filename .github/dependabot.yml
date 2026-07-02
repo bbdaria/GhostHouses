@@ -17,6 +17,10 @@ updates:
       day: sunday
       time: "06:15"
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: SixLabors.ImageSharp
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: npm
     directory: /project/web-server/frontend
@@ -26,6 +30,11 @@ updates:
       day: sunday
       time: "06:30"
     open-pull-requests-limit: 5
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
 
   - package-ecosystem: docker
     directory: /project/web-server/.devcontainer
