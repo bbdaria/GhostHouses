@@ -65,17 +65,12 @@ public class BuildingsController : ApiControllerBase
 
         if (filter.StreetId.HasValue)
         {
-            if (filter.StreetId.Value == NoStreetId)
-            {
-                query = query.Where(b =>
+            query = filter.StreetId.Value == NoStreetId
+                ? query.Where(b =>
                     b.StreetCode == NoStreetId ||
                     b.StreetCode == null ||
-                    b.StreetName == NoStreetName);
-            }
-            else
-            {
-                query = query.Where(b => b.StreetCode == filter.StreetId.Value);
-            }
+                    b.StreetName == NoStreetName)
+                : query.Where(b => b.StreetCode == filter.StreetId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
@@ -288,7 +283,7 @@ public class BuildingsController : ApiControllerBase
             return NotFound();
         }
 
-        var templatePath = Path.Combine(_hostEnvironment.ContentRootPath, "Data", "BuildingCardTemplate.pptx");
+        var templatePath = Path.Join(_hostEnvironment.ContentRootPath, "Data", "BuildingCardTemplate.pptx");
         if (!System.IO.File.Exists(templatePath))
         {
             return NotFound("Building card template not found.");
@@ -316,7 +311,7 @@ public class BuildingsController : ApiControllerBase
     {
         var ids = request?.Ids ?? new List<int>();
 
-        var templatePath = Path.Combine(_hostEnvironment.ContentRootPath, "Data", "BuildingCardTemplate.pptx");
+        var templatePath = Path.Join(_hostEnvironment.ContentRootPath, "Data", "BuildingCardTemplate.pptx");
         if (!System.IO.File.Exists(templatePath))
         {
             return NotFound("Building card template not found.");
@@ -371,17 +366,12 @@ public class BuildingsController : ApiControllerBase
 
         if (filter.StreetId.HasValue)
         {
-            if (filter.StreetId.Value == NoStreetId)
-            {
-                query = query.Where(b =>
+            query = filter.StreetId.Value == NoStreetId
+                ? query.Where(b =>
                     b.StreetCode == NoStreetId ||
                     b.StreetCode == null ||
-                    b.StreetName == NoStreetName);
-            }
-            else
-            {
-                query = query.Where(b => b.StreetCode == filter.StreetId.Value);
-            }
+                    b.StreetName == NoStreetName)
+                : query.Where(b => b.StreetCode == filter.StreetId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.HouseNumber))
@@ -2705,11 +2695,12 @@ public class BuildingsController : ApiControllerBase
         {
             var streetField = snapshot.Fields.FirstOrDefault(field =>
                 string.Equals(field.ColumnName, "StreetId", StringComparison.OrdinalIgnoreCase));
-            if (streetField?.RawValue is not null)
+            if (streetField is not null && streetField.RawValue is not null)
             {
                 streetId = streetField.RawValue;
             }
-            else if (!string.IsNullOrWhiteSpace(streetField?.Value) &&
+            else if (streetField is not null &&
+                     !string.IsNullOrWhiteSpace(streetField.Value) &&
                      int.TryParse(streetField.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
             {
                 streetId = parsed;
@@ -2829,7 +2820,7 @@ public class BuildingsController : ApiControllerBase
                 "SELECT setval(pg_get_serial_sequence('\"Buildings\"','\"Id\"'), GREATEST((SELECT MAX(\"Id\") FROM \"Buildings\"), 1))",
                 cancellationToken);
         }
-        catch
+        catch (DbUpdateException)
         {
             // best-effort sequence update
         }
@@ -2872,7 +2863,7 @@ public class BuildingsController : ApiControllerBase
                 message,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
-        catch
+        catch (JsonException)
         {
             return null;
         }
@@ -2977,12 +2968,12 @@ public class BuildingsController : ApiControllerBase
         var normalizedImageExtension = NormalizeCardImageExtension(imageExtension);
         var hasImage = imageBytes is { Length: > 0 } && !string.IsNullOrWhiteSpace(normalizedImageExtension);
         var hasMapImage = mapImageBytes is { Length: > 0 };
-        var targetImagePath = normalizedImageExtension is null
-            ? null
-            : $"ppt/media/image3.{normalizedImageExtension}";
-        var targetRelPath = normalizedImageExtension is null
-            ? null
-            : $"../media/image3.{normalizedImageExtension}";
+        var targetImagePath = hasImage
+            ? $"ppt/media/image3.{normalizedImageExtension}"
+            : null;
+        var targetRelPath = hasImage
+            ? $"../media/image3.{normalizedImageExtension}"
+            : null;
 
         using var templateStream = System.IO.File.OpenRead(templatePath);
         using var templateZip = new ZipArchive(templateStream, ZipArchiveMode.Read);
@@ -3004,26 +2995,20 @@ public class BuildingsController : ApiControllerBase
                 if (!string.IsNullOrWhiteSpace(templateImagePath) &&
                     string.Equals(entry.FullName, templateImagePath, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!hasImage || targetImagePath is null || imageBytes is null || normalizedImageExtension is null)
+                    if (!hasImage)
                     {
                         continue;
                     }
 
-                    byte[] outputImageBytes;
-                    try
-                    {
-                        var templateImageBytes = ReadAllBytes(entry.Open());
-                        outputImageBytes = BuildLetterboxedImage(
-                            imageBytes,
-                            templateImageBytes,
-                            normalizedImageExtension);
-                    }
-                    catch
-                    {
-                        outputImageBytes = imageBytes;
-                    }
+                    var sourceImageBytes = imageBytes!;
+                    var outputImageExtension = normalizedImageExtension!;
+                    var templateImageBytes = ReadAllBytes(entry.Open());
+                    var outputImageBytes = TryBuildLetterboxedImage(
+                        sourceImageBytes,
+                        templateImageBytes,
+                        outputImageExtension);
 
-                    var imageEntry = outputZip.CreateEntry(targetImagePath, CompressionLevel.Optimal);
+                    var imageEntry = outputZip.CreateEntry(targetImagePath!, CompressionLevel.Optimal);
                     using var imageEntryStream = imageEntry.Open();
                     imageEntryStream.Write(outputImageBytes, 0, outputImageBytes.Length);
                     continue;
@@ -3031,21 +3016,14 @@ public class BuildingsController : ApiControllerBase
 
                 if (string.Equals(entry.FullName, secondaryImagePath, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!hasMapImage || mapImageBytes is null)
+                    if (!hasMapImage)
                     {
                         continue;
                     }
 
-                    byte[] outputMapBytes;
-                    try
-                    {
-                        var templateMapBytes = ReadAllBytes(entry.Open());
-                        outputMapBytes = BuildLetterboxedImage(mapImageBytes, templateMapBytes, "png");
-                    }
-                    catch
-                    {
-                        outputMapBytes = mapImageBytes;
-                    }
+                    var sourceMapImageBytes = mapImageBytes!;
+                    var templateMapBytes = ReadAllBytes(entry.Open());
+                    var outputMapBytes = TryBuildLetterboxedImage(sourceMapImageBytes, templateMapBytes, "png");
 
                     var mapEntry = outputZip.CreateEntry(secondaryImagePath, CompressionLevel.Optimal);
                     using var mapEntryStream = mapEntry.Open();
@@ -3250,13 +3228,14 @@ public class BuildingsController : ApiControllerBase
                         slideRelsDoc.Save(relStream, System.Xml.Linq.SaveOptions.DisableFormatting);
                     }
 
-                    if (hasImage && payload.ImageBytes is not null)
+                    if (hasImage)
                     {
-                        var outputImageBytes = payload.ImageBytes;
+                        var payloadImageBytes = payload.ImageBytes!;
+                        var outputImageBytes = payloadImageBytes;
                         if (templateImageBytes is not null)
                         {
-                            outputImageBytes = BuildLetterboxedImage(
-                                payload.ImageBytes,
+                            outputImageBytes = TryBuildLetterboxedImage(
+                                payloadImageBytes,
                                 templateImageBytes,
                                 payload.ImageExtension!);
                         }
@@ -3266,12 +3245,13 @@ public class BuildingsController : ApiControllerBase
                         imageStream.Write(outputImageBytes, 0, outputImageBytes.Length);
                     }
 
-                    if (hasMapImage && payload.MapImageBytes is not null)
+                    if (hasMapImage)
                     {
-                        var outputMapBytes = payload.MapImageBytes;
+                        var payloadMapImageBytes = payload.MapImageBytes!;
+                        var outputMapBytes = payloadMapImageBytes;
                         if (templateMapImageBytes is not null)
                         {
-                            outputMapBytes = BuildLetterboxedImage(payload.MapImageBytes, templateMapImageBytes, "png");
+                            outputMapBytes = TryBuildLetterboxedImage(payloadMapImageBytes, templateMapImageBytes, "png");
                         }
 
                         var mapImageEntry = outputZip.CreateEntry(mapImagePath!, CompressionLevel.Optimal);
@@ -3497,10 +3477,13 @@ public class BuildingsController : ApiControllerBase
                 .Any(blip => string.Equals((string?)blip.Attribute(r + "embed"), relId, StringComparison.Ordinal)))
             .ToList();
 
-        foreach (var picture in pictures)
+        var srcRects = pictures
+            .SelectMany(picture => picture.Descendants(a + "srcRect"))
+            .ToList();
+
+        foreach (var srcRect in srcRects)
         {
-            var srcRect = picture.Descendants(a + "srcRect").FirstOrDefault();
-            srcRect?.Remove();
+            srcRect.Remove();
         }
     }
 
@@ -3537,6 +3520,33 @@ public class BuildingsController : ApiControllerBase
         }
 
         return output.ToArray();
+    }
+
+    private static byte[] TryBuildLetterboxedImage(
+        byte[] sourceBytes,
+        byte[] templateBytes,
+        string outputExtension)
+    {
+        try
+        {
+            return BuildLetterboxedImage(sourceBytes, templateBytes, outputExtension);
+        }
+        catch (UnknownImageFormatException)
+        {
+            return sourceBytes;
+        }
+        catch (InvalidImageContentException)
+        {
+            return sourceBytes;
+        }
+        catch (NotSupportedException)
+        {
+            return sourceBytes;
+        }
+        catch (IOException)
+        {
+            return sourceBytes;
+        }
     }
 
 

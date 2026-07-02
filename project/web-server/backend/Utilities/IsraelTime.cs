@@ -36,15 +36,9 @@ public static class IsraelTime
             return null;
         }
 
-        var date = value.Value;
-        if (date.Kind == DateTimeKind.Unspecified)
-        {
-            date = DateTime.SpecifyKind(date, DateTimeKind.Utc);
-        }
-        else
-        {
-            date = date.ToUniversalTime();
-        }
+        var date = value.Value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+            : value.Value.ToUniversalTime();
 
         return TimeZoneInfo.ConvertTimeFromUtc(date, IsraelZone);
     }

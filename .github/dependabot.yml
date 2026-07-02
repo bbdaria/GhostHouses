@@ -2,6 +2,7 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
       day: sunday
@@ -10,22 +11,60 @@ updates:
 
   - package-ecosystem: nuget
     directory: /project/web-server/backend
+    target-branch: develop
     schedule:
       interval: weekly
       day: sunday
       time: "06:15"
     open-pull-requests-limit: 5
+    groups:
+      ef-core:
+        patterns:
+          - Microsoft.EntityFrameworkCore*
+          - Npgsql.EntityFrameworkCore.PostgreSQL
+    ignore:
+      - dependency-name: SixLabors.ImageSharp
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.AspNetCore.Authentication.JwtBearer
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.EntityFrameworkCore.Design
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.EntityFrameworkCore
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.EntityFrameworkCore.Relational
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.EntityFrameworkCore.Tools
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Microsoft.Extensions.Caching.Memory
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: Npgsql.EntityFrameworkCore.PostgreSQL
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: npm
     directory: /project/web-server/frontend
+    target-branch: develop
     schedule:
       interval: weekly
       day: sunday
       time: "06:30"
     open-pull-requests-limit: 5
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
 
   - package-ecosystem: docker
     directory: /project/web-server/.devcontainer
+    target-branch: develop
     schedule:
       interval: weekly
       day: sunday
@@ -34,6 +73,7 @@ updates:
 
   - package-ecosystem: docker
     directory: /project/db-server/.devcontainer
+    target-branch: develop
     schedule:
       interval: weekly
       day: sunday

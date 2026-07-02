@@ -10,7 +10,6 @@ import OtpPage from './pages/OtpPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import StreetsPage from './pages/StreetsPage.jsx';
 import TemplateConverterPage from './pages/TemplateConverterPage.jsx';
-import UserDetailsPage from './pages/UserDetailsPage.jsx';
 import UsersListPage from './pages/UsersListPage.jsx';
 
 const MapPage = lazy(() => import('./pages/MapPage.jsx'));

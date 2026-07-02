@@ -3,10 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
 import BuildingModal from '../components/BuildingModal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { ROLE_LABELS, STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
+import { STATUS_LABEL_MAP, STATUS_OPTIONS, STATUS_VALUE_BY_ID } from '../i18n.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 import { BUILDING_FIELD_PLACEHOLDERS, LAST_BUILDING_KEY } from '../constants.js';
-import { formatDate, formatTime, formatDateTime, getIsraelDateStamp } from '../utils/formatDate.js';
+import { formatDateTime, getIsraelDateStamp } from '../utils/formatDate.js';
 
 const initialFilters = {
   streetId: '',
@@ -108,8 +108,6 @@ export default function BuildingsPage() {
   const [openViewCategories, setOpenViewCategories] = useState(() => new Set());
   const [openEditCategories, setOpenEditCategories] = useState(() => new Set());
   const [openCreateCategories, setOpenCreateCategories] = useState(() => new Set());
-  const [isExternalOpen, setIsExternalOpen] = useState(false);
-  const [isLogsOpen, setIsLogsOpen] = useState(false);
 
   const importBusy = importPreviewing || importApplying;
   const importCompareRow = useMemo(
@@ -161,7 +159,6 @@ export default function BuildingsPage() {
     [user]
   );
   const isAdmin = user?.role === 'Admin';
-  const roleLabel = ROLE_LABELS[user?.role] || user?.role;
   const formatLogDate = (value) => {
     if (!value) return '—';
     try {
@@ -1470,10 +1467,6 @@ export default function BuildingsPage() {
   );
   const importReadyToApply = importRows.length > 0 && importStage1Rows.length === 0 && importStage2Rows.length === 0;
 
-  const handleTabChange = (tab) => {
-    setSelectedView(tab);
-  };
-
   const handleCategoryToggleKeyDown = (event, toggle) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -1515,14 +1508,6 @@ export default function BuildingsPage() {
       }
       return next;
     });
-  };
-
-  const toggleExternalSection = () => {
-    setIsExternalOpen((prev) => !prev);
-  };
-
-  const toggleLogsSection = () => {
-    setIsLogsOpen((prev) => !prev);
   };
 
   const handleSortClick = (field) => {
@@ -1682,14 +1667,10 @@ export default function BuildingsPage() {
     if (!selectedBuilding) {
       setOpenViewCategories(new Set());
       setOpenEditCategories(new Set());
-      setIsExternalOpen(false);
-      setIsLogsOpen(false);
       return;
     }
     setOpenViewCategories(new Set(defaultOpenCategories));
     setOpenEditCategories(new Set(defaultOpenCategories));
-    setIsExternalOpen(false);
-    setIsLogsOpen(false);
   }, [selectedBuilding, defaultOpenCategories]);
 
   useEffect(() => {

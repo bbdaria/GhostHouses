@@ -81,8 +81,6 @@ export default function UserDetailsPage() {
     );
   }
 
-  const roleLabel = ROLE_LABELS[user.role] || user.role;
-
   return (
     <main className="app users-app">
       <button className="ghost" onClick={() => navigate(-1)}>

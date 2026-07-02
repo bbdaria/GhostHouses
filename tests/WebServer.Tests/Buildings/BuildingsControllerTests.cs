@@ -211,8 +211,8 @@ public class BuildingsControllerTests
         var current = new DirectoryInfo(Directory.GetCurrentDirectory());
         while (current is not null)
         {
-            var candidate = Path.Combine(current.FullName, "project", "web-server", "backend");
-            if (File.Exists(Path.Combine(candidate, "Data", "BuildingCardTemplate.pptx")))
+            var candidate = Path.Join(current.FullName, "project", "web-server", "backend");
+            if (File.Exists(Path.Join(candidate, "Data", "BuildingCardTemplate.pptx")))
             {
                 return candidate;
             }

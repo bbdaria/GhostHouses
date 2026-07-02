@@ -23,7 +23,11 @@ public class HealthController : ControllerBase
             var count = await _dbContext.Buildings.CountAsync();
             return Ok(new { count });
         }
-        catch (Exception ex)
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = ex.Message });
         }
