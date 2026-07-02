@@ -586,7 +586,7 @@ public class StreetsController : ControllerBase
                 continue;
             }
 
-            normalized[key] = string.IsNullOrWhiteSpace(value) ? null : value?.Trim();
+            normalized[key] = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
         return normalized;
     }
