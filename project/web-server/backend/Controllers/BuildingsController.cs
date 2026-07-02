@@ -2695,11 +2695,12 @@ public class BuildingsController : ApiControllerBase
         {
             var streetField = snapshot.Fields.FirstOrDefault(field =>
                 string.Equals(field.ColumnName, "StreetId", StringComparison.OrdinalIgnoreCase));
-            if (streetField?.RawValue is not null)
+            if (streetField is not null && streetField.RawValue is not null)
             {
                 streetId = streetField.RawValue;
             }
-            else if (!string.IsNullOrWhiteSpace(streetField?.Value) &&
+            else if (streetField is not null &&
+                     !string.IsNullOrWhiteSpace(streetField.Value) &&
                      int.TryParse(streetField.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
             {
                 streetId = parsed;

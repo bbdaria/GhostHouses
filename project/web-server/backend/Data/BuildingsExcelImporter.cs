@@ -536,12 +536,11 @@ public static class BuildingsExcelImporter
                 return dt;
             }
 
-            if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+            if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) &&
+                d >= -657435.0 &&
+                d <= 2958465.99999999)
             {
-                if (d >= -657435.0 && d <= 2958465.99999999)
-                {
-                    return DateTime.FromOADate(d);
-                }
+                return DateTime.FromOADate(d);
             }
 
             return null;
