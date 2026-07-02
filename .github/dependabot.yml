@@ -1,0 +1,41 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:00"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: nuget
+    directory: /project/web-server/backend
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:15"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /project/web-server/frontend
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:30"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /project/web-server/.devcontainer
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:45"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /project/db-server/.devcontainer
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "07:00"
+    open-pull-requests-limit: 5
