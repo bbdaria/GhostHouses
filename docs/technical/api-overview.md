@@ -11,12 +11,15 @@ When Swagger is enabled, it is available at:
 - Swagger UI: `/swagger/`
 - OpenAPI JSON: `/swagger/v1/swagger.json`
 
-In Docker Compose, Swagger can be enabled or disabled with:
+In Docker Compose, Swagger is disabled by default for production-safe deployments:
 
-- `SWAGGER_ENABLED=true`
 - `SWAGGER_ENABLED=false`
 
-For the municipality test server, Swagger can be enabled on the internal network so information security can inspect the API documentation directly.
+For an internal test server or security review, enable it through the local/server `.env` file:
+
+- `SWAGGER_ENABLED=true`
+
+The setting is intentionally controlled outside the code so Swagger can be enabled temporarily on the municipality test server and disabled again for production.
 
 ## Authentication
 
@@ -153,4 +156,4 @@ Common HTTP responses:
 - Role policies enforce Viewer, Editor, and Admin permissions at the controller level.
 - Backend and database services are internal to Docker in the deployment topology.
 - Production secrets and certificates are supplied through deployment environment variables or secure handover, not committed to the repository.
-- Swagger is controlled by configuration so it can be enabled for the municipality test server and disabled later if required.
+- Swagger is controlled by configuration, defaults to disabled, and should be enabled only when API documentation review is needed on an internal test server.
