@@ -587,8 +587,10 @@ public class BuildingsController : ApiControllerBase
 
     [HttpPost("convert-template")]
     [Authorize(Policy = "Admin")]
-    public IActionResult ConvertBuildingsTemplate([FromForm] IFormFile? file)
+    [Consumes("multipart/form-data")]
+    public IActionResult ConvertBuildingsTemplate([FromForm] TemplateConversionRequest request)
     {
+        var file = request.File;
         if (file == null || file.Length == 0)
         {
             return BadRequest("Import file is required.");
@@ -602,6 +604,11 @@ public class BuildingsController : ApiControllerBase
         }
 
         return BuildBuildingsExport(buildings, includeImages: false);
+    }
+
+    public sealed class TemplateConversionRequest
+    {
+        public IFormFile? File { get; set; }
     }
 
     public sealed class BuildingsImportRequest
