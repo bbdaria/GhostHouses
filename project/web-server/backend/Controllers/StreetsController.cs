@@ -200,10 +200,12 @@ public class StreetsController : ControllerBase
 
     [HttpPost("import/preview")]
     [Authorize(Policy = "Admin")]
+    [Consumes("multipart/form-data")]
     public async Task<ActionResult<StreetImportPreviewResponse>> PreviewImport(
-        [FromForm] IFormFile? file,
+        [FromForm] StreetImportFileRequest request,
         CancellationToken cancellationToken)
     {
+        var file = request.File;
         if (file == null || file.Length == 0)
         {
             return BadRequest("Import file is required.");
@@ -453,8 +455,10 @@ public class StreetsController : ControllerBase
 
     [HttpPost("convert-template")]
     [Authorize(Policy = "Admin")]
-    public IActionResult ConvertStreetsTemplate([FromForm] IFormFile? file)
+    [Consumes("multipart/form-data")]
+    public IActionResult ConvertStreetsTemplate([FromForm] StreetImportFileRequest request)
     {
+        var file = request.File;
         if (file == null || file.Length == 0)
         {
             return BadRequest("Import file is required.");
@@ -468,6 +472,11 @@ public class StreetsController : ControllerBase
         }
 
         return BuildStreetsExport(streets);
+    }
+
+    public sealed class StreetImportFileRequest
+    {
+        public IFormFile? File { get; set; }
     }
 
     private static IActionResult BuildStreetsExport(IReadOnlyList<Street> streets)
