@@ -118,28 +118,28 @@
 \begin{frame}{Customer-Side Deployment}
   \begin{itemize}
     \item The municipality environment is a Windows Server VM inside the private municipality network.
-    \item The intended deployment is a Docker Compose stack: frontend, backend, PostgreSQL, and pgAdmin.
+    \item The Docker Compose stack was run successfully with frontend, backend, PostgreSQL, and pgAdmin.
     \item Municipality users access only the frontend through HTTPS 443.
-    \item IT/database administration uses pgAdmin through HTTPS 8443.
+    \item IT/database administration uses pgAdmin through HTTPS 8443, we walked through tables and users with the municipality dev team.
     \item Backend and database stay internal to Docker networks and are not exposed directly.
   \end{itemize}
 \end{frame}
 
 \begin{frame}{Customer-Side Deployment Woes and Mitigation}
   \begin{itemize}
-    \item Main blocker: Docker Desktop / WSL 2 on the municipality Windows Server VM may require nested virtualization approval.
-    \item We prepared the deployment as one repeatable command from \texttt{project/}: \texttt{docker compose down -v \&\& docker compose up -d --build}.
-    \item We documented ports, software dependencies, hardware expectations, secrets, certificates, and network access.
-    \item We prepared fallback plans with the supervisor if nested virtualization is not approved.
+    \item We verified the normal run command from \texttt{project/}: \texttt{docker compose up -d --build}.
+    \item We verified the clean reset command: \texttt{docker compose down -v \&\& docker compose up -d --build}.
+    \item We explained production \texttt{.env} values, real certificates, domain/DNS, port forwarding, and restricted pgAdmin access.
+    \item Remaining production infrastructure decisions, including network routing and admin VLAN access, are municipality-owned.
   \end{itemize}
 \end{frame}
 
 \begin{frame}{Exhausting Communication With the Customer}
   \begin{itemize}
     \item \textbf{Exhausting communication with the customer toward possible deployment, in writing:} deployment communication is documented with the client side, municipality dev team, IT/security contacts, and supervisors.
-    \item The written trail covers deployment requirements, server preparation, security approval, and nested virtualization discussion.
-    \item The client-side blocker is not application readiness, it is approval and infrastructure constraints in the municipality environment.
-    \item We kept the system ready for handoff while continuing to coordinate professionally with the municipality side.
+    \item The latest handoff covered run/reset commands, pgAdmin table inspection, \texttt{.env} values, certificates, domain/DNS, port forwarding, and VLAN-limited admin access.
+    \item We explained the mocked 2FA replacement point and the Swagger toggle for temporary API/security review.
+    \item The deployment handoff was completed after the walkthrough.
   \end{itemize}
 \end{frame}
 

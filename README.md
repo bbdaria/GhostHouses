@@ -246,8 +246,14 @@ Filled response evidence: `docs/submissions/stage-b/customer-satisfaction/GhostH
 ##### 2.3.2 Successful Deployment on Customer Side
 Customer-side deployment is tracked in the deployment User Story: [Issue #94](https://github.com/bbdaria/GhostHouses/issues/94).
 
+The Docker Compose deployment was run successfully with the frontend, backend, PostgreSQL database, and pgAdmin services. The run command and clean reset command were verified from `project/`, and the municipality dev-team handoff included a walkthrough of pgAdmin, including where to view database tables and the users table.
+
+The deployment handoff was completed after the walkthrough. The remaining production work is municipality-owned infrastructure configuration: real certificates, domain/DNS, routing and port forwarding, internal admin/VLAN access policy, production `.env` values, and security review or penetration testing on the running deployed system.
+
 ##### 2.3.3 Exhausting Communication With the Customer Toward Possible Deployment, in Writing
 The written communication trail for deployment is documented in email correspondence with the client side, the municipality dev team, municipality IT/security contacts, and the project supervisors CC'd. This evidence covers the deployment requirements, server preparation, security approval process, nested-virtualization discussion, and our attempts to keep the deployment moving professionally.
+
+The latest handoff also covered the verified Docker run/reset commands, pgAdmin table and user inspection, the `.env` values that must be changed for production, the mocked 2FA replacement point, real certificate and domain requirements, port forwarding, VLAN/internal access for pgAdmin, and the Swagger toggle for temporary API/security review.
 
 #### 2.4 Maintainable Architecture
 ##### 2.4.1 UML Class Diagram
@@ -297,7 +303,7 @@ Release checkpoints show continuous project growth:
 - `release/stage-a/sprint-2-final`: final Stage A checkpoint.
 - `release/stage-b/sprint-1-deployment`: deployment-focused Stage B checkpoint.
 - `release/stage-b/sprint-2-gis`: GIS-focused Stage B checkpoint.
-- `release/stage-b/sprint-3-final`: intentionally empty for now and will be updated when all remaining issues are closed and the final handoff state is ready.
+- `release/stage-b/sprint-3-final`: final Stage B handoff and submission state.
 
 ##### 3.1.2 Backlog Management - What Is on the Horizon
 Open/planned work is tracked through GitHub Issues and the GhostHouses project board.
@@ -305,8 +311,8 @@ Open/planned work is tracked through GitHub Issues and the GhostHouses project b
 Current known horizon:
 - Real OTP implementation and stronger 2FA enforcement.
 - Additional external municipality system integrations beyond GIS, if the municipality provides real API/file contracts.
-- Final deployment/handoff completion on the customer server.
-- Final customer feedback/questionnaire evidence.
+- Municipality-owned production infrastructure finalization: real certificates, domain/DNS, routing, port forwarding, and internal admin access policy.
+- Full security code review and application penetration testing on the running deployed system.
 
 #### 3.2 Correct Use of GitHub
 ##### 3.2.1 Branch Management
@@ -370,7 +376,7 @@ Current repository-side controls include:
 - Existing CI for backend tests, frontend build, and Docker Compose build readiness.
 - Secret handling rules through `.gitignore`, `project/HANDOFF_SECRETS.md`, and local-only `.env` / certificate paths.
 
-Controls that still require repository-owner or administrator settings are documented separately: Dependabot alerts/security updates, secret scanning, push protection, branch protection/rulesets, and repository visibility justification.
+Repository-side security controls were enabled or verified by repository administration, including Dependabot alerts/security updates, secret scanning, push protection, branch protection/rulesets, and repository visibility review. These controls improve readiness, but they do not replace a full security code review or application penetration test.
 
 ## Project Structure
 - `project/web-server/backend`: ASP.NET Core backend.
