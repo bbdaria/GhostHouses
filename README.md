@@ -239,7 +239,7 @@ How we figured these requirements:
 
 #### 2.3 Customer Satisfaction
 ##### 2.3.1 Customer Questionnaire
-A Hebrew customer questionnaire was used to collect the client's final feedback, and the signed response is stored as the customer satisfaction evidence.
+A customer questionnaire was used to collect the client's final feedback, and the signed response is stored as the customer satisfaction evidence.
 
 Filled response evidence: `docs/submissions/stage-b/customer-satisfaction/GhostHouses_Customer_Questionnaire_Response.pdf`
 
