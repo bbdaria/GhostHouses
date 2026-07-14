@@ -119,9 +119,9 @@
   \begin{itemize}
     \item The municipality environment is a Windows Server VM inside the private municipality network.
     \item The Docker Compose stack was run successfully with frontend, backend, PostgreSQL, and pgAdmin.
+    \item The municipality confirmed that the system was published successfully on the correct dedicated server.
     \item Municipality users access only the frontend through HTTPS 443.
-    \item IT/database administration uses pgAdmin through HTTPS 8443, we walked through tables and users with the municipality dev team.
-    \item Backend and database stay internal to Docker networks and are not exposed directly.
+    \item Backend and database stay internal to Docker networks, and pgAdmin remains restricted to IT/database administration.
   \end{itemize}
 \end{frame}
 
@@ -130,16 +130,16 @@
     \item We verified the normal run command from \texttt{project/}: \texttt{docker compose up -d --build}.
     \item We verified the clean reset command: \texttt{docker compose down -v \&\& docker compose up -d --build}.
     \item We explained production \texttt{.env} values, real certificates, domain/DNS, port forwarding, and restricted pgAdmin access.
-    \item Remaining production infrastructure decisions, including network routing and admin VLAN access, are municipality-owned.
+    \item The remaining work is municipality-owned infrastructure: network settings, port opening, and access through the approved municipality server address.
   \end{itemize}
 \end{frame}
 
 \begin{frame}{Exhausting Communication With the Customer}
   \begin{itemize}
     \item \textbf{Exhausting communication with the customer toward possible deployment, in writing:} deployment communication is documented with the client side, municipality dev team, IT/security contacts, and supervisors.
-    \item The latest handoff covered run/reset commands, pgAdmin table inspection, \texttt{.env} values, certificates, domain/DNS, port forwarding, and VLAN-limited admin access.
-    \item We explained the mocked 2FA replacement point and the Swagger toggle for temporary API/security review.
-    \item The deployment handoff was completed after the walkthrough.
+    \item The latest written confirmation says the student and Technion-side tasks were completed successfully.
+    \item The municipality development checks were completed, and no additional tasks are currently required from Technion or the student team.
+    \item We continued helping the municipality system team clarify the required port and network settings.
   \end{itemize}
 \end{frame}
 
