@@ -1,5 +1,8 @@
 @startuml
+
 left to right direction
+
+skinparam ranksep 300
 
 skinparam shadowing false
 skinparam backgroundColor #FFFFFF
@@ -18,93 +21,156 @@ skinparam ArtifactFontColor #0F172A
 skinparam RectangleBorderColor #94A3B8
 skinparam RectangleBackgroundColor #FFFFFF
 
-rectangle "Actors" {
-  actor "Viewer" as Viewer
-  actor "Editor" as Editor
-  actor "Admin" as Admin
-  actor "Municipality\nIT / Dev Team" as IT
-}
-
-rectangle "Permissions" {
-  usecase "Viewer\nPermission" as P_VIEW
-  usecase "Editor\nPermission" as P_EDIT
-  usecase "Admin\nPermission" as P_ADMIN
-  usecase "Deployment\nResponsibility" as P_DEPLOY
+rectangle "User Stories" {
+  artifact "#21 As an admin, I want users to log in with 2FA\nso that only authorized people can use the system." as US_21 #F8FAFC;line:2563EB
+  artifact "#22 As an admin, I want to set municipality user\npermissions to view/edit/can't access so that\nsystem access is controlled." as US_22 #F8FAFC;line:2563EB
+  artifact "#24 As a viewer, I want to search and filter buildings\n(street, house no., nickname, status/category, area)\nso that I can quickly find relevant records." as US_24 #F8FAFC;line:0891B2
+  artifact "#26 As a viewer, I want to produce a building card image\nto include in presentations." as US_26 #F8FAFC;line:DC2626
+  artifact "#27 As an editor, I want to add new buildings\nso that the database stays current." as US_27 #F8FAFC;line:0891B2
+  artifact "#28 As an editor, I want to update existing buildings\nso that errors and changes are reflected promptly." as US_28 #F8FAFC;line:0891B2
+  artifact "#29 As an editor, I want to remove buildings\n(with safeguards) so that obsolete or duplicate\nentries are cleaned up." as US_29 #F8FAFC;line:0891B2
+  artifact "#34 As a viewer, I want a full audit trail of who changed\nwhat and when so that compliance requirements are met." as US_34 #F8FAFC;line:0891B2
+  artifact "#76 As a municipality staff user (admin/editor),\nI want to export the buildings table (optionally with\ncurrent filters) to an Excel file, so that I can keep\na backup of the database locally, and restore it later\nvia \"import from excel\"." as US_76 #F8FAFC;line:0891B2
+  artifact "#84 As a viewer, I want to view and pan around a map\nso I can understand abandoned building locations" as US_84 #F8FAFC;line:F59E0B
+  artifact "#85 As a viewer, I want to select an area of buildings\non the map so I can see their details and statuses" as US_85 #F8FAFC;line:F59E0B
+  artifact "#94 As municipality staff, I want GhostHouses deployed\non the municipality server so the system can be used\ninside the municipality network" as US_94 #F8FAFC;line:DC2626
 }
 
 rectangle "Use Cases" {
-  usecase "Access control\nand permissions" as UC_ACCESS
-  usecase "Search and view\nbuilding records" as UC_VIEW
-  usecase "Manage building\nrepository" as UC_MANAGE
-  usecase "Import / export\nbuilding data" as UC_DATA
-  usecase "Produce\nbuilding cards" as UC_CARDS
-  usecase "Review\naudit trail" as UC_LOGS
-  usecase "Use GIS\nmap context" as UC_GIS
-  usecase "Deploy inside\nmunicipality network" as UC_DEPLOY
-  usecase "Prove map provider\nflexibility" as UC_PROVIDER
+  usecase "Login to\nsystem" as UC_LOGIN #DBEAFE;line:2563EB
+  usecase "Search and filter\nbuilding records" as UC_SEARCH #DBEAFE;line:0891B2
+  usecase "View building\ndetails" as UC_DETAILS #DBEAFE;line:0891B2
+  usecase "View field logs\nand changes" as UC_LOGS #DBEAFE;line:0891B2
+  usecase "Produce\nbuilding cards" as UC_PRODUCE_CARDS #DBEAFE;line:DC2626
+  usecase "Export\nbuilding cards" as UC_EXPORT_CARDS #DBEAFE;line:DC2626
+  usecase "View building on\nmunicipal GIS map" as UC_GIS_VIEW #DBEAFE;line:F59E0B
+  usecase "Use GIS area\nselection" as UC_GIS_AREA #DBEAFE;line:F59E0B
+  usecase "Add and remove\nbuildings" as UC_ADD_REMOVE #DBEAFE;line:0891B2
+  usecase "Update existing\nbuildings" as UC_UPDATE #DBEAFE;line:0891B2
+  usecase "Restore removed\nbuildings" as UC_RESTORE #DBEAFE;line:0891B2
+  usecase "Export buildings\ntable" as UC_EXPORT_TABLE #DBEAFE;line:0891B2
+  usecase "Import legacy\nbuilding data" as UC_IMPORT #DBEAFE;line:2563EB
+  usecase "Convert legacy\nbuilding template" as UC_CONVERT #DBEAFE;line:0891B2
+  usecase "Manage streets" as UC_STREETS #DBEAFE;line:0891B2
+  usecase "Manage users" as UC_USERS #DBEAFE;line:2563EB
+  usecase "Edit user\npermissions" as UC_PERMISSIONS #DBEAFE;line:2563EB
+  usecase "Deploy inside\nmunicipality network" as UC_DEPLOY #DBEAFE;line:DC2626
 }
 
-rectangle "User Story Issues" {
-  artifact "US #20/#21/#22\nAs an admin, I want role-based access,\n2FA login, and permission control\nso only authorized users can use the system." as US_ACCESS
-  artifact "US #23/#24/#25\nAs a viewer, I want to view, search,\nfilter, and open building details\nso I can review records quickly." as US_VIEW
-  artifact "US #27/#28/#29\nAs an editor, I want to add, update,\nand safely remove buildings\nso the repository stays current." as US_MANAGE
-  artifact "US #76\nAs municipality staff, I want to export\nand restore building data\nso local backup is possible." as US_DATA
-  artifact "US #26\nAs a viewer, I want to produce\na building card image\nso it can be used in presentations." as US_CARDS
-  artifact "US #30/#31/#32/#34\nAs a viewer/editor/admin, I want logs\nand audit history so building changes\nremain accountable." as US_LOGS
-  artifact "US #35/#84/#85\nAs a viewer/editor, I want GIS map context\nand area selection so records connect\nto real locations." as US_GIS
-  artifact "US #94\nAs municipality staff, I want GhostHouses\ndeployed on the municipality server\nso it can be used internally." as US_DEPLOY
-  artifact "US #91\nAs a viewer, I want an OpenStreetMap proof\nso the team can demonstrate\nmap-provider flexibility." as US_PROVIDER
+rectangle "Issues" {
+  artifact "Mock 2FA login\n#4, #12" as I_MVP_2FA #F8FAFC;line:2563EB
+  artifact "User management\n#3, #13" as I_MVP_USERS #F8FAFC;line:2563EB
+  artifact "Building table filters\n#10, #11, #46, #47, #48, #49, #51" as I_STAGE_A_FILTERS #F8FAFC;line:0891B2
+  artifact "Building card export\n#7, #8" as I_MVP_CARD_EXPORT #F8FAFC;line:0891B2
+  artifact "Multi-building card export\n#74" as I_STAGE_A_CARD_MULTI #F8FAFC;line:0891B2
+  artifact "Final building card template\n#82" as I_FINAL_CARD_TEMPLATE #F8FAFC;line:DC2626
+  artifact "GIS snapshot in building cards\n#90" as I_GIS_CARD_SNAPSHOT #F8FAFC;line:F59E0B
+  artifact "Create building records\n#9, #10, #43" as I_MVP_ADD_BUILDINGS #F8FAFC;line:2563EB
+  artifact "Consistent add/edit building form\n#52, #53, #54, #55, #58, #59, #63, #68, #69, #79" as I_FINAL_BUILDING_FORM #F8FAFC;line:0891B2
+  artifact "View logs and activity history\n#2, #44, #60, #61, #62, #67, #71, #72" as I_MVP_LOGS #F8FAFC;line:2563EB
+  artifact "Locked audit trail\n#73" as I_STAGE_A_AUDIT_LOCK #F8FAFC;line:0891B2
+  artifact "Import client Excel file\n#16, #39, #41" as I_MVP_IMPORT #F8FAFC;line:2563EB
+  artifact "Filtered Excel export\n#45, #50, #64, #80" as I_FINAL_EXPORT #F8FAFC;line:0891B2
+  artifact "Street import/export and converter\n#40, #42, #54, #55, #81" as I_FINAL_STREETS #F8FAFC;line:0891B2
+  artifact "Municipal GIS map page\n#88" as I_GIS_MAP_PAGE #F8FAFC;line:F59E0B
+  artifact "GIS area selection\n#89" as I_GIS_AREA_SELECTION #F8FAFC;line:F59E0B
+  artifact "Private-network deployment hardening\n#83" as I_DEPLOY_HARDENING #F8FAFC;line:16A34A
+  artifact "Client server deployment handoff\n#78" as I_FINAL_DEPLOYMENT #F8FAFC;line:DC2626
 }
 
-rectangle "Sprints / Branches" {
-  artifact "release/stage-a/sprint-2-final\nrelease/stage-b/sprint-3-final" as S_ACCESS
-  artifact "release/stage-a/sprint-2-final\nrelease/stage-b/sprint-3-final" as S_VIEW
-  artifact "release/stage-a/sprint-1-mvp\nrelease/stage-a/sprint-2-final" as S_MANAGE
-  artifact "release/stage-a/sprint-1-mvp\nrelease/stage-a/sprint-2-final" as S_DATA
-  artifact "release/stage-a/sprint-2-final\nrelease/stage-b/sprint-2-gis\nrelease/stage-b/sprint-3-final" as S_CARDS
-  artifact "release/stage-a/sprint-2-final" as S_LOGS
-  artifact "release/stage-b/sprint-2-gis" as S_GIS
-  artifact "release/stage-b/sprint-1-deployment\nrelease/stage-b/sprint-3-final" as S_DEPLOY
-  artifact "feature/map-provider-flexibility/main\nnot merged to production releases" as S_PROVIDER
+rectangle "Sprints" {
+  artifact "release/stage-a/sprint-1-mvp" as S_STAGE_A_MVP #F8FAFC;line:2563EB
+  artifact "release/stage-a/sprint-2-final" as S_STAGE_A_FINAL #F8FAFC;line:0891B2
+  artifact "release/stage-b/sprint-1-deployment" as S_STAGE_B_DEPLOY #F8FAFC;line:16A34A
+  artifact "release/stage-b/sprint-2-gis" as S_STAGE_B_GIS #F8FAFC;line:F59E0B
+  artifact "release/stage-b/sprint-3-final" as S_STAGE_B_FINAL #F8FAFC;line:DC2626
 }
 
-Viewer --> P_VIEW
-Editor --> P_VIEW
-Editor --> P_EDIT
-Admin --> P_VIEW
-Admin --> P_EDIT
-Admin --> P_ADMIN
-IT --> P_DEPLOY
+US_21 -[#2563EB]-> UC_LOGIN
+US_22 -[#2563EB]-> UC_USERS
+US_22 -[#2563EB]-> UC_PERMISSIONS
 
-P_ADMIN --> UC_ACCESS
-P_VIEW --> UC_VIEW
-P_EDIT --> UC_MANAGE
-P_EDIT --> UC_DATA
-P_VIEW --> UC_CARDS
-P_VIEW --> UC_LOGS
-P_EDIT --> UC_LOGS
-P_VIEW --> UC_GIS
-P_EDIT --> UC_GIS
-P_DEPLOY --> UC_DEPLOY
-P_DEPLOY --> UC_PROVIDER
+US_24 -[#0891B2]-> UC_SEARCH
+US_24 -[#0891B2]-> UC_DETAILS
 
-UC_ACCESS ..> US_ACCESS : traces to
-UC_VIEW ..> US_VIEW : traces to
-UC_MANAGE ..> US_MANAGE : traces to
-UC_DATA ..> US_DATA : traces to
-UC_CARDS ..> US_CARDS : traces to
-UC_LOGS ..> US_LOGS : traces to
-UC_GIS ..> US_GIS : traces to
-UC_DEPLOY ..> US_DEPLOY : traces to
-UC_PROVIDER ..> US_PROVIDER : traces to
+US_26 -[#DC2626]-> UC_PRODUCE_CARDS
+US_26 -[#DC2626]-> UC_EXPORT_CARDS
 
-US_ACCESS ..> S_ACCESS : delivered in
-US_VIEW ..> S_VIEW : delivered in
-US_MANAGE ..> S_MANAGE : delivered in
-US_DATA ..> S_DATA : delivered in
-US_CARDS ..> S_CARDS : delivered in
-US_LOGS ..> S_LOGS : delivered in
-US_GIS ..> S_GIS : delivered in
-US_DEPLOY ..> S_DEPLOY : delivered in
-US_PROVIDER ..> S_PROVIDER : proof branch
+US_27 -[#0891B2]-> UC_ADD_REMOVE
+US_28 -[#0891B2]-> UC_UPDATE
+US_29 -[#0891B2]-> UC_ADD_REMOVE
+US_29 -[#0891B2]-> UC_RESTORE
+
+US_34 -[#0891B2]-> UC_LOGS
+
+US_76 -[#0891B2]-> UC_EXPORT_TABLE
+US_76 -[#2563EB]-> UC_IMPORT
+US_76 -[#0891B2]-> UC_CONVERT
+US_76 -[#0891B2]-> UC_STREETS
+
+US_84 -[#F59E0B]-> UC_GIS_VIEW
+US_85 -[#F59E0B]-> UC_GIS_AREA
+
+US_94 -[#DC2626]-> UC_DEPLOY
+
+UC_LOGIN -[#2563EB]-> I_MVP_2FA
+UC_USERS -[#2563EB]-> I_MVP_USERS
+UC_PERMISSIONS -[#2563EB]-> I_MVP_USERS
+
+UC_SEARCH -[#0891B2]-> I_STAGE_A_FILTERS
+UC_DETAILS -[#0891B2]-> I_STAGE_A_FILTERS
+
+UC_PRODUCE_CARDS -[#0891B2]-> I_MVP_CARD_EXPORT
+UC_PRODUCE_CARDS -[#0891B2]-> I_STAGE_A_CARD_MULTI
+UC_PRODUCE_CARDS -[#DC2626]-> I_FINAL_CARD_TEMPLATE
+UC_PRODUCE_CARDS -[#F59E0B]-> I_GIS_CARD_SNAPSHOT
+UC_EXPORT_CARDS -[#0891B2]-> I_MVP_CARD_EXPORT
+UC_EXPORT_CARDS -[#0891B2]-> I_STAGE_A_CARD_MULTI
+UC_EXPORT_CARDS -[#DC2626]-> I_FINAL_CARD_TEMPLATE
+UC_EXPORT_CARDS -[#F59E0B]-> I_GIS_CARD_SNAPSHOT
+
+UC_ADD_REMOVE -[#2563EB]-> I_MVP_ADD_BUILDINGS
+UC_ADD_REMOVE -[#0891B2]-> I_FINAL_BUILDING_FORM
+UC_UPDATE -[#2563EB]-> I_MVP_ADD_BUILDINGS
+UC_UPDATE -[#0891B2]-> I_FINAL_BUILDING_FORM
+UC_RESTORE -[#0891B2]-> I_FINAL_BUILDING_FORM
+
+UC_LOGS -[#2563EB]-> I_MVP_LOGS
+UC_LOGS -[#0891B2]-> I_STAGE_A_AUDIT_LOCK
+
+UC_EXPORT_TABLE -[#0891B2]-> I_FINAL_EXPORT
+UC_IMPORT -[#2563EB]-> I_MVP_IMPORT
+UC_CONVERT -[#0891B2]-> I_FINAL_STREETS
+UC_STREETS -[#0891B2]-> I_FINAL_STREETS
+
+UC_GIS_VIEW -[#F59E0B]-> I_GIS_MAP_PAGE
+UC_GIS_VIEW -[#F59E0B]-> I_GIS_CARD_SNAPSHOT
+UC_GIS_AREA -[#F59E0B]-> I_GIS_AREA_SELECTION
+
+UC_DEPLOY -[#16A34A]-> I_DEPLOY_HARDENING
+UC_DEPLOY -[#DC2626]-> I_FINAL_DEPLOYMENT
+
+I_MVP_2FA -[#2563EB]-> S_STAGE_A_MVP
+I_MVP_USERS -[#2563EB]-> S_STAGE_A_MVP
+I_MVP_IMPORT -[#2563EB]-> S_STAGE_A_MVP
+I_MVP_ADD_BUILDINGS -[#2563EB]-> S_STAGE_A_MVP
+I_MVP_LOGS -[#2563EB]-> S_STAGE_A_MVP
+
+I_STAGE_A_FILTERS -[#0891B2]-> S_STAGE_A_FINAL
+I_MVP_CARD_EXPORT -[#0891B2]-> S_STAGE_A_FINAL
+I_STAGE_A_CARD_MULTI -[#0891B2]-> S_STAGE_A_FINAL
+I_STAGE_A_AUDIT_LOCK -[#0891B2]-> S_STAGE_A_FINAL
+I_FINAL_BUILDING_FORM -[#0891B2]-> S_STAGE_A_FINAL
+I_FINAL_EXPORT -[#0891B2]-> S_STAGE_A_FINAL
+I_FINAL_STREETS -[#0891B2]-> S_STAGE_A_FINAL
+
+I_DEPLOY_HARDENING -[#16A34A]-> S_STAGE_B_DEPLOY
+
+I_GIS_MAP_PAGE -[#F59E0B]-> S_STAGE_B_GIS
+I_GIS_AREA_SELECTION -[#F59E0B]-> S_STAGE_B_GIS
+I_GIS_CARD_SNAPSHOT -[#F59E0B]-> S_STAGE_B_GIS
+
+I_FINAL_DEPLOYMENT -[#DC2626]-> S_STAGE_B_FINAL
+I_FINAL_CARD_TEMPLATE -[#DC2626]-> S_STAGE_B_FINAL
+
 @enduml
