@@ -64,7 +64,7 @@ rectangle "Sprints / Branches" {
   artifact "release/stage-a/sprint-2-final\nrelease/stage-b/sprint-2-gis\nrelease/stage-b/sprint-3-final" as S_CARDS
   artifact "release/stage-a/sprint-2-final" as S_LOGS
   artifact "release/stage-b/sprint-2-gis" as S_GIS
-  artifact "release/stage-b/sprint-1-deployment" as S_DEPLOY
+  artifact "release/stage-b/sprint-1-deployment\nrelease/stage-b/sprint-3-final" as S_DEPLOY
   artifact "feature/map-provider-flexibility/main\nnot merged to production releases" as S_PROVIDER
 }
 
@@ -105,6 +105,6 @@ US_DATA ..> S_DATA : delivered in
 US_CARDS ..> S_CARDS : delivered in
 US_LOGS ..> S_LOGS : delivered in
 US_GIS ..> S_GIS : delivered in
-US_DEPLOY ..> S_DEPLOY : tracked in
+US_DEPLOY ..> S_DEPLOY : delivered in
 US_PROVIDER ..> S_PROVIDER : proof branch
 @enduml
