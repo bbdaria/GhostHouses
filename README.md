@@ -239,21 +239,25 @@ How we figured these requirements:
 
 #### 2.3 Customer Satisfaction
 ##### 2.3.1 Customer Questionnaire
-A customer questionnaire was used to collect the client's final feedback, and the signed response is stored as the customer satisfaction evidence.
+A customer questionnaire was used to collect the client's final feedback. The repository stores a redacted response copy for public/project evidence, and the original signed response is kept privately in the project Drive.
 
-Filled response evidence: `docs/submissions/stage-b/customer-satisfaction/GhostHouses_Customer_Questionnaire_Response.pdf`
+Redacted response evidence: `docs/submissions/stage-b/customer-satisfaction/GhostHouses_Customer_Questionnaire_Response.pdf`
 
 ##### 2.3.2 Successful Deployment on Customer Side
 Customer-side deployment is tracked in the deployment User Story: [Issue #94](https://github.com/bbdaria/GhostHouses/issues/94).
 
 The Docker Compose deployment was run successfully with the frontend, backend, PostgreSQL database, and pgAdmin services. The run command and clean reset command were verified from `project/`, and the municipality dev-team handoff included a walkthrough of pgAdmin, including where to view database tables and the users table.
 
-The deployment handoff was completed after the walkthrough. The remaining production work is municipality-owned infrastructure configuration: real certificates, domain/DNS, routing and port forwarding, internal admin/VLAN access policy, production `.env` values, and security review or penetration testing on the running deployed system.
+The municipality confirmed in writing that the student and Technion-side tasks were completed successfully, the system was published successfully on the correct dedicated server, and the required checks from the municipality development team were completed. At this stage, no additional tasks are required from Technion or the student team.
+
+The remaining production work is municipality-owned infrastructure configuration: network settings, port opening, communication settings, real certificates, domain/DNS, routing and port forwarding, internal admin/VLAN access policy, production `.env` values, and security review or penetration testing on the running deployed system.
 
 ##### 2.3.3 Exhausting Communication With the Customer Toward Possible Deployment, in Writing
 The written communication trail for deployment is documented in email correspondence with the client side, the municipality dev team, municipality IT/security contacts, and the project supervisors CC'd. This evidence covers the deployment requirements, server preparation, security approval process, nested-virtualization discussion, and our attempts to keep the deployment moving professionally.
 
-The latest handoff also covered the verified Docker run/reset commands, pgAdmin table and user inspection, the `.env` values that must be changed for production, the mocked 2FA replacement point, real certificate and domain requirements, port forwarding, VLAN/internal access for pgAdmin, and the Swagger toggle for temporary API/security review.
+The latest written confirmation states that the system is published on the municipality server and that the remaining tasks are on the Haifa Municipality side only, handled by their server and infrastructure teams. These tasks include completing network settings, opening ports, and configuring communication so the system is accessible through the approved municipality server address.
+
+The handoff also covered the verified Docker run/reset commands, pgAdmin table and user inspection, the `.env` values that must be changed for production, the mocked 2FA replacement point, real certificate and domain requirements, port forwarding, VLAN/internal access for pgAdmin, and the Swagger toggle for temporary API/security review.
 
 #### 2.4 Maintainable Architecture
 ##### 2.4.1 UML Class Diagram
@@ -311,7 +315,7 @@ Open/planned work is tracked through GitHub Issues and the GhostHouses project b
 Current known horizon:
 - Real OTP implementation and stronger 2FA enforcement.
 - Additional external municipality system integrations beyond GIS, if the municipality provides real API/file contracts.
-- Municipality-owned production infrastructure finalization: real certificates, domain/DNS, routing, port forwarding, and internal admin access policy.
+- Municipality-owned production infrastructure finalization: network settings, port opening, communication settings, real certificates, domain/DNS, routing, and internal admin access policy.
 - Full security code review and application penetration testing on the running deployed system.
 
 #### 3.2 Correct Use of GitHub
